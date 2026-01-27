@@ -44,7 +44,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             )
             return
 
-        session_id = await self._get_or_create_session(task_id, user_text)
+        session_id = await self._get_or_create_session(context_id, user_text)
 
         try:
             response = await self._client.send_message(session_id, user_text)
@@ -99,15 +99,15 @@ class OpencodeAgentExecutor(AgentExecutor):
         )
         await event_queue.enqueue_event(event)
         await event_queue.close()
-        self._sessions.pop(task_id, None)
+        self._sessions.pop(context_id, None)
 
-    async def _get_or_create_session(self, task_id: str, title: str) -> str:
+    async def _get_or_create_session(self, context_id: str, title: str) -> str:
         async with self._lock:
-            existing = self._sessions.get(task_id)
+            existing = self._sessions.get(context_id)
             if existing:
                 return existing
             session_id = await self._client.create_session(title=title)
-            self._sessions[task_id] = session_id
+            self._sessions[context_id] = session_id
             return session_id
 
     async def _emit_error(

@@ -1,9 +1,15 @@
-import pytest
 import httpx
+import pytest
 from a2a.client.auth.credentials import InMemoryContextCredentialStore
 from a2a.client.auth.interceptor import AuthInterceptor
 from a2a.client.middleware import ClientCallContext
-from a2a.types import AgentCard, AgentCapabilities
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    HTTPAuthSecurityScheme,
+    SecurityScheme,
+)
+
 from opencode_a2a.a2a_client import PatchedRestTransport
 
 
@@ -30,6 +36,16 @@ async def test_auth_interceptor_applies_bearer_token():
         default_input_modes=["text/plain"],
         default_output_modes=["text/plain"],
         skills=[],
+        security_schemes={
+            "bearerAuth": SecurityScheme(
+                root=HTTPAuthSecurityScheme(
+                    description="Bearer token authentication",
+                    scheme="bearer",
+                    bearer_format="opaque",
+                )
+            )
+        },
+        security=[{"bearerAuth": []}],
     )
 
     async with httpx.AsyncClient() as httpx_client:
@@ -58,8 +74,9 @@ async def test_auth_interceptor_applies_bearer_token():
 @pytest.mark.asyncio
 async def test_patched_rest_transport_multiple_interceptors():
     """Test that PatchedRestTransport applies multiple interceptors in order."""
-    from a2a.client.middleware import ClientCallInterceptor
     from typing import Any
+
+    from a2a.client.middleware import ClientCallInterceptor
 
     class CustomInterceptor(ClientCallInterceptor):
         async def intercept(
@@ -89,11 +106,25 @@ async def test_patched_rest_transport_multiple_interceptors():
         url="http://test",
         version="0.1.0",
         protocol_version="0.3.0",
+        capabilities=AgentCapabilities(streaming=False),
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
+        skills=[],
+        security_schemes={
+            "bearerAuth": SecurityScheme(
+                root=HTTPAuthSecurityScheme(
+                    description="Bearer token authentication",
+                    scheme="bearer",
+                    bearer_format="opaque",
+                )
+            )
+        },
+        security=[{"bearerAuth": []}],
     )
 
     async with httpx.AsyncClient() as httpx_client:
         transport = PatchedRestTransport(
-            client=httpx_client,
+            httpx_client=httpx_client,
             agent_card=agent_card,
             url="http://test",
             interceptors=[auth_interceptor, custom_interceptor],
