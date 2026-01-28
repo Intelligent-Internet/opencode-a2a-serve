@@ -31,6 +31,18 @@ def _get_float(name: str, default: float) -> float:
         return default
 
 
+def _get_bool(name: str, default: bool) -> bool:
+    value = _get_env(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def _parse_scopes(value: str | None) -> dict[str, str]:
     if not value:
         return {}
@@ -57,6 +69,7 @@ class Settings:
     a2a_description: str
     a2a_version: str
     a2a_protocol_version: str
+    a2a_streaming: bool
     a2a_host: str
     a2a_port: int
     a2a_bearer_token: str | None
@@ -81,6 +94,7 @@ class Settings:
             a2a_description=_get_env("A2A_DESCRIPTION", "A2A wrapper service for OpenCode"),
             a2a_version=_get_env("A2A_VERSION", "0.1.0"),
             a2a_protocol_version=_get_env("A2A_PROTOCOL_VERSION", "0.3.0"),
+            a2a_streaming=_get_bool("A2A_STREAMING", True),
             a2a_host=_get_env("A2A_HOST", "127.0.0.1"),
             a2a_port=_get_int("A2A_PORT", 8000),
             a2a_bearer_token=_get_env("A2A_BEARER_TOKEN"),

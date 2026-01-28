@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import suppress
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue import EventQueue
@@ -46,7 +47,26 @@ class OpencodeAgentExecutor(AgentExecutor):
 
         session_id = await self._get_or_create_session(context_id, user_text)
 
+        stop_event = asyncio.Event()
+        stream_task = asyncio.create_task(
+            self._consume_opencode_stream(
+                session_id=session_id,
+                task_id=task_id,
+                context_id=context_id,
+                event_queue=event_queue,
+                stop_event=stop_event,
+            )
+        )
+
         try:
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=task_id,
+                    context_id=context_id,
+                    status=TaskStatus(state=TaskState.working),
+                    final=False,
+                )
+            )
             response = await self._client.send_message(session_id, user_text)
             response_text = response.text or "(No text content returned by OpenCode.)"
             assistant_message = _build_assistant_message(
@@ -84,6 +104,11 @@ class OpencodeAgentExecutor(AgentExecutor):
                 context_id=context_id,
                 message=f"OpenCode error: {exc}",
             )
+        finally:
+            stop_event.set()
+            stream_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await stream_task
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id = context.task_id
@@ -131,6 +156,60 @@ class OpencodeAgentExecutor(AgentExecutor):
             history=[error_message],
         )
         await event_queue.enqueue_event(task)
+
+    async def _consume_opencode_stream(
+        self,
+        *,
+        session_id: str,
+        task_id: str,
+        context_id: str,
+        event_queue: EventQueue,
+        stop_event: asyncio.Event,
+    ) -> None:
+        buffered_text = ""
+        current_message_id: str | None = None
+        try:
+            async for event in self._client.stream_events(stop_event=stop_event):
+                if stop_event.is_set():
+                    break
+                event_type = event.get("type")
+                if event_type != "message.part.updated":
+                    continue
+                props = event.get("properties", {})
+                part = props.get("part") or {}
+                if part.get("sessionID") != session_id:
+                    continue
+                message_id = part.get("messageID")
+                if isinstance(message_id, str):
+                    current_message_id = message_id
+                delta = props.get("delta")
+                updated = False
+                if isinstance(delta, str) and delta:
+                    buffered_text += delta
+                    updated = True
+                elif part.get("type") == "text" and isinstance(part.get("text"), str):
+                    if part["text"] != buffered_text:
+                        buffered_text = part["text"]
+                        updated = True
+                if not updated:
+                    continue
+                assistant_message = Message(
+                    message_id=current_message_id or str(uuid.uuid4()),
+                    role=Role.agent,
+                    parts=[TextPart(text=buffered_text)],
+                    task_id=task_id,
+                    context_id=context_id,
+                )
+                await event_queue.enqueue_event(
+                    TaskStatusUpdateEvent(
+                        task_id=task_id,
+                        context_id=context_id,
+                        status=TaskStatus(state=TaskState.working, message=assistant_message),
+                        final=False,
+                    )
+                )
+        except Exception:
+            logger.exception("OpenCode event stream failed")
 
 
 def _build_assistant_message(task_id: str, context_id: str, text: str) -> Message:

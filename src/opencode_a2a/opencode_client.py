@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,6 +41,42 @@ class OpencodeClient:
         if not self._directory:
             return {}
         return {"directory": self._directory}
+
+    async def stream_events(
+        self, stop_event: asyncio.Event | None = None
+    ) -> AsyncIterator[dict[str, Any]]:
+        params = self._query_params()
+        async with self._client.stream(
+            "GET",
+            "/event",
+            params=params,
+            timeout=None,
+            headers={"Accept": "text/event-stream"},
+        ) as response:
+            response.raise_for_status()
+            data_lines: list[str] = []
+            async for line in response.aiter_lines():
+                if stop_event and stop_event.is_set():
+                    break
+                if line.startswith(":"):
+                    continue
+                if line == "":
+                    if not data_lines:
+                        continue
+                    payload = "\n".join(data_lines).strip()
+                    data_lines.clear()
+                    if not payload:
+                        continue
+                    try:
+                        event = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(event, dict):
+                        yield event
+                    continue
+                if line.startswith("data:"):
+                    data_lines.append(line[5:].lstrip())
+                    continue
 
     async def create_session(self, title: str | None = None) -> str:
         payload: dict[str, Any] = {}

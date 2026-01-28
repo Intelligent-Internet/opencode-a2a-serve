@@ -58,6 +58,7 @@ A2A Agent Card：`http://127.0.0.1:8000/.well-known/agent-card.json`
 - `A2A_HOST`：监听地址，默认 `127.0.0.1`
 - `A2A_PORT`：监听端口，默认 `8000`
 - `A2A_BEARER_TOKEN`：必填；用于 Bearer Token 校验，未设置则服务拒绝启动
+- `A2A_STREAMING`：是否启用 SSE streaming（`/v1/message:stream`），默认 `true`
 - `A2A_OAUTH_AUTHORIZATION_URL`：OAuth2 授权地址（预留配置）
 - `A2A_OAUTH_TOKEN_URL`：OAuth2 token 地址（预留配置）
 - `A2A_OAUTH_METADATA_URL`：OAuth2 元数据地址（可选，预留配置）

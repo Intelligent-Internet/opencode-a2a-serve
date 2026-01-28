@@ -130,6 +130,7 @@ if [[ -z "${OPENCODE_BIND_PORT:-}" ]]; then
 fi
 export A2A_PUBLIC_URL="${A2A_PUBLIC_URL:-http://${A2A_HOST}:${A2A_PORT}}"
 export A2A_LOG_LEVEL="${A2A_LOG_LEVEL:-info}"
+export A2A_STREAMING="${A2A_STREAMING:-true}"
 
 "${SCRIPT_DIR}/deploy/install_units.sh"
 "${SCRIPT_DIR}/deploy/setup_instance.sh" "$PROJECT_NAME" "$GH_TOKEN" "$A2A_BEARER_TOKEN"

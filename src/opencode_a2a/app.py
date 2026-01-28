@@ -71,7 +71,7 @@ def build_agent_card(settings: Settings) -> AgentCard:
         preferred_transport=TransportProtocol.http_json,
         default_input_modes=["text/plain"],
         default_output_modes=["text/plain"],
-        capabilities=AgentCapabilities(streaming=False),
+        capabilities=AgentCapabilities(streaming=settings.a2a_streaming),
         skills=[
             AgentSkill(
                 id="opencode.chat",

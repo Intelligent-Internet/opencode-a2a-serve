@@ -72,6 +72,7 @@
 - `A2A_PORT`：A2A 监听端口，默认 `8000`（多实例时需为每个项目分配不同端口）
 - `A2A_PUBLIC_URL`：对外可访问的 A2A URL，默认 `http://<A2A_HOST>:<A2A_PORT>`
 - `A2A_LOG_LEVEL`：A2A 日志级别，默认 `info`
+- `A2A_STREAMING`：是否启用 SSE streaming（`/v1/message:stream`），默认 `true`
 
 ### 实例配置文件
 
@@ -157,5 +158,11 @@ systemd 单元已启用：
 - `NoNewPrivileges=true`
 
 OpenCode 与 A2A 分离运行：`A2A_BEARER_TOKEN` 仅注入 A2A，`GH_TOKEN`/Git 凭证仅注入 OpenCode，避免跨进程继承。
+
+## Streaming 说明
+
+- A2A 支持 `POST /v1/message:stream`（SSE），需 `A2A_STREAMING=true`。
+- A2A 会订阅 OpenCode 的 `/event`（带 `directory` 参数）获取增量事件，并在 A2A 侧按 session 过滤后转发。
+- 当前仅流式输出文本增量；非 streaming 调用方式保持兼容。
 
 如需更强隔离（例如 `RootDirectory`/`BindPaths` 或 `InaccessiblePaths`），可在 systemd 单元中进一步加固。
