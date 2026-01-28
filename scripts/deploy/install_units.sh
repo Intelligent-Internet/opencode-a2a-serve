@@ -28,6 +28,7 @@ WorkingDirectory=${DATA_ROOT}/%i
 Environment=OPENCODE_CORE_DIR=${OPENCODE_CORE_DIR}
 Environment=OPENCODE_A2A_DIR=${OPENCODE_A2A_DIR}
 Environment=UV_PYTHON_DIR=${UV_PYTHON_DIR}
+Environment=PATH=${OPENCODE_CORE_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=${DATA_ROOT}/%i/config/opencode.env
 Environment=HOME=${DATA_ROOT}/%i
 
@@ -43,6 +44,7 @@ ReadWritePaths=${DATA_ROOT}/%i
 ReadOnlyPaths=${OPENCODE_CORE_DIR}
 ReadOnlyPaths=${OPENCODE_A2A_DIR}
 ReadOnlyPaths=${UV_PYTHON_DIR}
+ReadOnlyPaths=/usr/bin/gh
 
 [Install]
 WantedBy=multi-user.target
