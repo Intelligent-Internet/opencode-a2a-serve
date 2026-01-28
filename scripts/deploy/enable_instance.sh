@@ -11,6 +11,8 @@ if [[ -z "$PROJECT_NAME" ]]; then
   exit 1
 fi
 
+FORCE_RESTART="${FORCE_RESTART:-false}"
+
 sudo systemctl daemon-reload
 
 use_manager_env=false
@@ -22,13 +24,26 @@ if [[ -n "${GOOGLE_GENERATIVE_AI_API_KEY:-}" ]]; then
   fi
 fi
 
+start_or_restart() {
+  local unit="$1"
+  if [[ "$FORCE_RESTART" == "true" ]]; then
+    if sudo systemctl is-active --quiet "$unit"; then
+      sudo systemctl restart "$unit"
+    else
+      sudo systemctl enable --now "$unit"
+    fi
+  else
+    sudo systemctl enable --now "$unit"
+  fi
+}
+
 if [[ "$use_manager_env" == "true" ]]; then
-  sudo systemctl enable --now "opencode@${PROJECT_NAME}.service"
+  start_or_restart "opencode@${PROJECT_NAME}.service"
   sudo systemctl unset-environment "GOOGLE_GENERATIVE_AI_API_KEY"
-  sudo systemctl enable --now "opencode-a2a@${PROJECT_NAME}.service"
+  start_or_restart "opencode-a2a@${PROJECT_NAME}.service"
 else
-  sudo systemctl enable --now "opencode@${PROJECT_NAME}.service"
-  sudo systemctl enable --now "opencode-a2a@${PROJECT_NAME}.service"
+  start_or_restart "opencode@${PROJECT_NAME}.service"
+  start_or_restart "opencode-a2a@${PROJECT_NAME}.service"
 fi
 
 sudo systemctl status "opencode-a2a@${PROJECT_NAME}.service" --no-pager

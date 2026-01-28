@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy an isolated OpenCode + A2A instance (systemd services).
-# Usage: ./deploy.sh project=<name> github_token=<token> a2a_bearer_token=<token> [a2a_port=<port>] [a2a_host=<host>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>]
+# Usage: ./deploy.sh project=<name> github_token=<token> a2a_bearer_token=<token> [a2a_port=<port>] [a2a_host=<host>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [update_a2a=true] [force_restart=true]
 # Optional: GOOGLE_GENERATIVE_AI_API_KEY=<key> to inject runtime-only API key into opencode@ service.
 # Requires: sudo access to write systemd units and create users/directories.
 #
@@ -26,6 +26,8 @@ GOOGLE_API_KEY_INPUT="${GOOGLE_GENERATIVE_AI_API_KEY:-}"
 REPO_URL_INPUT=""
 REPO_BRANCH_INPUT=""
 OPENCODE_TIMEOUT_INPUT=""
+UPDATE_A2A_INPUT=""
+FORCE_RESTART_INPUT=""
 
 for arg in "$@"; do
   if [[ "$arg" == *=* ]]; then
@@ -70,6 +72,12 @@ for arg in "$@"; do
     opencode_timeout)
       OPENCODE_TIMEOUT_INPUT="$value"
       ;;
+    update_a2a)
+      UPDATE_A2A_INPUT="$value"
+      ;;
+    force_restart)
+      FORCE_RESTART_INPUT="$value"
+      ;;
     *)
       echo "Unknown argument: $arg" >&2
       exit 1
@@ -78,7 +86,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$PROJECT_NAME" || -z "$GH_TOKEN" || -z "$A2A_BEARER_TOKEN" ]]; then
-  echo "Usage: $0 project=<name> github_token=<token> a2a_bearer_token=<token> [a2a_port=<port>] [a2a_host=<host>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>]" >&2
+  echo "Usage: $0 project=<name> github_token=<token> a2a_bearer_token=<token> [a2a_port=<port>] [a2a_host=<host>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [update_a2a=true] [force_restart=true]" >&2
   exit 1
 fi
 
@@ -132,6 +140,26 @@ export A2A_PUBLIC_URL="${A2A_PUBLIC_URL:-http://${A2A_HOST}:${A2A_PORT}}"
 export A2A_LOG_LEVEL="${A2A_LOG_LEVEL:-info}"
 export A2A_STREAMING="${A2A_STREAMING:-true}"
 
+is_truthy() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+UPDATE_A2A="false"
+FORCE_RESTART="false"
+if [[ -n "$UPDATE_A2A_INPUT" ]] && is_truthy "$UPDATE_A2A_INPUT"; then
+  UPDATE_A2A="true"
+fi
+if [[ -n "$FORCE_RESTART_INPUT" ]] && is_truthy "$FORCE_RESTART_INPUT"; then
+  FORCE_RESTART="true"
+fi
+
+if [[ "$UPDATE_A2A" == "true" ]]; then
+  "${SCRIPT_DIR}/deploy/update_a2a.sh"
+fi
+
 "${SCRIPT_DIR}/deploy/install_units.sh"
 "${SCRIPT_DIR}/deploy/setup_instance.sh" "$PROJECT_NAME" "$GH_TOKEN" "$A2A_BEARER_TOKEN"
-"${SCRIPT_DIR}/deploy/enable_instance.sh" "$PROJECT_NAME"
+FORCE_RESTART="$FORCE_RESTART" "${SCRIPT_DIR}/deploy/enable_instance.sh" "$PROJECT_NAME"

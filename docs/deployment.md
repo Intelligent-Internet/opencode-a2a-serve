@@ -33,7 +33,7 @@
 ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1 opencode_provider_id=google opencode_model_id=gemini-3-flash-preview
 ```
 
-支持的 key（不区分大小写）：`project`/`project_name`、`github_token`/`gh_token`、`a2a_bearer_token`、`a2a_port`、`a2a_host`、`opencode_provider_id`、`opencode_model_id`、`repo_url`、`repo_branch`、`opencode_timeout`、`google_generative_ai_api_key`（可用 `google_api_key` 作为别名）。
+支持的 key（不区分大小写）：`project`/`project_name`、`github_token`/`gh_token`、`a2a_bearer_token`、`a2a_port`、`a2a_host`、`opencode_provider_id`、`opencode_model_id`、`repo_url`、`repo_branch`、`opencode_timeout`、`google_generative_ai_api_key`（可用 `google_api_key` 作为别名）、`update_a2a`、`force_restart`。
 
 > `github_token` **必须使用项目专属的 Fine-grained personal access token**，并严格限制权限范围（**不得跨仓授权**，仅授予该项目仓库所需的最小读写权限）。
 
@@ -43,11 +43,17 @@
 ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010
 ```
 
+已部署实例升级（更新共享代码后）：
+
+```bash
+./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx update_a2a=true force_restart=true
+```
+
 脚本会：
 1) 安装 systemd 模板单元 `opencode@.service` 与 `opencode-a2a@.service`
 2) 创建项目用户与目录
 3) 写入实例配置 env 文件
-4) 启动两套服务
+4) 启动两套服务（如 `force_restart=true`，则会重启已运行的服务）
 
 ## 配置说明
 
