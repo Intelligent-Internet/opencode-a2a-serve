@@ -68,7 +68,7 @@
 - `OPENCODE_MODEL_ID`：OpenCode 默认 model（写入 `opencode.env`）
 - `OPENCODE_TIMEOUT`：请求超时秒数，默认 `300`
 
-- `A2A_HOST`：A2A 监听地址，默认 `127.0.0.1`（也可通过 `deploy.sh` 的第 5 个参数设置）
+- `A2A_HOST`：A2A 监听地址，默认 `127.0.0.1`（也可通过 `deploy.sh` 的 `a2a_host=...` 参数设置）
 - `A2A_PORT`：A2A 监听端口，默认 `8000`（多实例时需为每个项目分配不同端口）
 - `A2A_PUBLIC_URL`：对外可访问的 A2A URL，默认 `http://<A2A_HOST>:<A2A_PORT>`
 - `A2A_LOG_LEVEL`：A2A 日志级别，默认 `info`
@@ -156,6 +156,6 @@ systemd 单元已启用：
 - `PrivateTmp=true`
 - `NoNewPrivileges=true`
 
-OpenCode 与 A2A 分离运行，敏感变量仅注入 A2A 服务，避免 OpenCode 继承。
+OpenCode 与 A2A 分离运行：`A2A_BEARER_TOKEN` 仅注入 A2A，`GH_TOKEN`/Git 凭证仅注入 OpenCode，避免跨进程继承。
 
 如需更强隔离（例如 `RootDirectory`/`BindPaths` 或 `InaccessiblePaths`），可在 systemd 单元中进一步加固。

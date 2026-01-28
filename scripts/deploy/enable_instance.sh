@@ -22,11 +22,13 @@ if [[ -n "${GOOGLE_GENERATIVE_AI_API_KEY:-}" ]]; then
   fi
 fi
 
-sudo systemctl enable --now "opencode@${PROJECT_NAME}.service"
-sudo systemctl enable --now "opencode-a2a@${PROJECT_NAME}.service"
-
 if [[ "$use_manager_env" == "true" ]]; then
+  sudo systemctl enable --now "opencode@${PROJECT_NAME}.service"
   sudo systemctl unset-environment "GOOGLE_GENERATIVE_AI_API_KEY"
+  sudo systemctl enable --now "opencode-a2a@${PROJECT_NAME}.service"
+else
+  sudo systemctl enable --now "opencode@${PROJECT_NAME}.service"
+  sudo systemctl enable --now "opencode-a2a@${PROJECT_NAME}.service"
 fi
 
 sudo systemctl status "opencode-a2a@${PROJECT_NAME}.service" --no-pager

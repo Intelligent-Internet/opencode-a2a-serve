@@ -48,7 +48,7 @@ A2A Agent Card：`http://127.0.0.1:8000/.well-known/agent-card.json`
 - `OPENCODE_AGENT`：OpenCode agent 名称（可选）
 - `OPENCODE_SYSTEM`：system prompt（可选）
 - `OPENCODE_VARIANT`：variant（可选）
-- `OPENCODE_TIMEOUT`：请求超时秒数，默认 `120`
+- `OPENCODE_TIMEOUT`：请求超时秒数，默认 `120`（systemd 部署模板默认写入 `300`）
 
 - `A2A_PUBLIC_URL`：对外可访问的 A2A 地址前缀，默认 `http://127.0.0.1:8000`
 - `A2A_TITLE`：Agent 名称，默认 `OpenCode A2A`
