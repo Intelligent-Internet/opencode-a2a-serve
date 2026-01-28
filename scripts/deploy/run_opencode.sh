@@ -17,7 +17,7 @@ fi
 cmd=("$OPENCODE_BIN" serve --log-level "$OPENCODE_LOG_LEVEL" --print-logs)
 
 if [[ -n "$OPENCODE_BIND_HOST" ]]; then
-  cmd+=(--host "$OPENCODE_BIND_HOST")
+  cmd+=(--hostname "$OPENCODE_BIND_HOST")
 fi
 
 if [[ -n "$OPENCODE_BIND_PORT" ]]; then
