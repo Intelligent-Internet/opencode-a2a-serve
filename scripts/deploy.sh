@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy an isolated OpenCode + A2A instance (systemd services).
 # Usage: ./deploy.sh <project_name> <github_token> <a2a_bearer_token> [a2a_port] [a2a_host]
-# Or:    ./deploy.sh project:<name> github_token:<token> a2a_bearer_token:<token> [a2a_port:<port>] [a2a_host:<host>]
+# Or:    ./deploy.sh project=<name> github_token=<token> a2a_bearer_token=<token> [a2a_port=<port>] [a2a_host=<host>]
 # Requires: sudo access to write systemd units and create users/directories.
 #
 # Key environment variables (optional):
@@ -23,10 +23,7 @@ A2A_HOST_INPUT=""
 POSITIONAL_ARGS=()
 
 for arg in "$@"; do
-  if [[ "$arg" == *:* ]]; then
-    key="${arg%%:*}"
-    value="${arg#*:}"
-  elif [[ "$arg" == *=* ]]; then
+  if [[ "$arg" == *=* ]]; then
     key="${arg%%=*}"
     value="${arg#*=}"
   else
@@ -75,7 +72,7 @@ fi
 
 if [[ -z "$PROJECT_NAME" || -z "$GH_TOKEN" || -z "$A2A_BEARER_TOKEN" ]]; then
   echo "Usage: $0 <project_name> <github_token> <a2a_bearer_token> [a2a_port] [a2a_host]" >&2
-  echo "   or: $0 project:<name> github_token:<token> a2a_bearer_token:<token> [a2a_port:<port>] [a2a_host:<host>]" >&2
+  echo "   or: $0 project=<name> github_token=<token> a2a_bearer_token=<token> [a2a_port=<port>] [a2a_host=<host>]" >&2
   exit 1
 fi
 
