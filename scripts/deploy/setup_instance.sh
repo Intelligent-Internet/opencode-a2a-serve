@@ -37,12 +37,18 @@ sudo install -d -m 700 -o "$PROJECT_NAME" -g "$PROJECT_NAME" "$PROJECT_DIR" "$WO
 sudo install -d -m 700 -o root -g root "$CONFIG_DIR"
 
 opencode_env_tmp="$(mktemp)"
-cat <<ENV >"$opencode_env_tmp"
-OPENCODE_LOG_LEVEL=${OPENCODE_LOG_LEVEL}
-OPENCODE_BIND_HOST=${OPENCODE_BIND_HOST}
-OPENCODE_BIND_PORT=${OPENCODE_BIND_PORT}
-OPENCODE_EXTRA_ARGS=${OPENCODE_EXTRA_ARGS:-}
-ENV
+{
+  echo "OPENCODE_LOG_LEVEL=${OPENCODE_LOG_LEVEL}"
+  echo "OPENCODE_BIND_HOST=${OPENCODE_BIND_HOST}"
+  echo "OPENCODE_BIND_PORT=${OPENCODE_BIND_PORT}"
+  echo "OPENCODE_EXTRA_ARGS=${OPENCODE_EXTRA_ARGS:-}"
+  if [[ -n "${OPENCODE_PROVIDER_ID:-}" ]]; then
+    echo "OPENCODE_PROVIDER_ID=${OPENCODE_PROVIDER_ID}"
+  fi
+  if [[ -n "${OPENCODE_MODEL_ID:-}" ]]; then
+    echo "OPENCODE_MODEL_ID=${OPENCODE_MODEL_ID}"
+  fi
+} >"$opencode_env_tmp"
 sudo install -m 600 -o root -g root "$opencode_env_tmp" "$CONFIG_DIR/opencode.env"
 rm -f "$opencode_env_tmp"
 

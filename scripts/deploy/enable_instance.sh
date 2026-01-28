@@ -12,6 +12,10 @@ if [[ -z "$PROJECT_NAME" ]]; then
 fi
 
 sudo systemctl daemon-reload
+if [[ -n "${GOOGLE_GENERATIVE_AI_API_KEY:-}" ]]; then
+  sudo systemctl set-property --runtime "opencode@${PROJECT_NAME}.service" \
+    "Environment=GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY}"
+fi
 sudo systemctl enable --now "opencode@${PROJECT_NAME}.service"
 sudo systemctl enable --now "opencode-a2a@${PROJECT_NAME}.service"
 

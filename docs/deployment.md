@@ -30,10 +30,10 @@
 ## 快速部署
 
 ```bash
-./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1
+./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1 opencode_provider_id=google opencode_model_id=gemini-3-flash-preview
 ```
 
-支持的 key（不区分大小写）：`project`/`project_name`、`github_token`/`gh_token`、`a2a_bearer_token`、`a2a_port`、`a2a_host`。
+支持的 key（不区分大小写）：`project`/`project_name`、`github_token`/`gh_token`、`a2a_bearer_token`、`a2a_port`、`a2a_host`、`opencode_provider_id`、`opencode_model_id`、`google_generative_ai_api_key`（可用 `google_api_key` 作为别名）。
 
 > `github_token` 强烈建议使用 **repo 专属的 Fine-grained personal access token**，并严格限制权限范围（仅授予该项目仓库所需的最小读写权限）。
 
@@ -64,6 +64,8 @@
 - `OPENCODE_BIND_PORT`：OpenCode 监听端口，默认 `4096`（多实例时需为每个项目分配不同端口；未显式设置时，脚本会尝试用 `A2A_PORT + 1` 自动分配）
 - `OPENCODE_LOG_LEVEL`：OpenCode 日志级别，默认 `INFO`
 - `OPENCODE_EXTRA_ARGS`：OpenCode 额外启动参数（空格分隔）
+- `OPENCODE_PROVIDER_ID`：OpenCode 默认 provider（写入 `opencode.env`）
+- `OPENCODE_MODEL_ID`：OpenCode 默认 model（写入 `opencode.env`）
 
 - `A2A_HOST`：A2A 监听地址，默认 `127.0.0.1`（也可通过 `deploy.sh` 的第 5 个参数设置）
 - `A2A_PORT`：A2A 监听端口，默认 `8000`（多实例时需为每个项目分配不同端口）
@@ -76,6 +78,14 @@
 
 - `config/opencode.env`：仅 OpenCode 读取
 - `config/a2a.env`：仅 A2A 读取（包含 `GH_TOKEN` 与 `A2A_BEARER_TOKEN`）
+
+`GOOGLE_GENERATIVE_AI_API_KEY` 不会写入任何配置文件。可在部署时通过环境变量或 `google_generative_ai_api_key` 参数注入，并以 systemd runtime 方式仅作用于 `opencode@` 进程。系统重启后需重新注入。
+
+示例（推荐用环境变量避免写入 shell 历史）：  
+
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=AIzxxx ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1 opencode_provider_id=google opencode_model_id=gemini-3-flash-preview
+```
 
 如需更新 token 或端口，修改 env 文件后重启服务：
 
