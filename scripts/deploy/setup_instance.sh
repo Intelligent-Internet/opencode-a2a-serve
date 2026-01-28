@@ -85,3 +85,20 @@ OPENCODE_TIMEOUT=120
 ENV
 sudo install -m 600 -o root -g root "$a2a_env_tmp" "$CONFIG_DIR/a2a.env"
 rm -f "$a2a_env_tmp"
+
+if [[ -n "${REPO_URL:-}" ]]; then
+  if [[ -d "${WORKSPACE_DIR}/.git" ]]; then
+    echo "Workspace already initialized; skipping clone."
+  else
+    clone_args=("$REPO_URL" "$WORKSPACE_DIR")
+    if [[ -n "${REPO_BRANCH:-}" ]]; then
+      clone_args=(--branch "$REPO_BRANCH" --single-branch "${clone_args[@]}")
+    fi
+    sudo -u "$PROJECT_NAME" -H env \
+      GH_TOKEN="$GH_TOKEN" \
+      GIT_ASKPASS="$ASKPASS_SCRIPT" \
+      GIT_ASKPASS_REQUIRE=force \
+      GIT_TERMINAL_PROMPT=0 \
+      git clone "${clone_args[@]}"
+  fi
+fi
