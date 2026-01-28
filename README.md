@@ -69,6 +69,7 @@ systemd 部署流程详见 `docs/deployment.md`。
 
 - 该服务将 A2A 的 `message:send` 请求转发为 OpenCode 的 session/message 调用。
 - 任务状态默认返回 `input-required`，便于继续多轮对话。
+- streaming（`/v1/message:stream`）会输出 `TaskArtifactUpdateEvent` 增量（`append=true`），结束时发送 `TaskStatusUpdateEvent(final=true)` 并携带完整快照；非 streaming 调用仍返回 `Task`。
 - 需在请求中携带 `Authorization: Bearer <token>`，否则返回 401（Agent Card 不受鉴权限制）。
 - OAuth2 相关配置目前仅用于 Agent Card 声明，鉴权校验需后续接入。
 

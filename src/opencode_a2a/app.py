@@ -38,7 +38,18 @@ if TYPE_CHECKING:
 class StreamingCallContextBuilder(DefaultCallContextBuilder):
     def build(self, request: Request) -> "ServerCallContext":
         context = super().build(request)
-        if request.url.path.endswith("/v1/message:stream"):
+        path = request.url.path
+        raw_path = request.scope.get("raw_path")
+        raw_value = ""
+        if isinstance(raw_path, (bytes, bytearray)):
+            raw_value = raw_path.decode(errors="ignore")
+        is_stream = (
+            path.endswith("/v1/message:stream")
+            or path.endswith("/v1/message%3Astream")
+            or raw_value.endswith("/v1/message:stream")
+            or raw_value.endswith("/v1/message%3Astream")
+        )
+        if is_stream:
             context.state["a2a_streaming_request"] = True
         return context
 

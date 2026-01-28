@@ -163,6 +163,6 @@ OpenCode 与 A2A 分离运行：`A2A_BEARER_TOKEN` 仅注入 A2A，`GH_TOKEN`/Gi
 
 - A2A 支持 `POST /v1/message:stream`（SSE），需 `A2A_STREAMING=true`。
 - A2A 会订阅 OpenCode 的 `/event`（带 `directory` 参数）获取增量事件，并在 A2A 侧按 session 过滤后转发。
-- 当前仅流式输出文本增量；非 streaming 调用方式保持兼容。
+- streaming 会输出 `TaskArtifactUpdateEvent` 增量（`append=true`），结束时发送 `TaskStatusUpdateEvent(final=true)` 并携带完整快照；非 streaming 调用仍返回 `Task`。
 
 如需更强隔离（例如 `RootDirectory`/`BindPaths` 或 `InaccessiblePaths`），可在 systemd 单元中进一步加固。

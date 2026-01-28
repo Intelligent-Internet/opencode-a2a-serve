@@ -12,6 +12,7 @@ from a2a.types import (
     Message,
     Role,
     Task,
+    TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
@@ -36,6 +37,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         if not task_id or not context_id:
             raise RuntimeError("Missing task_id or context_id in request context")
 
+        streaming_request = self._should_stream(context)
         user_text = context.get_user_input().strip()
         if not user_text:
             await self._emit_error(
@@ -43,12 +45,13 @@ class OpencodeAgentExecutor(AgentExecutor):
                 task_id=task_id,
                 context_id=context_id,
                 message="Only text input is supported.",
+                streaming_request=streaming_request,
             )
             return
 
         session_id = await self._get_or_create_session(context_id, user_text)
 
-        streaming_request = self._should_stream(context)
+        stream_artifact_id = f"{task_id}:stream"
         stop_event = asyncio.Event()
         stream_task: asyncio.Task[None] | None = None
         if streaming_request:
@@ -57,6 +60,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                     session_id=session_id,
                     task_id=task_id,
                     context_id=context_id,
+                    artifact_id=stream_artifact_id,
                     event_queue=event_queue,
                     stop_event=stop_event,
                 )
@@ -77,8 +81,18 @@ class OpencodeAgentExecutor(AgentExecutor):
                 task_id=task_id,
                 context_id=context_id,
                 text=response_text,
+                message_id=response.message_id,
             )
             if streaming_request:
+                await _enqueue_artifact_update(
+                    event_queue=event_queue,
+                    task_id=task_id,
+                    context_id=context_id,
+                    artifact_id=stream_artifact_id,
+                    text=response_text,
+                    append=False,
+                    last_chunk=True,
+                )
                 await event_queue.enqueue_event(
                     TaskStatusUpdateEvent(
                         task_id=task_id,
@@ -126,6 +140,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                 task_id=task_id,
                 context_id=context_id,
                 message=f"OpenCode error: {exc}",
+                streaming_request=streaming_request,
             )
         finally:
             stop_event.set()
@@ -165,6 +180,8 @@ class OpencodeAgentExecutor(AgentExecutor):
         task_id: str,
         context_id: str,
         message: str,
+        *,
+        streaming_request: bool,
     ) -> None:
         error_message = Message(
             message_id=str(uuid.uuid4()),
@@ -173,6 +190,25 @@ class OpencodeAgentExecutor(AgentExecutor):
             task_id=task_id,
             context_id=context_id,
         )
+        if streaming_request:
+            await _enqueue_artifact_update(
+                event_queue=event_queue,
+                task_id=task_id,
+                context_id=context_id,
+                artifact_id=f"{task_id}:error",
+                text=message,
+                append=False,
+                last_chunk=True,
+            )
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=task_id,
+                    context_id=context_id,
+                    status=TaskStatus(state=TaskState.failed, message=error_message),
+                    final=True,
+                )
+            )
+            return
         task = Task(
             id=task_id,
             context_id=context_id,
@@ -195,12 +231,11 @@ class OpencodeAgentExecutor(AgentExecutor):
         session_id: str,
         task_id: str,
         context_id: str,
+        artifact_id: str,
         event_queue: EventQueue,
         stop_event: asyncio.Event,
     ) -> None:
         buffered_text = ""
-        current_message_id: str | None = None
-        fallback_message_id = f"{task_id}:stream"
         backoff = 0.5
         max_backoff = 5.0
         try:
@@ -216,36 +251,34 @@ class OpencodeAgentExecutor(AgentExecutor):
                         part = props.get("part") or {}
                         if part.get("sessionID") != session_id:
                             continue
-                        message_id = part.get("messageID")
-                        if isinstance(message_id, str):
-                            current_message_id = message_id
                         delta = props.get("delta")
-                        updated = False
+                        chunk_text: str | None = None
+                        append = True
                         if isinstance(delta, str) and delta:
+                            chunk_text = delta
                             buffered_text += delta
-                            updated = True
                         elif part.get("type") == "text" and isinstance(
                             part.get("text"), str
                         ):
-                            if part["text"] != buffered_text:
-                                buffered_text = part["text"]
-                                updated = True
-                        if not updated:
+                            next_text = part["text"]
+                            if next_text != buffered_text:
+                                if next_text.startswith(buffered_text):
+                                    chunk_text = next_text[len(buffered_text) :]
+                                    append = True
+                                else:
+                                    chunk_text = next_text
+                                    append = False
+                                buffered_text = next_text
+                        if not chunk_text:
                             continue
-                        assistant_message = Message(
-                            message_id=current_message_id or fallback_message_id,
-                            role=Role.agent,
-                            parts=[TextPart(text=buffered_text)],
+                        await _enqueue_artifact_update(
+                            event_queue=event_queue,
                             task_id=task_id,
                             context_id=context_id,
-                        )
-                        await event_queue.enqueue_event(
-                            TaskStatusUpdateEvent(
-                                task_id=task_id,
-                                context_id=context_id,
-                                status=TaskStatus(state=TaskState.working, message=assistant_message),
-                                final=False,
-                            )
+                            artifact_id=artifact_id,
+                            text=chunk_text,
+                            append=append,
+                            last_chunk=False,
                         )
                     break
                 except Exception:
@@ -258,13 +291,44 @@ class OpencodeAgentExecutor(AgentExecutor):
             logger.exception("OpenCode event stream failed")
 
 
-def _build_assistant_message(task_id: str, context_id: str, text: str) -> Message:
+def _build_assistant_message(
+    task_id: str,
+    context_id: str,
+    text: str,
+    *,
+    message_id: str | None = None,
+) -> Message:
     return Message(
-        message_id=str(uuid.uuid4()),
+        message_id=message_id or str(uuid.uuid4()),
         role=Role.agent,
         parts=[TextPart(text=text)],
         task_id=task_id,
         context_id=context_id,
+    )
+
+
+async def _enqueue_artifact_update(
+    *,
+    event_queue: EventQueue,
+    task_id: str,
+    context_id: str,
+    artifact_id: str,
+    text: str,
+    append: bool | None,
+    last_chunk: bool | None,
+) -> None:
+    artifact = Artifact(
+        artifact_id=artifact_id,
+        parts=[TextPart(text=text)],
+    )
+    await event_queue.enqueue_event(
+        TaskArtifactUpdateEvent(
+            task_id=task_id,
+            context_id=context_id,
+            artifact=artifact,
+            append=append,
+            last_chunk=last_chunk,
+        )
     )
 
 
