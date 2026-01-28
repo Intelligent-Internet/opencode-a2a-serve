@@ -30,7 +30,7 @@
 ## 快速部署
 
 ```bash
-./scripts/deploy.sh <project_name> <github_token> <a2a_bearer_token> [a2a_port]
+./scripts/deploy.sh <project_name> <github_token> <a2a_bearer_token> [a2a_port] [a2a_host]
 ```
 
 > `github_token` 强烈建议使用 **repo 专属的 Fine-grained personal access token**，并严格限制权限范围（仅授予该项目仓库所需的最小读写权限）。
@@ -59,11 +59,11 @@
 - `DATA_ROOT`：项目根目录，默认 `/data/projects`
 
 - `OPENCODE_BIND_HOST`：OpenCode 监听地址，默认 `127.0.0.1`
-- `OPENCODE_BIND_PORT`：OpenCode 监听端口，默认 `4096`（多实例时需为每个项目分配不同端口）
+- `OPENCODE_BIND_PORT`：OpenCode 监听端口，默认 `4096`（多实例时需为每个项目分配不同端口；未显式设置时，脚本会尝试用 `A2A_PORT + 1` 自动分配）
 - `OPENCODE_LOG_LEVEL`：OpenCode 日志级别，默认 `INFO`
 - `OPENCODE_EXTRA_ARGS`：OpenCode 额外启动参数（空格分隔）
 
-- `A2A_HOST`：A2A 监听地址，默认 `127.0.0.1`
+- `A2A_HOST`：A2A 监听地址，默认 `127.0.0.1`（也可通过 `deploy.sh` 的第 5 个参数设置）
 - `A2A_PORT`：A2A 监听端口，默认 `8000`（多实例时需为每个项目分配不同端口）
 - `A2A_PUBLIC_URL`：对外可访问的 A2A URL，默认 `http://<A2A_HOST>:<A2A_PORT>`
 - `A2A_LOG_LEVEL`：A2A 日志级别，默认 `info`

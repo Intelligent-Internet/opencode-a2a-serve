@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy an isolated OpenCode + A2A instance (systemd services).
-# Usage: ./deploy.sh <project_name> <github_token> <a2a_bearer_token> [a2a_port]
+# Usage: ./deploy.sh <project_name> <github_token> <a2a_bearer_token> [a2a_port] [a2a_host]
 # Requires: sudo access to write systemd units and create users/directories.
 #
 # Key environment variables (optional):
@@ -18,9 +18,10 @@ PROJECT_NAME="${1:-}"
 GH_TOKEN="${2:-}"
 A2A_BEARER_TOKEN="${3:-}"
 A2A_PORT_INPUT="${4:-}"
+A2A_HOST_INPUT="${5:-}"
 
 if [[ -z "$PROJECT_NAME" || -z "$GH_TOKEN" || -z "$A2A_BEARER_TOKEN" ]]; then
-  echo "Usage: $0 <project_name> <github_token> <a2a_bearer_token> [a2a_port]" >&2
+  echo "Usage: $0 <project_name> <github_token> <a2a_bearer_token> [a2a_port] [a2a_host]" >&2
   exit 1
 fi
 
@@ -30,15 +31,26 @@ export UV_PYTHON_DIR="${UV_PYTHON_DIR:-/opt/uv-python}"
 export DATA_ROOT="${DATA_ROOT:-/data/projects}"
 
 export OPENCODE_BIND_HOST="${OPENCODE_BIND_HOST:-127.0.0.1}"
-export OPENCODE_BIND_PORT="${OPENCODE_BIND_PORT:-4096}"
 export OPENCODE_LOG_LEVEL="${OPENCODE_LOG_LEVEL:-INFO}"
 export OPENCODE_EXTRA_ARGS="${OPENCODE_EXTRA_ARGS:-}"
 
-export A2A_HOST="${A2A_HOST:-127.0.0.1}"
+if [[ -n "$A2A_HOST_INPUT" ]]; then
+  export A2A_HOST="$A2A_HOST_INPUT"
+else
+  export A2A_HOST="${A2A_HOST:-127.0.0.1}"
+fi
 if [[ -n "$A2A_PORT_INPUT" ]]; then
   export A2A_PORT="$A2A_PORT_INPUT"
 else
   export A2A_PORT="${A2A_PORT:-8000}"
+fi
+
+if [[ -z "${OPENCODE_BIND_PORT:-}" ]]; then
+  if [[ "$A2A_PORT" =~ ^[0-9]+$ ]]; then
+    export OPENCODE_BIND_PORT="$((A2A_PORT + 1))"
+  else
+    export OPENCODE_BIND_PORT="4096"
+  fi
 fi
 export A2A_PUBLIC_URL="${A2A_PUBLIC_URL:-http://${A2A_HOST}:${A2A_PORT}}"
 export A2A_LOG_LEVEL="${A2A_LOG_LEVEL:-info}"
