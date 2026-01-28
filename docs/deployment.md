@@ -68,7 +68,7 @@
 
 ### 实例配置文件
 
-每个项目会生成：
+每个项目会生成（路径位于 `/data/projects/<project>/config/`，不同项目不会重名）：
 
 - `config/opencode.env`：仅 OpenCode 读取
 - `config/a2a.env`：仅 A2A 读取（包含 `GH_TOKEN` 与 `A2A_BEARER_TOKEN`）
