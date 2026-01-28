@@ -81,6 +81,8 @@
 
 `GOOGLE_GENERATIVE_AI_API_KEY` 不会写入任何配置文件。可在部署时通过环境变量或 `google_generative_ai_api_key` 参数注入，并以 systemd runtime 方式仅作用于 `opencode@` 进程。系统重启后需重新注入。
 
+若 systemd 不支持 `set-property Environment`，脚本会退化为临时设置 systemd manager 环境变量并立即启动服务，随后清理该环境变量，避免长期暴露。
+
 示例（推荐用环境变量避免写入 shell 历史）：  
 
 ```bash
