@@ -83,7 +83,14 @@ class OpencodeAgentExecutor(AgentExecutor):
                     final=False,
                 )
             )
-            response = await self._client.send_message(session_id, user_text)
+            if streaming_request:
+                response = await self._client.send_message(
+                    session_id,
+                    user_text,
+                    timeout_override=self._client.stream_timeout,
+                )
+            else:
+                response = await self._client.send_message(session_id, user_text)
             response_text = response.text or "(No text content returned by OpenCode.)"
             logger.debug(
                 "OpenCode response task_id=%s session_id=%s message_id=%s text=%s",

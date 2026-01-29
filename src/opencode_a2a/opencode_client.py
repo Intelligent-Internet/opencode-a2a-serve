@@ -11,6 +11,8 @@ import logging
 
 from .config import Settings
 
+_UNSET = object()
+
 
 @dataclass(frozen=True)
 class OpencodeMessage:
@@ -29,6 +31,7 @@ class OpencodeClient:
         self._agent = settings.opencode_agent
         self._system = settings.opencode_system
         self._variant = settings.opencode_variant
+        self._stream_timeout = settings.opencode_timeout_stream
         self._log_payloads = settings.a2a_log_payloads
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
@@ -38,6 +41,10 @@ class OpencodeClient:
 
     async def close(self) -> None:
         await self._client.aclose()
+
+    @property
+    def stream_timeout(self) -> float | None:
+        return self._stream_timeout
 
     def _query_params(self) -> dict[str, str]:
         if not self._directory:
@@ -92,7 +99,13 @@ class OpencodeClient:
             raise RuntimeError("OpenCode session response missing id")
         return session_id
 
-    async def send_message(self, session_id: str, text: str) -> OpencodeMessage:
+    async def send_message(
+        self,
+        session_id: str,
+        text: str,
+        *,
+        timeout_override: float | None | object = _UNSET,
+    ) -> OpencodeMessage:
         payload: dict[str, Any] = {
             "parts": [
                 {
@@ -117,10 +130,15 @@ class OpencodeClient:
             logger = logging.getLogger(__name__)
             logger.debug("OpenCode request payload=%s", payload)
 
+        request_kwargs: dict[str, Any] = {}
+        if timeout_override is not _UNSET:
+            request_kwargs["timeout"] = timeout_override
+
         response = await self._client.post(
             f"/session/{session_id}/message",
             params=self._query_params(),
             json=payload,
+            **request_kwargs,
         )
         response.raise_for_status()
         data = response.json()

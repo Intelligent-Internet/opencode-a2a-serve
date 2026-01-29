@@ -50,6 +50,7 @@ systemd 部署流程详见 `docs/deployment.md`。
 - `OPENCODE_SYSTEM`：system prompt（可选）
 - `OPENCODE_VARIANT`：variant（可选）
 - `OPENCODE_TIMEOUT`：请求超时秒数，默认 `120`（systemd 部署模板默认写入 `300`）
+- `OPENCODE_TIMEOUT_STREAM`：streaming 请求超时秒数（可选；不设置则不限制）
 
 - `A2A_PUBLIC_URL`：对外可访问的 A2A 地址前缀，默认 `http://127.0.0.1:8000`
 - `A2A_TITLE`：Agent 名称，默认 `OpenCode A2A`
