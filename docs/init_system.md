@@ -21,6 +21,7 @@
 - 克隆 `opencode-a2a-serve` 仓库（默认 SSH 地址，缺少 SSH key 时会提示手动 clone）。
 - 创建 A2A venv（`uv sync --all-extras`）。
 - 若系统缺少 systemd（`systemctl` 不存在），脚本会直接失败退出。
+- 若 OpenCode 安装脚本将程序落在 `/root/.opencode`，会自动迁移到 `OPENCODE_CORE_DIR` 并写入 `/usr/local/bin/opencode`。
 
 ## 修改默认配置
 

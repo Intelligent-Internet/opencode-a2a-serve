@@ -538,6 +538,12 @@ else
     log_start "Running OPENCODE_INSTALL_CMD..."
     OPENCODE_CORE_DIR="$OPENCODE_CORE_DIR" bash -lc "$OPENCODE_INSTALL_CMD"
     log_done "OPENCODE_INSTALL_CMD completed."
+    if [[ ! -d "$OPENCODE_CORE_DIR" && -d "/root/.opencode" ]]; then
+      log_start "Relocating OpenCode from /root/.opencode to $OPENCODE_CORE_DIR..."
+      $SUDO mv /root/.opencode "$OPENCODE_CORE_DIR"
+      $SUDO ln -sf "${OPENCODE_CORE_DIR}/bin/opencode" /usr/local/bin/opencode
+      log_done "OpenCode relocated and symlinked."
+    fi
   else
     warn "opencode not found; set OPENCODE_INSTALL_CMD to install it."
     INCOMPLETE=1
@@ -552,6 +558,12 @@ log_done "OpenCode installation check completed."
 if [[ "$INCOMPLETE" -ne 0 ]]; then
   warn "Initialization incomplete; review warnings above."
   exit 1
+fi
+
+if [[ "$SUDO" == "sudo" ]]; then
+  log_start "Restoring /root permissions..."
+  $SUDO chmod 700 /root
+  log_done "Restored /root permissions."
 fi
 
 log_done "Initialization complete."
