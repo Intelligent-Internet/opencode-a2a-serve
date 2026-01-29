@@ -88,11 +88,6 @@
 
 可在运行 `deploy.sh` 前设置（未设置时使用默认值）：
 
-- `OPENCODE_A2A_DIR`：A2A 仓库路径，默认 `/opt/opencode-a2a/opencode-a2a-serve`
-- `OPENCODE_CORE_DIR`：OpenCode 核心路径，默认 `/opt/.opencode`
-- `UV_PYTHON_DIR`：uv Python 池路径，默认 `/opt/uv-python`
-- `DATA_ROOT`：项目根目录，默认 `/data/projects`
-
 - `OPENCODE_BIND_HOST`：OpenCode 监听地址，默认 `127.0.0.1`（映射到 `opencode serve --hostname`）
 - `OPENCODE_BIND_PORT`：OpenCode 监听端口，默认 `4096`（多实例时需为每个项目分配不同端口；未显式设置时，脚本会尝试用 `A2A_PORT + 1` 自动分配）
 - `OPENCODE_LOG_LEVEL`：OpenCode 日志级别，默认 `DEBUG`（脚本内默认）
@@ -108,6 +103,8 @@
 - `A2A_LOG_LEVEL`：A2A 日志级别，默认 `DEBUG`（脚本内默认）
 - `A2A_LOG_PAYLOADS`：是否记录 A2A 与 OpenCode 请求/响应正文，默认 `true`（脚本内默认）
 - `A2A_LOG_BODY_LIMIT`：日志正文最大长度，默认 `0`（不截断）
+
+> 共享路径（`OPENCODE_A2A_DIR`/`OPENCODE_CORE_DIR`/`UV_PYTHON_DIR`/`DATA_ROOT`）请修改 `scripts/init_system.sh` 顶部变量；`deploy.sh` 仅读取这些值。
 - `A2A_STREAMING`：是否启用 SSE streaming（`/v1/message:stream`），默认 `true`
 
 ### 实例配置文件
