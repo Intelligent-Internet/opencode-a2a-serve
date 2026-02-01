@@ -24,7 +24,6 @@ from a2a.types import (
     TransportProtocol,
 )
 from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.responses import StreamingResponse
 
@@ -197,9 +196,7 @@ async def get_auth_dependency(
                 required_scopes = set(settings.a2a_oauth_scopes.keys())
                 token_scopes = _normalize_token_scopes(payload)
                 if not required_scopes.intersection(token_scopes):
-                    logger.warning(
-                        "Token missing required scopes: %s", sorted(required_scopes)
-                    )
+                    logger.warning("Token missing required scopes: %s", sorted(required_scopes))
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Token missing required scopes",
@@ -211,7 +208,7 @@ async def get_auth_dependency(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Invalid or expired token: {str(e)}",
                 headers={"WWW-Authenticate": "Bearer"},
-            )
+            ) from e
     elif settings.a2a_auth_mode == "bearer":
         # Fallback to static bearer token
         expected_token = settings.a2a_bearer_token
@@ -238,9 +235,7 @@ async def get_auth_dependency(
 def create_app(settings: Settings) -> FastAPI:
     # Validate auth configuration
     if settings.a2a_auth_mode not in ALLOWED_AUTH_MODES:
-        raise RuntimeError(
-            f"A2A_AUTH_MODE must be one of {sorted(ALLOWED_AUTH_MODES)}"
-        )
+        raise RuntimeError(f"A2A_AUTH_MODE must be one of {sorted(ALLOWED_AUTH_MODES)}")
     if settings.a2a_auth_mode == "jwt":
         if not settings.a2a_jwt_secret:
             raise RuntimeError("A2A_JWT_SECRET must be set when A2A_AUTH_MODE is 'jwt'")
