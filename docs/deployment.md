@@ -170,6 +170,24 @@ sudo systemctl status opencode@<project>.service
 sudo systemctl status opencode-a2a@<project>.service
 ```
 
+## 卸载单个实例
+
+如需回收某个 `project` 的部署资源（停止并禁用实例服务、删除项目目录与项目用户/组），可使用：
+
+```bash
+./scripts/uninstall.sh project=<project> confirm=UNINSTALL
+```
+
+脚本默认 `dry_run=true` 仅打印将执行的命令；如需真正执行删除：
+
+```bash
+./scripts/uninstall.sh project=<project> dry_run=false confirm=UNINSTALL
+```
+
+注意：
+- `uninstall.sh` **永远不会**删除 systemd 模板单元（`/etc/systemd/system/opencode@.service` 与 `opencode-a2a@.service`），因为它们是全局共享的，删除会影响其它实例。
+- 该脚本仅针对单个 `project` 的实例单元（`opencode@<project>`、`opencode-a2a@<project>`）及其专有目录/用户/组做清理。
+
 ## 日志查看
 
 查看最近日志：
