@@ -60,7 +60,13 @@
 ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1 opencode_provider_id=google opencode_model_id=gemini-3-flash-preview
 ```
 
-支持的 key（不区分大小写）：`project`/`project_name`、`github_token`/`gh_token`、`a2a_bearer_token`、`a2a_port`、`a2a_host`、`opencode_provider_id`、`opencode_model_id`、`repo_url`、`repo_branch`、`opencode_timeout`、`opencode_timeout_stream`、`google_generative_ai_api_key`（可用 `google_api_key` 作为别名）、`update_a2a`、`force_restart`。
+HTTPS 域名示例（避免 root 多实例环境变量互相干扰）：
+
+```bash
+./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1 a2a_public_url=https://a2a.example.com
+```
+
+支持的 key（不区分大小写）：`project`/`project_name`、`github_token`/`gh_token`、`a2a_bearer_token`、`a2a_port`、`a2a_host`、`a2a_public_url`、`opencode_provider_id`、`opencode_model_id`、`repo_url`、`repo_branch`、`opencode_timeout`、`opencode_timeout_stream`、`git_identity_name`、`git_identity_email`、`google_generative_ai_api_key`（可用 `google_api_key` 作为别名）、`update_a2a`、`force_restart`。
 
 > `github_token` **必须使用项目专属的 Fine-grained personal access token**，并严格限制权限范围（**不得跨仓授权**，仅授予该项目仓库所需的最小读写权限）。
 
@@ -96,15 +102,17 @@
 - `OPENCODE_MODEL_ID`：OpenCode 默认 model（写入 `a2a.env`）
 - `OPENCODE_TIMEOUT`：请求超时秒数，默认 `300`
 - `OPENCODE_TIMEOUT_STREAM`：streaming 请求超时秒数（可选；不设置则不限制）
+- `GIT_IDENTITY_NAME`：可选，覆盖写入 Git author/committer name；未设置时默认 `OpenCode-<project>`
+- `GIT_IDENTITY_EMAIL`：可选，覆盖写入 Git author/committer email；未设置时默认 `<project>@internal`
 
 - `A2A_HOST`：A2A 监听地址，默认 `127.0.0.1`（也可通过 `deploy.sh` 的 `a2a_host=...` 参数设置）
 - `A2A_PORT`：A2A 监听端口，默认 `8000`（多实例时需为每个项目分配不同端口）
-- `A2A_PUBLIC_URL`：对外可访问的 A2A URL，默认 `http://<A2A_HOST>:<A2A_PORT>`
 - `A2A_LOG_LEVEL`：A2A 日志级别，默认 `DEBUG`（脚本内默认）
 - `A2A_LOG_PAYLOADS`：是否记录 A2A 与 OpenCode 请求/响应正文，默认 `true`（脚本内默认）
 - `A2A_LOG_BODY_LIMIT`：日志正文最大长度，默认 `0`（不截断）
 
 > 共享路径（`OPENCODE_A2A_DIR`/`OPENCODE_CORE_DIR`/`UV_PYTHON_DIR`/`DATA_ROOT`）默认从 `scripts/init_system.sh` 顶部变量读取；`deploy.sh` 仍支持环境变量覆盖（需确保与实际目录一致）。
+- `A2A_PUBLIC_URL` 仅通过 `deploy.sh` 的 `a2a_public_url=...` 参数设置；未提供时自动拼接为 `http://<A2A_HOST>:<A2A_PORT>`。
 - `A2A_STREAMING`：是否启用 SSE streaming（`/v1/message:stream`），默认 `true`
 
 ### 实例配置文件
@@ -112,9 +120,12 @@
 每个项目会生成（路径位于 `/data/projects/<project>/config/`，不同项目不会重名）：
 
 - `config/opencode.env`：仅 OpenCode 读取（包含 `GH_TOKEN` 与 Git 身份配置）
+- `config/opencode.secret.env`：仅 OpenCode 读取的敏感配置（可选，包含 `GOOGLE_GENERATIVE_AI_API_KEY`）
 - `config/a2a.env`：仅 A2A 读取（包含 `A2A_BEARER_TOKEN`，以及 `OPENCODE_PROVIDER_ID/OPENCODE_MODEL_ID` 等模型配置）
 
-`GOOGLE_GENERATIVE_AI_API_KEY` 不会写入任何配置文件。可在部署时通过环境变量或 `google_generative_ai_api_key` 参数注入，并以 systemd runtime 方式仅作用于 `opencode@` 进程。系统重启后需重新注入。
+`GOOGLE_GENERATIVE_AI_API_KEY` 可在部署时通过环境变量或 `google_generative_ai_api_key` 参数提供，脚本会将其写入 `config/opencode.secret.env`（权限 `600`，`root:root`），并由 `opencode@.service` 通过 `EnvironmentFile` 持久加载。服务重启或服务器重启后无需重新注入。
+
+> 风险提示：由于 key 注入到 `opencode` 运行进程，`opencode agent` 可能通过套话/拼接等方式泄露敏感值。本方案不提供“agent 无法获知 provider key”的安全保证。
 
 为保障私有仓库访问，`github_token` 会写入 `config/opencode.env`，并结合 `GIT_ASKPASS` 注入到 OpenCode 进程中使用。该文件权限为 600（root-only）。
 
@@ -122,12 +133,18 @@
 
 如需使用 `gh` CLI，服务默认将 `PATH` 包含 `/usr/bin`，并显式允许读取 `/usr/bin/gh`。若 `gh` 安装在其他路径，可通过软链接放入 `${OPENCODE_CORE_DIR}/bin`。
 
-若 systemd 不支持 `set-property Environment`，脚本会退化为临时设置 systemd manager 环境变量并立即启动服务，随后清理该环境变量，避免长期暴露。
+未提供 `GOOGLE_GENERATIVE_AI_API_KEY` 时，部署脚本不会覆盖已有 `config/opencode.secret.env`，便于已部署实例在常规升级时保持现有密钥配置。
 
 示例（推荐用环境变量避免写入 shell 历史）：
 
 ```bash
 GOOGLE_GENERATIVE_AI_API_KEY=AIzxxx ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1 opencode_provider_id=google opencode_model_id=gemini-3-flash-preview repo_url=https://github.com/org/repo.git repo_branch=main
+```
+
+轮换 Gemini key（推荐）：
+
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=AIz_new ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx force_restart=true
 ```
 
 如需自动初始化仓库，可传 `repo_url`（可选 `repo_branch`），脚本会在首次部署时将仓库克隆到 `workspace/`；如果 `workspace/.git` 已存在或目录非空则跳过。
@@ -139,12 +156,38 @@ sudo systemctl restart opencode@<project>.service
 sudo systemctl restart opencode-a2a@<project>.service
 ```
 
+### Gemini Key 验收 Checklist
+
+- 首次部署：提供 `GOOGLE_GENERATIVE_AI_API_KEY`，确认 `config/opencode.secret.env` 已生成且权限为 `600`（owner/group 为 `root`）。
+- 服务重启：执行 `sudo systemctl restart opencode@<project>.service` 后，Gemini 请求仍可成功。
+- 服务器重启：系统重启后确认 `opencode@<project>.service` 恢复运行且 Gemini 请求仍可成功。
+- 密钥轮换：使用新 key 重新执行 `deploy.sh`（可带 `force_restart=true`），确认新 key 生效且服务可用。
+
 ## 服务管理
 
 ```bash
 sudo systemctl status opencode@<project>.service
 sudo systemctl status opencode-a2a@<project>.service
 ```
+
+## 卸载单个实例
+
+如需回收某个 `project` 的部署资源（停止并禁用实例服务、删除项目目录与项目用户/组），可使用：
+
+```bash
+./scripts/uninstall.sh project=<project>
+```
+
+脚本默认仅打印将执行的命令（preview）；如需真正执行删除，需在 preview 基础上显式确认：
+
+```bash
+./scripts/uninstall.sh project=<project> confirm=UNINSTALL
+```
+
+注意：
+- `uninstall.sh` **永远不会**删除 systemd 模板单元（`/etc/systemd/system/opencode@.service` 与 `opencode-a2a@.service`），因为它们是全局共享的，删除会影响其它实例。
+- 该脚本仅针对单个 `project` 的实例单元（`opencode@<project>`、`opencode-a2a@<project>`）及其专有目录/用户/组做清理。
+- 出于安全考虑：apply 模式（`confirm=UNINSTALL`）会校验 `project` 名称（对齐常见 Linux 用户名约束），并在执行删除前检查 `${DATA_ROOT}/<project>/config/` 下的 marker env 文件（如 `a2a.env` / `opencode.env`）。若不满足将拒绝执行删除（此时需人工确认后手工清理目录）。脚本会 canonicalize `DATA_ROOT` 并拒绝包含 `.`/`..` 段的路径（避免意外删除到上级目录）。脚本会使用 `sudo`，在非交互环境下要求 `sudo -n` 可用以避免卡住。
 
 ## 日志查看
 
@@ -191,6 +234,12 @@ systemd 单元已启用：
 - `NoNewPrivileges=true`
 
 OpenCode 与 A2A 分离运行：`A2A_BEARER_TOKEN` 仅注入 A2A，`GH_TOKEN`/Git 凭证仅注入 OpenCode，避免跨进程继承。
+
+关键风险与适用范围：
+
+- 当前实现下，LLM provider token（如 `GOOGLE_GENERATIVE_AI_API_KEY`）对 `opencode` 进程可见，存在被 agent 侧间接获取的风险。
+- 因此本仓当前能力仅建议部署在内部实例，且由少数可信成员共用 repo 与 LLM key。
+- 若要作为 cgnext 的通用能力对外提供，必须先完成 token 安全方案定义（至少覆盖租户隔离、权限边界、审计、轮换与应急撤销）。
 
 ## Streaming 说明
 

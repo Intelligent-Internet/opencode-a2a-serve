@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy an isolated OpenCode + A2A instance (systemd services).
-# Usage: ./deploy.sh project=<name> github_token=<token> [a2a_auth_mode=bearer|jwt] [a2a_bearer_token=<token>] [a2a_jwt_secret=<key>] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [update_a2a=true] [force_restart=true]
-# Optional: GOOGLE_GENERATIVE_AI_API_KEY=<key> to inject runtime-only API key into opencode@ service.
+# Usage: ./deploy.sh project=<name> github_token=<token> [a2a_auth_mode=bearer|jwt] [a2a_bearer_token=<token>] [a2a_jwt_secret=<key>] [a2a_jwt_algorithm=<alg>] [a2a_jwt_issuer=<iss>] [a2a_jwt_audience=<aud>] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [git_identity_email=<email>] [update_a2a=true] [force_restart=true]
+# Optional: GOOGLE_GENERATIVE_AI_API_KEY=<key> (persisted into config/opencode.secret.env for opencode@ service).
 # Requires: sudo access to write systemd units and create users/directories.
 #
 # Key environment variables (optional):
@@ -33,6 +33,8 @@ REPO_URL_INPUT=""
 REPO_BRANCH_INPUT=""
 OPENCODE_TIMEOUT_INPUT=""
 OPENCODE_TIMEOUT_STREAM_INPUT=""
+GIT_IDENTITY_NAME_INPUT=""
+GIT_IDENTITY_EMAIL_INPUT=""
 UPDATE_A2A_INPUT=""
 FORCE_RESTART_INPUT=""
 
@@ -100,6 +102,12 @@ for arg in "$@"; do
     opencode_timeout_stream)
       OPENCODE_TIMEOUT_STREAM_INPUT="$value"
       ;;
+    git_identity_name)
+      GIT_IDENTITY_NAME_INPUT="$value"
+      ;;
+    git_identity_email)
+      GIT_IDENTITY_EMAIL_INPUT="$value"
+      ;;
     update_a2a)
       UPDATE_A2A_INPUT="$value"
       ;;
@@ -114,7 +122,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$PROJECT_NAME" || -z "$GH_TOKEN" ]]; then
-  echo "Usage: $0 project=<name> github_token=<token> [a2a_auth_mode=bearer|jwt] [a2a_bearer_token=<token>] [a2a_jwt_secret=<key>] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [update_a2a=true] [force_restart=true]" >&2
+  echo "Usage: $0 project=<name> github_token=<token> [a2a_auth_mode=bearer|jwt] [a2a_bearer_token=<token>] [a2a_jwt_secret=<key>] [a2a_jwt_algorithm=<alg>] [a2a_jwt_issuer=<iss>] [a2a_jwt_audience=<aud>] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [git_identity_email=<email>] [update_a2a=true] [force_restart=true]" >&2
   exit 1
 fi
 
@@ -158,6 +166,12 @@ if [[ -n "$OPENCODE_TIMEOUT_INPUT" ]]; then
 fi
 if [[ -n "$OPENCODE_TIMEOUT_STREAM_INPUT" ]]; then
   export OPENCODE_TIMEOUT_STREAM="$OPENCODE_TIMEOUT_STREAM_INPUT"
+fi
+if [[ -n "$GIT_IDENTITY_NAME_INPUT" ]]; then
+  export GIT_IDENTITY_NAME="$GIT_IDENTITY_NAME_INPUT"
+fi
+if [[ -n "$GIT_IDENTITY_EMAIL_INPUT" ]]; then
+  export GIT_IDENTITY_EMAIL="$GIT_IDENTITY_EMAIL_INPUT"
 fi
 
 export OPENCODE_BIND_HOST="${OPENCODE_BIND_HOST:-127.0.0.1}"

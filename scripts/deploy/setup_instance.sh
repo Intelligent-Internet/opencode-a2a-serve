@@ -3,6 +3,7 @@
 # Usage: ./setup_instance.sh <project_name> <github_token> <a2a_bearer_token>
 # Requires env: DATA_ROOT, OPENCODE_BIND_HOST, OPENCODE_BIND_PORT, OPENCODE_LOG_LEVEL,
 #               A2A_HOST, A2A_PORT, A2A_PUBLIC_URL.
+# Optional env: GOOGLE_GENERATIVE_AI_API_KEY (persisted into config/opencode.secret.env when provided).
 set -euo pipefail
 
 PROJECT_NAME="${1:-}"
@@ -26,6 +27,7 @@ fi
 PROJECT_DIR="${DATA_ROOT}/${PROJECT_NAME}"
 WORKSPACE_DIR="${PROJECT_DIR}/workspace"
 CONFIG_DIR="${PROJECT_DIR}/config"
+OPENCODE_SECRET_ENV_FILE="${CONFIG_DIR}/opencode.secret.env"
 LOG_DIR="${PROJECT_DIR}/logs"
 RUN_DIR="${PROJECT_DIR}/run"
 ASKPASS_SCRIPT="${RUN_DIR}/git-askpass.sh"
@@ -50,6 +52,15 @@ SCRIPT
 sudo install -m 700 -o "$PROJECT_NAME" -g "$PROJECT_NAME" "$askpass_tmp" "$ASKPASS_SCRIPT"
 rm -f "$askpass_tmp"
 
+git_author_name="OpenCode-${PROJECT_NAME}"
+git_author_email="${PROJECT_NAME}@internal"
+if [[ -n "${GIT_IDENTITY_NAME:-}" ]]; then
+  git_author_name="${GIT_IDENTITY_NAME}"
+fi
+if [[ -n "${GIT_IDENTITY_EMAIL:-}" ]]; then
+  git_author_email="${GIT_IDENTITY_EMAIL}"
+fi
+
 opencode_env_tmp="$(mktemp)"
 {
   echo "OPENCODE_LOG_LEVEL=${OPENCODE_LOG_LEVEL}"
@@ -60,10 +71,10 @@ opencode_env_tmp="$(mktemp)"
   echo "GIT_ASKPASS=${ASKPASS_SCRIPT}"
   echo "GIT_ASKPASS_REQUIRE=force"
   echo "GIT_TERMINAL_PROMPT=0"
-  echo "GIT_AUTHOR_NAME=OpenCode-${PROJECT_NAME}"
-  echo "GIT_COMMITTER_NAME=OpenCode-${PROJECT_NAME}"
-  echo "GIT_AUTHOR_EMAIL=${PROJECT_NAME}@internal"
-  echo "GIT_COMMITTER_EMAIL=${PROJECT_NAME}@internal"
+  echo "GIT_AUTHOR_NAME=${git_author_name}"
+  echo "GIT_COMMITTER_NAME=${git_author_name}"
+  echo "GIT_AUTHOR_EMAIL=${git_author_email}"
+  echo "GIT_COMMITTER_EMAIL=${git_author_email}"
   if [[ -n "${OPENCODE_PROVIDER_ID:-}" ]]; then
     echo "OPENCODE_PROVIDER_ID=${OPENCODE_PROVIDER_ID}"
   fi
@@ -73,6 +84,15 @@ opencode_env_tmp="$(mktemp)"
 } >"$opencode_env_tmp"
 sudo install -m 600 -o root -g root "$opencode_env_tmp" "$CONFIG_DIR/opencode.env"
 rm -f "$opencode_env_tmp"
+
+if [[ -n "${GOOGLE_GENERATIVE_AI_API_KEY:-}" ]]; then
+  opencode_secret_env_tmp="$(mktemp)"
+  {
+    echo "GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY}"
+  } >"$opencode_secret_env_tmp"
+  sudo install -m 600 -o root -g root "$opencode_secret_env_tmp" "$OPENCODE_SECRET_ENV_FILE"
+  rm -f "$opencode_secret_env_tmp"
+fi
 
 a2a_env_tmp="$(mktemp)"
 {
