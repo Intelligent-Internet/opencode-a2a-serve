@@ -80,7 +80,6 @@ if [[ "$DATA_ROOT" =~ [[:space:]] ]]; then
   exit 1
 fi
 
-PROJECT_DIR="${DATA_ROOT}/${PROJECT_NAME}"
 UNIT_OPENCODE="opencode@${PROJECT_NAME}.service"
 UNIT_A2A="opencode-a2a@${PROJECT_NAME}.service"
 
@@ -88,6 +87,42 @@ APPLY="false"
 if [[ "$CONFIRM_INPUT" == "UNINSTALL" ]]; then
   APPLY="true"
 fi
+
+# Canonicalize paths for safety and to prevent DATA_ROOT=/path/.. surprises.
+#
+# In apply mode we refuse dot-segments in DATA_ROOT and require a canonicalizer.
+contains_dot_segment() {
+  local p="$1"
+  [[ "$p" =~ (^|/)\.\.(/|$) || "$p" =~ (^|/)\.(/|$) ]]
+}
+
+DATA_ROOT_RAW="$DATA_ROOT"
+DATA_ROOT_EFFECTIVE="$DATA_ROOT"
+PROJECT_DIR_EFFECTIVE=""
+
+if [[ "$APPLY" == "true" ]]; then
+  if contains_dot_segment "$DATA_ROOT_RAW"; then
+    echo "Invalid DATA_ROOT for apply mode (contains '.' or '..' segments): ${DATA_ROOT_RAW}" >&2
+    exit 1
+  fi
+fi
+
+if command -v realpath >/dev/null 2>&1; then
+  DATA_ROOT_EFFECTIVE="$(realpath -m -- "$DATA_ROOT_RAW")"
+else
+  if [[ "$APPLY" == "true" ]]; then
+    echo "realpath not found; cannot safely apply uninstall. Install coreutils or provide realpath." >&2
+    exit 1
+  fi
+fi
+
+PROJECT_DIR_EFFECTIVE="${DATA_ROOT_EFFECTIVE}/${PROJECT_NAME}"
+if command -v realpath >/dev/null 2>&1; then
+  PROJECT_DIR_EFFECTIVE="$(realpath -m -- "$PROJECT_DIR_EFFECTIVE")"
+fi
+
+DATA_ROOT="$DATA_ROOT_EFFECTIVE"
+PROJECT_DIR="$PROJECT_DIR_EFFECTIVE"
 
 run() {
   echo "+ $*"
@@ -179,6 +214,7 @@ fi
 
 # Remove project user and group.
 if id "${PROJECT_NAME}" &>/dev/null; then
+  user_deleted="false"
   user_home="$(getent passwd "${PROJECT_NAME}" | cut -d: -f6 || true)"
   if [[ -n "$user_home" && "$user_home" != "${PROJECT_DIR}" ]]; then
     warn "User ${PROJECT_NAME} home mismatch (expected ${PROJECT_DIR}, got ${user_home}); refusing to delete user automatically."
@@ -193,25 +229,51 @@ if id "${PROJECT_NAME}" &>/dev/null; then
     HAD_NONFATAL_FAILURE="true"
   fi
   fi
+
+  # Determine whether the user is gone before attempting to delete the group.
+  if ! id "${PROJECT_NAME}" &>/dev/null; then
+    user_deleted="true"
+  fi
 else
   echo "User not found; skipping: ${PROJECT_NAME}"
+  user_deleted="false"
 fi
 
 if getent group "${PROJECT_NAME}" >/dev/null 2>&1; then
-  # Only delete group if it looks like the dedicated group for this user.
-  primary_group="$(id -gn "${PROJECT_NAME}" 2>/dev/null || true)"
-  if [[ -n "$primary_group" && "$primary_group" != "${PROJECT_NAME}" ]]; then
-    warn "User ${PROJECT_NAME} primary group is ${primary_group}; refusing to delete group ${PROJECT_NAME} automatically."
+  # Safety rules (apply mode):
+  # - We only attempt group deletion after the user is gone.
+  # - If the group still has members, we refuse to delete it automatically.
+  if [[ "$APPLY" == "true" && "$user_deleted" != "true" ]]; then
+    warn "Refusing to delete group ${PROJECT_NAME} automatically because user ${PROJECT_NAME} still exists (or was not deleted)."
     HAD_NONFATAL_FAILURE="true"
   else
-  if command -v groupdel >/dev/null 2>&1; then
-    run_ignore sudo groupdel "${PROJECT_NAME}"
-  elif command -v delgroup >/dev/null 2>&1; then
-    run_ignore sudo delgroup "${PROJECT_NAME}"
-  else
-    echo "Neither groupdel nor delgroup found; cannot remove group ${PROJECT_NAME} automatically." >&2
-    HAD_NONFATAL_FAILURE="true"
-  fi
+    if [[ "$APPLY" == "true" ]]; then
+      members="$(getent group "${PROJECT_NAME}" | cut -d: -f4 || true)"
+      if [[ -n "$members" ]]; then
+        warn "Refusing to delete group ${PROJECT_NAME} automatically because it still has members: ${members}"
+        HAD_NONFATAL_FAILURE="true"
+        # Still print the command for auditability, but do not run it.
+        echo "+ sudo groupdel ${PROJECT_NAME}"
+      else
+        if command -v groupdel >/dev/null 2>&1; then
+          run_ignore sudo groupdel "${PROJECT_NAME}"
+        elif command -v delgroup >/dev/null 2>&1; then
+          run_ignore sudo delgroup "${PROJECT_NAME}"
+        else
+          echo "Neither groupdel nor delgroup found; cannot remove group ${PROJECT_NAME} automatically." >&2
+          HAD_NONFATAL_FAILURE="true"
+        fi
+      fi
+    else
+      # Preview mode: print what would be attempted in apply mode.
+      if command -v groupdel >/dev/null 2>&1; then
+        run_ignore sudo groupdel "${PROJECT_NAME}"
+      elif command -v delgroup >/dev/null 2>&1; then
+        run_ignore sudo delgroup "${PROJECT_NAME}"
+      else
+        echo "Neither groupdel nor delgroup found; cannot remove group ${PROJECT_NAME} automatically." >&2
+      fi
+    fi
   fi
 else
   echo "Group not found; skipping: ${PROJECT_NAME}"
