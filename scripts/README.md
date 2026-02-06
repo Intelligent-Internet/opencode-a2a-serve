@@ -7,6 +7,7 @@
 - `init_system.sh`：初始化系统环境（依赖与共享目录）。可重复执行，已满足的步骤会自动跳过。用于首次搭建服务器环境。
 - `start_services.sh`：本地/临时运行 OpenCode + A2A。无需 sudo，不依赖 systemd，启动后前台常驻，Ctrl+C 会自动停止服务。适合开发、调试、临时验证。
 - `deploy.sh`：在服务器上通过 systemd 部署多实例。适合长期运行与运维管理。
+- `uninstall.sh`：卸载单个 systemd 实例（按 project），永远先打印卸载动作（preview），需显式 `confirm=UNINSTALL` 才会执行删除。
 
 保留 `start_services.sh` 的原因：
 - 轻量：不需要 systemd 与 sudo 权限。
