@@ -68,31 +68,58 @@ HTTPS 域名示例（避免 root 多实例环境变量互相干扰）：
 ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_jwt_secret_b64="$(base64 -w0 jwt_public.pem)" a2a_jwt_issuer=compass a2a_jwt_audience=opencode-a2a:alpha a2a_port=8010 a2a_host=127.0.0.1 a2a_public_url=https://a2a.example.com
 ```
 
-支持的 key（不区分大小写）：
+支持的 key（不区分大小写；均为 `./scripts/deploy.sh` 的 `key=value` 参数）：
 
-- `project`/`project_name`
-- `github_token`/`gh_token`
-- `a2a_jwt_secret`
-- `a2a_jwt_secret_b64`
-- `a2a_jwt_secret_file`
-- `a2a_jwt_algorithm`
-- `a2a_jwt_issuer`
-- `a2a_jwt_audience`
-- `a2a_jwt_scope_match`
-- `a2a_port`
-- `a2a_host`
-- `a2a_public_url`
-- `opencode_provider_id`
-- `opencode_model_id`
-- `repo_url`
-- `repo_branch`
-- `opencode_timeout`
-- `opencode_timeout_stream`
-- `git_identity_name`
-- `git_identity_email`
+必填：
+- `project`/`project_name`：实例名（将映射为 Linux 用户/目录名），建议使用 `[a-z0-9_-]+`（例如 `project=alpha`）
+- `github_token`/`gh_token`：用于私有仓库访问与 `gh` 的 token（建议 Fine-grained PAT，例如 `github_token=ghp_xxx`）
+- `a2a_jwt_issuer`：JWT `iss`（例如 `a2a_jwt_issuer=compass` 或 `a2a_jwt_issuer=https://compass.example.com`）
+- `a2a_jwt_audience`：JWT `aud`（建议按实例隔离，例如 `a2a_jwt_audience=opencode-a2a:alpha`）
+
+JWT 验签公钥（必填）：必须且只能提供以下三者之一（推荐顺序从上到下）：
+- `a2a_jwt_secret_b64`：base64(公钥 PEM) 单行值（推荐；避免 systemd `EnvironmentFile` 多行问题，例如 `a2a_jwt_secret_b64=\"$(base64 -w0 jwt_public.pem)\"`）
+- `a2a_jwt_secret_file`：公钥 PEM 文件路径（适合本地/手工部署调试；要求运行时对服务用户可读；建议该文件由 `root` 持有且不可写，例如 `-o root -g root -m 0644`，避免被实例用户篡改；示例 `a2a_jwt_secret_file=/data/projects/alpha/config/jwt_public.pem`）
+- `a2a_jwt_secret`：公钥 PEM（单行；不推荐生产使用；若包含换行，deploy 脚本会尝试自动转成 `a2a_jwt_secret_b64`）
+
+可选（鉴权相关）：
+- `a2a_jwt_algorithm`：JWT 算法，默认 `RS256`；仅支持 `RS256/RS384/RS512/ES256/ES384/ES512`（服务端会拒绝 `HS*` 等对称算法）
+- `a2a_jwt_scope_match`：scope 匹配规则，`any|all`，默认 `any`（仅在配置了 `A2A_OAUTH_SCOPES` 时生效）
+
+可选（网络与路由）：
+- `a2a_port`：A2A 端口（例如 `a2a_port=8010`；多实例时每个实例需使用不同端口）
+- `a2a_host`：A2A 监听地址（例如 `a2a_host=127.0.0.1`；若需要对外暴露可用 `0.0.0.0` 并配合反向代理）
+- `a2a_public_url`：对外访问 URL（例如 `a2a_public_url=https://a2a.example.com`）
+
+可选（OpenCode 与仓库初始化）：
+- `opencode_provider_id`：写入实例配置用于默认 provider（例如 `opencode_provider_id=google`）
+- `opencode_model_id`：写入实例配置用于默认 model（例如 `opencode_model_id=gemini-3-flash-preview`）
+- `repo_url`：首次部署时自动 clone 的仓库 URL（例如 `repo_url=https://github.com/org/repo.git`）
+- `repo_branch`：配合 `repo_url` 指定分支（例如 `repo_branch=main`）
+
+可选（超时）：
+- `opencode_timeout`：OpenCode 请求超时秒数（例如 `opencode_timeout=300`）
+- `opencode_timeout_stream`：OpenCode streaming 超时秒数（例如 `opencode_timeout_stream=600`）
+
+可选（Git 身份覆盖）：
+- `git_identity_name`：覆盖 Git author/committer name（例如 `git_identity_name=OpenCode-alpha`）
+- `git_identity_email`：覆盖 Git author/committer email（例如 `git_identity_email=alpha@internal`）
+
+可选（Gemini key 注入）：
 - `google_generative_ai_api_key`（可用 `google_api_key` 作为别名）
-- `update_a2a`
-- `force_restart`
+
+可选（运维）：
+- `update_a2a`：更新共享代码后再部署（例如 `update_a2a=true`）
+- `force_restart`：强制重启 systemd 服务（例如 `force_restart=true`）
+
+示例：生成 `a2a_jwt_secret_b64`
+
+```bash
+# GNU coreutils (Linux)
+base64 -w0 jwt_public.pem
+
+# macOS / BusyBox 通用写法
+base64 < jwt_public.pem | tr -d '\n'
+```
 
 > `github_token` **必须使用项目专属的 Fine-grained personal access token**，并严格限制权限范围（**不得跨仓授权**，仅授予该项目仓库所需的最小读写权限）。
 
