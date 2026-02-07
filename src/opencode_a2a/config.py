@@ -64,6 +64,16 @@ def _parse_scopes(value: str | None) -> dict[str, str]:
     return scopes
 
 
+def _get_normalized_choice(name: str, default: str, choices: set[str]) -> str:
+    value = _get_env(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in choices:
+        return normalized
+    return default
+
+
 @dataclass(frozen=True)
 class Settings:
     opencode_base_url: str
@@ -92,6 +102,8 @@ class Settings:
     a2a_jwt_algorithm: str
     a2a_jwt_issuer: str | None
     a2a_jwt_audience: str | None
+    a2a_jwt_require_issuer: bool
+    a2a_jwt_scope_match: str
     a2a_oauth_authorization_url: str | None
     a2a_oauth_token_url: str | None
     a2a_oauth_metadata_url: str | None
@@ -126,6 +138,12 @@ class Settings:
             a2a_jwt_algorithm=str(_get_env("A2A_JWT_ALGORITHM", "HS256")),
             a2a_jwt_issuer=_get_env("A2A_JWT_ISSUER"),
             a2a_jwt_audience=_get_env("A2A_JWT_AUDIENCE"),
+            a2a_jwt_require_issuer=_get_bool("A2A_JWT_REQUIRE_ISSUER", False),
+            a2a_jwt_scope_match=_get_normalized_choice(
+                "A2A_JWT_SCOPE_MATCH",
+                default="any",
+                choices={"any", "all"},
+            ),
             a2a_oauth_authorization_url=_get_env("A2A_OAUTH_AUTHORIZATION_URL"),
             a2a_oauth_token_url=_get_env("A2A_OAUTH_TOKEN_URL"),
             a2a_oauth_metadata_url=_get_env("A2A_OAUTH_METADATA_URL"),

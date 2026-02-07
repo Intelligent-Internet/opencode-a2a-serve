@@ -41,6 +41,8 @@ def bearer_settings():
         a2a_jwt_algorithm="HS256",
         a2a_jwt_issuer=None,
         a2a_jwt_audience=None,
+        a2a_jwt_require_issuer=False,
+        a2a_jwt_scope_match="any",
         a2a_oauth_authorization_url=None,
         a2a_oauth_token_url=None,
         a2a_oauth_metadata_url=None,
@@ -77,6 +79,8 @@ def jwt_settings():
         a2a_jwt_algorithm="HS256",
         a2a_jwt_issuer="test-issuer",
         a2a_jwt_audience="test-audience",
+        a2a_jwt_require_issuer=False,
+        a2a_jwt_scope_match="any",
         a2a_oauth_authorization_url=None,
         a2a_oauth_token_url=None,
         a2a_oauth_metadata_url=None,
@@ -124,6 +128,7 @@ def test_jwt_auth_failure_invalid_secret(jwt_settings):
     token = jwt.encode(_jwt_payload(), TEST_JWT_WRONG_SECRET, algorithm="HS256")
     response = client.get("/v1/tasks", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
 
 
 def test_public_route_no_auth(bearer_settings):
@@ -172,6 +177,7 @@ def test_jwt_auth_failure_missing_exp(jwt_settings):
     )
     response = client.get("/v1/tasks", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or expired token"
 
 
 def test_jwt_auth_success_with_scope_list(jwt_settings):
@@ -206,3 +212,26 @@ def test_invalid_auth_mode(bearer_settings):
     settings = dataclasses.replace(bearer_settings, a2a_auth_mode="invalid")
     with pytest.raises(RuntimeError):
         create_app(settings)
+
+
+def test_jwt_mode_requires_audience(jwt_settings):
+    settings = dataclasses.replace(jwt_settings, a2a_jwt_audience=None)
+    with pytest.raises(RuntimeError):
+        create_app(settings)
+
+
+def test_jwt_scope_match_all_requires_all_scopes(jwt_settings):
+    jwt_settings = dataclasses.replace(
+        jwt_settings,
+        a2a_oauth_scopes={"scope-a": "", "scope-b": ""},
+        a2a_jwt_scope_match="all",
+    )
+    app = create_app(jwt_settings)
+    client = TestClient(app)
+    token = jwt.encode(
+        _jwt_payload(scope=["scope-a"]),
+        TEST_JWT_SECRET,
+        algorithm="HS256",
+    )
+    response = client.get("/v1/tasks", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403

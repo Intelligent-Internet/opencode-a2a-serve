@@ -33,6 +33,18 @@ from .opencode_client import OpencodeClient
 
 logger = logging.getLogger(__name__)
 ALLOWED_AUTH_MODES = {"bearer", "jwt"}
+ALLOWED_JWT_ALGORITHMS = {
+    "HS256",
+    "HS384",
+    "HS512",
+    "RS256",
+    "RS384",
+    "RS512",
+    "ES256",
+    "ES384",
+    "ES512",
+}
+MIN_HS_SECRET_BYTES = 32
 
 if TYPE_CHECKING:
     from a2a.server.context import ServerCallContext
@@ -179,8 +191,6 @@ async def get_auth_dependency(
         try:
             # Basic JWT validation
             decode_options: dict[str, Any] = {"require": ["exp"]}
-            if not settings.a2a_jwt_audience:
-                decode_options["verify_aud"] = False
             if not settings.a2a_jwt_issuer:
                 decode_options["verify_iss"] = False
             payload = jwt.decode(
@@ -195,8 +205,16 @@ async def get_auth_dependency(
             if settings.a2a_oauth_scopes:
                 required_scopes = set(settings.a2a_oauth_scopes.keys())
                 token_scopes = _normalize_token_scopes(payload)
-                if not required_scopes.intersection(token_scopes):
-                    logger.warning("Token missing required scopes: %s", sorted(required_scopes))
+                if settings.a2a_jwt_scope_match == "all":
+                    ok = required_scopes.issubset(token_scopes)
+                else:
+                    ok = bool(required_scopes.intersection(token_scopes))
+                if not ok:
+                    logger.warning(
+                        "Token missing required scopes: %s; token_scopes=%s",
+                        sorted(required_scopes),
+                        sorted(token_scopes),
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Token missing required scopes",
@@ -206,7 +224,7 @@ async def get_auth_dependency(
             logger.warning("Invalid JWT token: %s", str(e))
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid or expired token: {str(e)}",
+                detail="Invalid or expired token",
                 headers={"WWW-Authenticate": "Bearer"},
             ) from e
     elif settings.a2a_auth_mode == "bearer":
@@ -239,6 +257,25 @@ def create_app(settings: Settings) -> FastAPI:
     if settings.a2a_auth_mode == "jwt":
         if not settings.a2a_jwt_secret:
             raise RuntimeError("A2A_JWT_SECRET must be set when A2A_AUTH_MODE is 'jwt'")
+        if settings.a2a_jwt_scope_match not in {"any", "all"}:
+            raise RuntimeError("A2A_JWT_SCOPE_MATCH must be 'any' or 'all'")
+        if settings.a2a_jwt_algorithm not in ALLOWED_JWT_ALGORITHMS:
+            raise RuntimeError(
+                f"A2A_JWT_ALGORITHM must be one of {sorted(ALLOWED_JWT_ALGORITHMS)}"
+            )
+        if not settings.a2a_jwt_audience:
+            raise RuntimeError("A2A_JWT_AUDIENCE must be set when A2A_AUTH_MODE is 'jwt'")
+        if settings.a2a_jwt_require_issuer and not settings.a2a_jwt_issuer:
+            raise RuntimeError(
+                "A2A_JWT_ISSUER must be set when A2A_JWT_REQUIRE_ISSUER is true"
+            )
+        if settings.a2a_jwt_algorithm.startswith("HS"):
+            secret_len = len(settings.a2a_jwt_secret.encode("utf-8"))
+            if secret_len < MIN_HS_SECRET_BYTES:
+                raise RuntimeError(
+                    f"A2A_JWT_SECRET must be at least {MIN_HS_SECRET_BYTES} bytes for "
+                    f"{settings.a2a_jwt_algorithm}"
+                )
     elif settings.a2a_auth_mode == "bearer":
         if not settings.a2a_bearer_token:
             raise RuntimeError("A2A_BEARER_TOKEN must be set when A2A_AUTH_MODE is 'bearer'")

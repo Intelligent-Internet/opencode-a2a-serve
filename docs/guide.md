@@ -24,9 +24,12 @@
 - `A2A_AUTH_MODE`：鉴权模式，可选 `bearer` 或 `jwt`，默认 `bearer`
 - `A2A_BEARER_TOKEN`：当 `A2A_AUTH_MODE=bearer` 时必填；用于静态 Bearer Token 校验
 - `A2A_JWT_SECRET`：当 `A2A_AUTH_MODE=jwt` 时必填；JWT 签名密钥
+- 说明：当 `A2A_JWT_ALGORITHM` 为 `HS256/HS384/HS512` 时，`A2A_JWT_SECRET` 建议使用高熵随机值且长度不少于 32 bytes
 - `A2A_JWT_ALGORITHM`：JWT 签名算法，默认 `HS256`
-- `A2A_JWT_ISSUER`：JWT 签发者校验（可选）
-- `A2A_JWT_AUDIENCE`：JWT 受众校验（可选）
+- `A2A_JWT_ISSUER`：JWT 签发者校验（可选；若启用 `A2A_JWT_REQUIRE_ISSUER=true` 则必填）
+- `A2A_JWT_AUDIENCE`：JWT 受众校验（当 `A2A_AUTH_MODE=jwt` 时必填）
+- `A2A_JWT_REQUIRE_ISSUER`：是否强制要求并校验 `iss`（默认 `false`）
+- `A2A_JWT_SCOPE_MATCH`：当设置了 `A2A_OAUTH_SCOPES` 时的 scopes 匹配规则，可选 `any`/`all`，默认 `any`
 - `A2A_STREAMING`：是否启用 SSE streaming（`/v1/message:stream`），默认 `true`
 - `A2A_LOG_LEVEL`：A2A 服务日志级别（`DEBUG/INFO/WARNING/ERROR`），默认 `INFO`
 - `A2A_LOG_PAYLOADS`：是否记录 A2A 与 OpenCode 的请求/响应正文，默认 `false`
@@ -62,7 +65,7 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 
 ## 鉴权示例（JWT 模式）
 
-若启用 `A2A_AUTH_MODE=jwt`，Token 需为合法的 JWT 且必须包含 `exp`。若设置了 `A2A_OAUTH_SCOPES`，Token 的 `scope` 或 `scp` 声明中必须包含其中之一（支持字符串或数组）。
+若启用 `A2A_AUTH_MODE=jwt`，Token 需为合法的 JWT 且必须包含 `exp`，并且服务端必须配置 `A2A_JWT_AUDIENCE`。若设置了 `A2A_OAUTH_SCOPES`，Token 的 `scope` 或 `scp` 声明需满足 `A2A_JWT_SCOPE_MATCH` 规则（支持字符串或数组）。
 
 ```bash
 # 生成 Token 示例（Python）
