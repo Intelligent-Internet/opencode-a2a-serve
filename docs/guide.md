@@ -24,7 +24,7 @@
 - `A2A_AUTH_MODE`：鉴权模式，可选 `bearer` 或 `jwt`，默认 `bearer`
 - `A2A_BEARER_TOKEN`：当 `A2A_AUTH_MODE=bearer` 时必填；用于静态 Bearer Token 校验
 - `A2A_JWT_SECRET`：当 `A2A_AUTH_MODE=jwt` 时必填；JWT 签名密钥
-- 说明：当 `A2A_JWT_ALGORITHM` 为 `HS256/HS384/HS512` 时，`A2A_JWT_SECRET` 建议使用高熵随机值且长度不少于 32 bytes
+- 说明：当 `A2A_JWT_ALGORITHM` 为 `HS256/HS384/HS512` 时，`A2A_JWT_SECRET` 必须为高熵随机值且长度不少于 32 bytes（否则服务拒绝启动）
 - `A2A_JWT_ALGORITHM`：JWT 签名算法，默认 `HS256`
 - `A2A_JWT_ISSUER`：JWT 签发者校验（可选；若启用 `A2A_JWT_REQUIRE_ISSUER=true` 则必填）
 - `A2A_JWT_AUDIENCE`：JWT 受众校验（当 `A2A_AUTH_MODE=jwt` 时必填）
@@ -37,7 +37,7 @@
 - `A2A_OAUTH_AUTHORIZATION_URL`：OAuth2 授权地址（预留配置）
 - `A2A_OAUTH_TOKEN_URL`：OAuth2 token 地址（预留配置）
 - `A2A_OAUTH_METADATA_URL`：OAuth2 元数据地址（可选，预留配置）
-- `A2A_OAUTH_SCOPES`：OAuth2 scopes，逗号分隔（预留配置）
+- `A2A_OAUTH_SCOPES`：OAuth2 scopes，逗号分隔（可选；用于 Agent Card 声明，并可用于 JWT 的 scope/scp 校验）
 
 ## 服务行为说明
 
@@ -45,8 +45,8 @@
 - 任务状态默认返回 `input-required`，便于继续多轮对话。
 - Streaming（`/v1/message:stream`）会输出 `TaskArtifactUpdateEvent` 增量（`append=true`），结束时发送 `TaskStatusUpdateEvent(final=true)`；完整内容由 artifact 承载，非 streaming 调用仍返回 `Task`。
 - 需在请求中携带 `Authorization: Bearer <token>`，否则返回 401（Agent Card 不受鉴权限制）。
-- 支持 JWT 无状态鉴权：当启用 JWT 模式时，会校验签名、过期时间（exp，必填）及 Scopes（scope/scp，字符串或数组）。
-- OAuth2 相关配置（Authorization/Token URL）目前主要用于 Agent Card 声明。
+- 支持 JWT 无状态鉴权：当启用 JWT 模式时，会校验签名、过期时间（exp，必填）与受众（audience），并可选校验签发者（issuer）及 Scopes（scope/scp，字符串或数组）。
+- OAuth2 URLs（Authorization/Token URL）目前主要用于 Agent Card 声明。
 
 ## 鉴权示例（curl）
 
@@ -69,7 +69,7 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 
 ```bash
 # 生成 Token 示例（Python）
-# python -c "import jwt, time; print(jwt.encode({'iss': 'my-issuer', 'exp': int(time.time()) + 3600, 'scope': 'opencode'}, 'my-secret', algorithm='HS256'))"
+# python -c "import jwt, time; print(jwt.encode({'iss': 'my-issuer', 'aud': 'my-audience', 'exp': int(time.time()) + 3600, 'scope': 'opencode'}, 'my-secret', algorithm='HS256'))"
 
 curl -sS http://127.0.0.1:8000/v1/message:send \
   -H 'Authorization: Bearer <your-jwt-token>' \

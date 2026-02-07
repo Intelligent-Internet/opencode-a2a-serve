@@ -60,13 +60,44 @@
 ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1 opencode_provider_id=google opencode_model_id=gemini-3-flash-preview
 ```
 
+JWT 鉴权示例（推荐生产使用；需配置 `a2a_jwt_audience`）：
+
+```bash
+./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_auth_mode=jwt a2a_jwt_secret=jwt_xxx a2a_jwt_audience=opencode-a2a:alpha a2a_port=8010 a2a_host=127.0.0.1
+```
+
 HTTPS 域名示例（避免 root 多实例环境变量互相干扰）：
 
 ```bash
 ./scripts/deploy.sh project=alpha github_token=ghp_xxx a2a_bearer_token=a2a_xxx a2a_port=8010 a2a_host=127.0.0.1 a2a_public_url=https://a2a.example.com
 ```
 
-支持的 key（不区分大小写）：`project`/`project_name`、`github_token`/`gh_token`、`a2a_bearer_token`、`a2a_port`、`a2a_host`、`a2a_public_url`、`opencode_provider_id`、`opencode_model_id`、`repo_url`、`repo_branch`、`opencode_timeout`、`opencode_timeout_stream`、`git_identity_name`、`git_identity_email`、`google_generative_ai_api_key`（可用 `google_api_key` 作为别名）、`update_a2a`、`force_restart`。
+支持的 key（不区分大小写）：
+
+- `project`/`project_name`
+- `github_token`/`gh_token`
+- `a2a_auth_mode`
+- `a2a_bearer_token`
+- `a2a_jwt_secret`
+- `a2a_jwt_algorithm`
+- `a2a_jwt_issuer`
+- `a2a_jwt_audience`
+- `a2a_jwt_require_issuer`
+- `a2a_jwt_scope_match`
+- `a2a_port`
+- `a2a_host`
+- `a2a_public_url`
+- `opencode_provider_id`
+- `opencode_model_id`
+- `repo_url`
+- `repo_branch`
+- `opencode_timeout`
+- `opencode_timeout_stream`
+- `git_identity_name`
+- `git_identity_email`
+- `google_generative_ai_api_key`（可用 `google_api_key` 作为别名）
+- `update_a2a`
+- `force_restart`
 
 > `github_token` **必须使用项目专属的 Fine-grained personal access token**，并严格限制权限范围（**不得跨仓授权**，仅授予该项目仓库所需的最小读写权限）。
 
@@ -121,7 +152,7 @@ HTTPS 域名示例（避免 root 多实例环境变量互相干扰）：
 
 - `config/opencode.env`：仅 OpenCode 读取（包含 `GH_TOKEN` 与 Git 身份配置）
 - `config/opencode.secret.env`：仅 OpenCode 读取的敏感配置（可选，包含 `GOOGLE_GENERATIVE_AI_API_KEY`）
-- `config/a2a.env`：仅 A2A 读取（包含 `A2A_BEARER_TOKEN`，以及 `OPENCODE_PROVIDER_ID/OPENCODE_MODEL_ID` 等模型配置）
+- `config/a2a.env`：仅 A2A 读取（包含 `A2A_AUTH_MODE`；当 `bearer` 模式时包含 `A2A_BEARER_TOKEN`；当 `jwt` 模式时包含 `A2A_JWT_*`；以及 `OPENCODE_PROVIDER_ID/OPENCODE_MODEL_ID` 等模型配置）
 
 `GOOGLE_GENERATIVE_AI_API_KEY` 可在部署时通过环境变量或 `google_generative_ai_api_key` 参数提供，脚本会将其写入 `config/opencode.secret.env`（权限 `600`，`root:root`），并由 `opencode@.service` 通过 `EnvironmentFile` 持久加载。服务重启或服务器重启后无需重新注入。
 

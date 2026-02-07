@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy an isolated OpenCode + A2A instance (systemd services).
-# Usage: ./deploy.sh project=<name> github_token=<token> [a2a_auth_mode=bearer|jwt] [a2a_bearer_token=<token>] [a2a_jwt_secret=<key>] [a2a_jwt_algorithm=<alg>] [a2a_jwt_issuer=<iss>] [a2a_jwt_audience=<aud>] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [git_identity_email=<email>] [update_a2a=true] [force_restart=true]
+# Usage: ./deploy.sh project=<name> github_token=<token> [a2a_auth_mode=bearer|jwt] [a2a_bearer_token=<token>] [a2a_jwt_secret=<key>] [a2a_jwt_algorithm=<alg>] [a2a_jwt_issuer=<iss>] [a2a_jwt_audience=<aud>] [a2a_jwt_require_issuer=true|false] [a2a_jwt_scope_match=any|all] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [git_identity_email=<email>] [update_a2a=true] [force_restart=true]
 # Optional: GOOGLE_GENERATIVE_AI_API_KEY=<key> (persisted into config/opencode.secret.env for opencode@ service).
 # Requires: sudo access to write systemd units and create users/directories.
 #
@@ -23,6 +23,8 @@ A2A_JWT_SECRET=""
 A2A_JWT_ALGORITHM="HS256"
 A2A_JWT_ISSUER=""
 A2A_JWT_AUDIENCE=""
+A2A_JWT_REQUIRE_ISSUER=""
+A2A_JWT_SCOPE_MATCH=""
 A2A_PORT_INPUT=""
 A2A_HOST_INPUT=""
 A2A_PUBLIC_URL_INPUT=""
@@ -71,6 +73,12 @@ for arg in "$@"; do
       ;;
     a2a_jwt_audience)
       A2A_JWT_AUDIENCE="$value"
+      ;;
+    a2a_jwt_require_issuer)
+      A2A_JWT_REQUIRE_ISSUER="$value"
+      ;;
+    a2a_jwt_scope_match)
+      A2A_JWT_SCOPE_MATCH="$value"
       ;;
     a2a_port)
       A2A_PORT_INPUT="$value"
@@ -122,7 +130,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$PROJECT_NAME" || -z "$GH_TOKEN" ]]; then
-  echo "Usage: $0 project=<name> github_token=<token> [a2a_auth_mode=bearer|jwt] [a2a_bearer_token=<token>] [a2a_jwt_secret=<key>] [a2a_jwt_algorithm=<alg>] [a2a_jwt_issuer=<iss>] [a2a_jwt_audience=<aud>] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [git_identity_email=<email>] [update_a2a=true] [force_restart=true]" >&2
+  echo "Usage: $0 project=<name> github_token=<token> [a2a_auth_mode=bearer|jwt] [a2a_bearer_token=<token>] [a2a_jwt_secret=<key>] [a2a_jwt_algorithm=<alg>] [a2a_jwt_issuer=<iss>] [a2a_jwt_audience=<aud>] [a2a_jwt_require_issuer=true|false] [a2a_jwt_scope_match=any|all] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [git_identity_email=<email>] [update_a2a=true] [force_restart=true]" >&2
   exit 1
 fi
 
@@ -138,6 +146,18 @@ fi
 
 if [[ "$A2A_AUTH_MODE" == "jwt" && -z "$A2A_JWT_SECRET" ]]; then
   echo "a2a_jwt_secret is required when a2a_auth_mode is jwt" >&2
+  exit 1
+fi
+if [[ "$A2A_AUTH_MODE" == "jwt" && -z "$A2A_JWT_AUDIENCE" ]]; then
+  echo "a2a_jwt_audience is required when a2a_auth_mode is jwt" >&2
+  exit 1
+fi
+if [[ "$A2A_AUTH_MODE" == "jwt" ]] && is_truthy "${A2A_JWT_REQUIRE_ISSUER:-false}" && [[ -z "$A2A_JWT_ISSUER" ]]; then
+  echo "a2a_jwt_issuer is required when a2a_jwt_require_issuer is true" >&2
+  exit 1
+fi
+if [[ -n "$A2A_JWT_SCOPE_MATCH" && "$A2A_JWT_SCOPE_MATCH" != "any" && "$A2A_JWT_SCOPE_MATCH" != "all" ]]; then
+  echo "a2a_jwt_scope_match must be any or all" >&2
   exit 1
 fi
 
@@ -231,6 +251,12 @@ export A2A_JWT_SECRET
 export A2A_JWT_ALGORITHM
 export A2A_JWT_ISSUER
 export A2A_JWT_AUDIENCE
+if [[ -n "$A2A_JWT_REQUIRE_ISSUER" ]]; then
+  export A2A_JWT_REQUIRE_ISSUER
+fi
+if [[ -n "$A2A_JWT_SCOPE_MATCH" ]]; then
+  export A2A_JWT_SCOPE_MATCH
+fi
 
 "${SCRIPT_DIR}/deploy/install_units.sh"
 "${SCRIPT_DIR}/deploy/setup_instance.sh" "$PROJECT_NAME" "$GH_TOKEN" "$A2A_BEARER_TOKEN"

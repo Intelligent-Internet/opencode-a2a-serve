@@ -106,6 +106,8 @@ a2a_env_tmp="$(mktemp)"
   if [[ -n "${A2A_JWT_SECRET:-}" ]]; then
     echo "A2A_JWT_SECRET=${A2A_JWT_SECRET}"
     echo "A2A_JWT_ALGORITHM=${A2A_JWT_ALGORITHM:-HS256}"
+    echo "A2A_JWT_REQUIRE_ISSUER=${A2A_JWT_REQUIRE_ISSUER:-false}"
+    echo "A2A_JWT_SCOPE_MATCH=${A2A_JWT_SCOPE_MATCH:-any}"
   fi
   if [[ -n "${A2A_JWT_ISSUER:-}" ]]; then
     echo "A2A_JWT_ISSUER=${A2A_JWT_ISSUER}"
