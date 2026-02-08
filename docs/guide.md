@@ -26,6 +26,7 @@
 - `A2A_LOG_LEVEL`：A2A 服务日志级别（`DEBUG/INFO/WARNING/ERROR`），默认 `INFO`
 - `A2A_LOG_PAYLOADS`：是否记录 A2A 与 OpenCode 的请求/响应正文，默认 `false`
 - `A2A_LOG_BODY_LIMIT`：日志正文最大长度，默认 `0`（不截断）
+- `A2A_DOCUMENTATION_URL`：可选；用于在 Agent Card 的 `documentationUrl` 字段中暴露文档地址（建议指向本仓库或内部文档站点）
 - `A2A_OAUTH_AUTHORIZATION_URL`：OAuth2 授权地址（预留配置）
 - `A2A_OAUTH_TOKEN_URL`：OAuth2 token 地址（预留配置）
 - `A2A_OAUTH_METADATA_URL`：OAuth2 元数据地址（可选，预留配置）
@@ -39,25 +40,62 @@
 - 需在请求中携带 `Authorization: Bearer <token>`，否则返回 401（Agent Card 不受鉴权限制）。
 - OAuth2 相关配置目前仅用于 Agent Card 声明，鉴权校验需后续接入。
 
-## OpenCode 会话查询（REST 代理）
+## OpenCode 会话查询（A2A Extension）
 
-除 A2A 协议接口外，本服务还提供只读 REST 路由，用于代理 OpenCode serve 的会话列表与历史消息查询。
+本服务通过 A2A Extension 的方式暴露“OpenCode 会话列表/历史消息查询”能力，不额外提供自定义 REST 端点。
 
+- 触发方式：在标准 `POST /v1/message:send` 请求中携带一个 `content` 项（Part.data），并在 `data.op` 指定操作。
 - 鉴权：复用同一个 `Authorization: Bearer <token>`。
-- 安全：即使开启 `A2A_LOG_PAYLOADS=true`，这些路由也不会将响应 body 写入日志（避免泄露聊天历史）。
+- 安全：即使开启 `A2A_LOG_PAYLOADS=true`，当检测到 `opencode.sessions.*` 的 DataPart 请求时，服务也不会将请求/响应 body 写入日志（避免泄露聊天历史）。
 
-### 会话列表
+### 会话列表（opencode.sessions.list）
 
 ```bash
-curl -sS http://127.0.0.1:8000/v1/opencode/sessions \
-  -H 'Authorization: Bearer <your-token>'
+curl -sS http://127.0.0.1:8000/v1/message:send \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "message": {
+      "messageId": "msg-1",
+      "role": "ROLE_USER",
+      "content": [
+        {
+          "data": {
+            "data": {
+              "op": "opencode.sessions.list",
+              "params": {}
+            }
+          }
+        }
+      ]
+    }
+  }'
 ```
 
-### 会话消息历史
+### 会话消息历史（opencode.sessions.messages.list）
 
 ```bash
-curl -sS http://127.0.0.1:8000/v1/opencode/sessions/<session_id>/messages \
-  -H 'Authorization: Bearer <your-token>'
+curl -sS http://127.0.0.1:8000/v1/message:send \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "message": {
+      "messageId": "msg-1",
+      "role": "ROLE_USER",
+      "content": [
+        {
+          "data": {
+            "data": {
+              "op": "opencode.sessions.messages.list",
+              "params": {
+                "session_id": "<session_id>"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }'
 ```
 
 ## 鉴权示例（curl）
@@ -68,9 +106,9 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
   -H 'Authorization: Bearer <your-token>' \
   -d '{
     "message": {
-      "message_id": "msg-1",
-      "role": "user",
-      "parts": [{"kind": "text", "text": "你好，介绍下这个仓库"}]
+      "messageId": "msg-1",
+      "role": "ROLE_USER",
+      "content": [{"text": "你好，介绍下这个仓库"}]
     }
   }'
 ```

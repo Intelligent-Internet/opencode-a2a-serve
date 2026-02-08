@@ -84,6 +84,7 @@ class Settings:
     a2a_log_level: str
     a2a_log_payloads: bool
     a2a_log_body_limit: int
+    a2a_documentation_url: str | None
     a2a_host: str
     a2a_port: int
     a2a_bearer_token: str | None
@@ -113,6 +114,7 @@ class Settings:
             a2a_log_level=_get_env("A2A_LOG_LEVEL", "INFO"),
             a2a_log_payloads=_get_bool("A2A_LOG_PAYLOADS", False),
             a2a_log_body_limit=_get_int("A2A_LOG_BODY_LIMIT", 0),
+            a2a_documentation_url=_get_env("A2A_DOCUMENTATION_URL"),
             a2a_host=_get_env("A2A_HOST", "127.0.0.1"),
             a2a_port=_get_int("A2A_PORT", 8000),
             a2a_bearer_token=_get_env("A2A_BEARER_TOKEN"),

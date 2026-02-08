@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
-import httpx
 import uvicorn
 from a2a.server.apps.jsonrpc.jsonrpc_app import DefaultCallContextBuilder
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
@@ -14,6 +14,7 @@ from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
+    AgentExtension,
     AgentInterface,
     AgentSkill,
     AuthorizationCodeOAuthFlow,
@@ -92,12 +93,31 @@ def build_agent_card(settings: Settings) -> AgentCard:
         name=settings.a2a_title,
         description=settings.a2a_description,
         url=base_url,
+        documentation_url=settings.a2a_documentation_url,
         version=settings.a2a_version,
         protocol_version=settings.a2a_protocol_version,
         preferred_transport=TransportProtocol.http_json,
         default_input_modes=["text/plain"],
         default_output_modes=["text/plain"],
-        capabilities=AgentCapabilities(streaming=settings.a2a_streaming),
+        capabilities=AgentCapabilities(
+            streaming=settings.a2a_streaming,
+            extensions=[
+                AgentExtension(
+                    uri="urn:opencode-a2a:opencode-session-query:1",
+                    required=False,
+                    description=(
+                        "Support OpenCode session list/history queries via DataPart operations "
+                        "on the standard A2A message:send endpoint."
+                    ),
+                    params={
+                        "operations": [
+                            "opencode.sessions.list",
+                            "opencode.sessions.messages.list",
+                        ]
+                    },
+                )
+            ],
+        ),
         skills=[
             AgentSkill(
                 id="opencode.chat",
@@ -108,7 +128,20 @@ def build_agent_card(settings: Settings) -> AgentCard:
                     "Explain what this repository does.",
                     "Summarize the API endpoints in this project.",
                 ],
-            )
+            ),
+            AgentSkill(
+                id="opencode.sessions.query",
+                name="OpenCode Sessions Query",
+                description=(
+                    "Query OpenCode server sessions and message histories via a DataPart request "
+                    "(see documentationUrl / extensions)."
+                ),
+                tags=["opencode", "sessions", "history"],
+                examples=[
+                    "List OpenCode sessions (DataPart opencode.sessions.list).",
+                    "List messages for a session (DataPart opencode.sessions.messages.list).",
+                ],
+            ),
         ],
         additional_interfaces=[AgentInterface(transport=TransportProtocol.http_json, url=base_url)],
         security_schemes=security_schemes,
@@ -163,32 +196,61 @@ def create_app(settings: Settings) -> FastAPI:
         context_builder=StreamingCallContextBuilder(),
     ).build(title=settings.a2a_title, version=settings.a2a_version, lifespan=lifespan)
 
+    def _detect_opencode_session_query_op(body_bytes: bytes) -> str | None:
+        try:
+            payload = json.loads(body_bytes.decode("utf-8", errors="replace"))
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        msg = payload.get("message")
+        if not isinstance(msg, dict):
+            return None
+        content = msg.get("content")
+        if not isinstance(content, list):
+            return None
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            data_part = part.get("data")
+            if not isinstance(data_part, dict):
+                continue
+            data = data_part.get("data")
+            if not isinstance(data, dict):
+                continue
+            op = data.get("op")
+            if isinstance(op, str) and op.startswith("opencode.sessions."):
+                return op
+        return None
+
     @app.middleware("http")
     async def log_payloads(request: Request, call_next):
         if not settings.a2a_log_payloads:
             return await call_next(request)
 
+        body = await request.body()
+        request._body = body  # allow downstream to read again
         path = request.url.path
-        # These endpoints may return full chat histories; never print bodies to logs.
-        sensitive_path = path.startswith("/v1/opencode/")
+        sensitive_op = None
+        if path.endswith("/v1/message:send") or path.endswith("/v1/message:stream"):
+            sensitive_op = _detect_opencode_session_query_op(body)
 
-        if sensitive_path:
-            logger.debug("A2A request %s %s", request.method, path)
+        if sensitive_op:
+            logger.debug("A2A request %s %s op=%s", request.method, path, sensitive_op)
             response = await call_next(request)
             if isinstance(response, StreamingResponse):
-                logger.debug("A2A response %s streaming", path)
+                logger.debug("A2A response %s streaming op=%s", path, sensitive_op)
                 return response
             response_body = getattr(response, "body", b"") or b""
             logger.debug(
-                "A2A response %s status=%s bytes=%s",
+                "A2A response %s status=%s bytes=%s op=%s",
                 path,
                 response.status_code,
                 len(response_body),
+                sensitive_op,
             )
             return response
 
-        body = await request.body()
-        request._body = body  # allow downstream to read again
         body_text = body.decode("utf-8", errors="replace")
         limit = settings.a2a_log_body_limit
         if limit > 0 and len(body_text) > limit:
@@ -218,42 +280,6 @@ def create_app(settings: Settings) -> FastAPI:
         return response
 
     add_auth_middleware(app, settings)
-
-    @app.get("/v1/opencode/sessions")
-    async def opencode_list_sessions(request: Request):
-        try:
-            data = await client.list_sessions(params=dict(request.query_params))
-            return JSONResponse(data, headers={"Cache-Control": "no-store"})
-        except httpx.HTTPStatusError as exc:
-            return JSONResponse(
-                {"error": "Upstream OpenCode error", "status_code": exc.response.status_code},
-                status_code=exc.response.status_code,
-                headers={"Cache-Control": "no-store"},
-            )
-        except httpx.HTTPError:
-            return JSONResponse(
-                {"error": "Upstream OpenCode unreachable"},
-                status_code=502,
-                headers={"Cache-Control": "no-store"},
-            )
-
-    @app.get("/v1/opencode/sessions/{session_id}/messages")
-    async def opencode_list_messages(session_id: str, request: Request):
-        try:
-            data = await client.list_messages(session_id, params=dict(request.query_params))
-            return JSONResponse(data, headers={"Cache-Control": "no-store"})
-        except httpx.HTTPStatusError as exc:
-            return JSONResponse(
-                {"error": "Upstream OpenCode error", "status_code": exc.response.status_code},
-                status_code=exc.response.status_code,
-                headers={"Cache-Control": "no-store"},
-            )
-        except httpx.HTTPError:
-            return JSONResponse(
-                {"error": "Upstream OpenCode unreachable"},
-                status_code=502,
-                headers={"Cache-Control": "no-store"},
-            )
 
     return app
 
