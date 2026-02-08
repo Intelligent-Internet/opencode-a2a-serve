@@ -24,6 +24,10 @@ Agent Card 的 `capabilities.extensions[]` 会声明：
 - `params.pagination`: 当前实现为透传式（仅支持 `page/size`，服务端会作为 query params 透传给 OpenCode serve）
 - `params.result_schema`: 可选；当前为空（客户端按 JSON 透传处理）
 
+说明：
+
+- `directory` 参数由服务端配置（`OPENCODE_DIRECTORY`）控制，客户端通过 `query` 传入的 `directory` 会被忽略（不可覆盖）。
+
 ## 请求格式（JSON-RPC）
 
 客户端使用 A2A JSON-RPC（默认 `POST /`），调用 extension 声明的方法。

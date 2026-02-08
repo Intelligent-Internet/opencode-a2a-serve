@@ -246,9 +246,8 @@ def create_app(settings: Settings) -> FastAPI:
         body = await request.body()
         request._body = body  # allow downstream to read again
         path = request.url.path
-        sensitive_method = None
-        if path == "/":
-            sensitive_method = _detect_opencode_session_query_method(body)
+        # Detect session-query JSON-RPC methods regardless of deployment prefixes/root_path.
+        sensitive_method = _detect_opencode_session_query_method(body)
 
         if sensitive_method:
             logger.debug("A2A request %s %s method=%s", request.method, path, sensitive_method)

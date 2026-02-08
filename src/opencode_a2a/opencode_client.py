@@ -58,6 +58,9 @@ class OpencodeClient:
         for key, value in extra.items():
             if value is None:
                 continue
+            # "directory" is server-controlled (OPENCODE_DIRECTORY). Never allow client overrides.
+            if key == "directory":
+                continue
             # FastAPI query params are strings; keep them as-is. Coerce other primitives to str.
             params[key] = value if isinstance(value, str) else str(value)
         return params
