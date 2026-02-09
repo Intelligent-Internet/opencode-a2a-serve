@@ -32,6 +32,8 @@ LOG_DIR="${PROJECT_DIR}/logs"
 RUN_DIR="${PROJECT_DIR}/run"
 ASKPASS_SCRIPT="${RUN_DIR}/git-askpass.sh"
 CACHE_DIR="${PROJECT_DIR}/.cache/opencode"
+LOCAL_DIR="${PROJECT_DIR}/.local"
+STATE_DIR="${LOCAL_DIR}/state"
 OPENCODE_LOCAL_SHARE_DIR="${PROJECT_DIR}/.local/share/opencode"
 OPENCODE_BIN_DIR="${OPENCODE_LOCAL_SHARE_DIR}/bin"
 DATA_DIR="${PROJECT_DIR}/.local/share/opencode/storage/session"
@@ -69,10 +71,15 @@ sudo install -d -m 700 -o "$PROJECT_NAME" -g "$PROJECT_NAME" "$PROJECT_DIR" "$WO
 sudo install -d -m 700 -o root -g root "$CONFIG_DIR"
 # Ensure OpenCode can write its XDG cache/data paths under $HOME even if the
 # instance was previously started with a different user (stale root-owned dirs).
-sudo install -d -m 700 -o "$PROJECT_NAME" -g "$PROJECT_NAME" "$CACHE_DIR" "$DATA_DIR" "$OPENCODE_BIN_DIR"
+sudo install -d -m 700 -o "$PROJECT_NAME" -g "$PROJECT_NAME" \
+  "$CACHE_DIR" \
+  "$LOCAL_DIR" \
+  "$STATE_DIR" \
+  "$DATA_DIR" \
+  "$OPENCODE_BIN_DIR"
 # If the directory existed with wrong ownership (e.g., started as root once),
 # fix it to avoid EACCES when opencode tries to mkdir under opencode/.
-sudo chown -R "$PROJECT_NAME:$PROJECT_NAME" "$OPENCODE_LOCAL_SHARE_DIR" "$CACHE_DIR"
+sudo chown -R "$PROJECT_NAME:$PROJECT_NAME" "$LOCAL_DIR" "$CACHE_DIR"
 
 askpass_tmp="$(mktemp)"
 cat <<'SCRIPT' >"$askpass_tmp"
