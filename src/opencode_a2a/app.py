@@ -212,8 +212,6 @@ def build_agent_card(settings: Settings) -> AgentCard:
 
 def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
     token = settings.a2a_bearer_token
-    if not token:
-        raise RuntimeError("A2A_BEARER_TOKEN must be set to start the server.")
 
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):

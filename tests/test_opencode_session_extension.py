@@ -56,6 +56,8 @@ def _settings(*, token: str, log_payloads: bool) -> Settings:
         a2a_oauth_scopes={},
         a2a_session_cache_ttl_seconds=3600,
         a2a_session_cache_maxsize=10_000,
+        a2a_jwt_audience="test-aud",
+        a2a_jwt_issuer="test-iss",
     )
 
 
