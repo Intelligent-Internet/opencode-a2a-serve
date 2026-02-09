@@ -106,7 +106,14 @@ class OpencodeAgentExecutor(AgentExecutor):
         task_id = context.task_id
         context_id = context.context_id
         if not task_id or not context_id:
-            raise RuntimeError("Missing task_id or context_id in request context")
+            await self._emit_error(
+                event_queue,
+                task_id=task_id or "unknown",
+                context_id=context_id or "unknown",
+                message="Missing task_id or context_id in request context",
+                streaming_request=self._should_stream(context),
+            )
+            return
 
         streaming_request = self._should_stream(context)
         user_text = context.get_user_input().strip()
@@ -250,24 +257,44 @@ class OpencodeAgentExecutor(AgentExecutor):
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id = context.task_id
         context_id = context.context_id
-        if not task_id or not context_id:
-            raise RuntimeError("Missing task_id or context_id in request context")
+        try:
+            if not task_id or not context_id:
+                await self._emit_error(
+                    event_queue,
+                    task_id=task_id or "unknown",
+                    context_id=context_id or "unknown",
+                    message="Missing task_id or context_id in request context",
+                    streaming_request=False,
+                )
+                return
 
-        event = TaskStatusUpdateEvent(
-            task_id=task_id,
-            context_id=context_id,
-            status=TaskStatus(state=TaskState.canceled),
-            final=True,
-        )
-        await event_queue.enqueue_event(event)
-        await event_queue.close()
-        async with self._lock:
-            self._sessions.pop(context_id)
-            inflight = self._inflight_session_creates.pop(context_id, None)
-        if inflight:
-            inflight.cancel()
-            with suppress(asyncio.CancelledError):
-                await inflight
+            event = TaskStatusUpdateEvent(
+                task_id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=TaskState.canceled),
+                final=True,
+            )
+            await event_queue.enqueue_event(event)
+            async with self._lock:
+                self._sessions.pop(context_id)
+                inflight = self._inflight_session_creates.pop(context_id, None)
+            if inflight:
+                inflight.cancel()
+                with suppress(asyncio.CancelledError):
+                    await inflight
+        except Exception as exc:
+            logger.exception("Cancel failed")
+            if task_id and context_id:
+                with suppress(Exception):
+                    await self._emit_error(
+                        event_queue,
+                        task_id=task_id,
+                        context_id=context_id,
+                        message=f"Cancel failed: {exc}",
+                        streaming_request=False,
+                    )
+        finally:
+            await event_queue.close()
 
     async def _get_or_create_session(
         self,

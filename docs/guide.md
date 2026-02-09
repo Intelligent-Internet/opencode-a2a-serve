@@ -40,7 +40,12 @@
 - 任务状态默认返回 `input-required`，便于继续多轮对话。
 - Streaming（`/v1/message:stream`）会输出 `TaskArtifactUpdateEvent` 增量（`append=true`），结束时发送 `TaskStatusUpdateEvent(final=true)`；完整内容由 artifact 承载，非 streaming 调用仍返回 `Task`。
 - 需在请求中携带 `Authorization: Bearer <token>`，否则返回 401（Agent Card 不受鉴权限制）。
+- **错误处理与反馈**：
+  - 输入校验失败、上下文缺失（缺失 `task_id` 或 `context_id`）或内部处理异常时，服务会尽可能通过 `event_queue` 返回标准 A2A 失败事件。
+  - 失败事件将包含具体的错误信息，并根据请求类型返回 `failed` 状态。
+  - 这确保了调用方能够接收到明确的反馈，避免因未捕获异常导致的挂起或难以诊断的问题。
 - OAuth2 相关配置目前仅用于 Agent Card 声明，鉴权校验需后续接入。
+- 本服务不会在 Agent Card 中声明 OAuth2 scheme，以避免客户端误判。
 
 ## 续聊契约（绑定到历史 OpenCode session）
 
