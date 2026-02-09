@@ -107,6 +107,66 @@ def _as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
     return msg.model_dump(by_alias=True, exclude_none=True)
 
 
+def _extract_raw_items(raw_result: Any, *, kind: str) -> list[Any]:
+    """Extract list payloads from OpenCode responses.
+
+    OpenCode serve does not guarantee a stable envelope. In the wild, list endpoints may return:
+    - a top-level list
+    - a dict with the list under a non-standard key (e.g. "sessions", "messages", "data")
+    - a dict where there is exactly one list-valued field (plus metadata/pagination)
+
+    We accept common variants and fall back to a conservative heuristic.
+    """
+    if isinstance(raw_result, list):
+        return raw_result
+
+    if not isinstance(raw_result, dict):
+        return []
+
+    if kind == "sessions":
+        candidate_keys = ["items", "sessions", "data", "results"]
+    elif kind == "messages":
+        candidate_keys = ["items", "messages", "data", "results"]
+    else:
+        candidate_keys = ["items", "data", "results"]
+
+    # Common case: { "items": [...] } or { "sessions": [...] } / { "messages": [...] }.
+    for key in candidate_keys:
+        value = raw_result.get(key)
+        if isinstance(value, list):
+            return value
+
+    # Nested wrappers: { "data": { "items": [...] } } etc (one level deep).
+    for key in ("data", "result"):
+        nested = raw_result.get(key)
+        if not isinstance(nested, dict):
+            continue
+        for nested_key in candidate_keys:
+            value = nested.get(nested_key)
+            if isinstance(value, list):
+                return value
+
+    # Heuristic: if there's exactly one list-valued field, treat it as the payload.
+    list_keys = [k for k, v in raw_result.items() if isinstance(v, list)]
+    if len(list_keys) == 1:
+        guessed_key = list_keys[0]
+        logger.debug(
+            "OpenCode %s list payload missing standard keys=%s; using list field key=%s",
+            kind,
+            candidate_keys,
+            guessed_key,
+        )
+        return raw_result[guessed_key]
+
+    # Keep behavior stable: return [] and do not raise. Log keys for diagnosis (no content).
+    logger.debug(
+        "OpenCode %s list payload has no list field; type=dict keys=%s",
+        kind,
+        sorted(raw_result.keys()),
+    )
+    return []
+
+
 class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
     """Extend A2A JSON-RPC endpoint with OpenCode session query methods.
 
@@ -272,9 +332,10 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 A2AError(root=InternalError(message=str(exc))),
             )
 
-        raw_items: list[Any] = []
-        if isinstance(raw_result, dict) and isinstance(raw_result.get("items"), list):
-            raw_items = raw_result["items"]
+        if base_request.method == self._method_list_sessions:
+            raw_items = _extract_raw_items(raw_result, kind="sessions")
+        else:
+            raw_items = _extract_raw_items(raw_result, kind="messages")
 
         # Protocol: items are always arrays of A2A objects.
         # Task for sessions; Message for messages.
