@@ -322,7 +322,7 @@ wheels = [
 ]
 
 [[package]]
-name = "opencode-a2a"
+name = "opencode-a2a-serve"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

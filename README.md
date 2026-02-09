@@ -1,4 +1,4 @@
-# opencode-a2a
+# opencode-a2a-serve
 
 这是一个将 OpenCode 服务封装为 A2A 服务的适配层（FastAPI + A2A SDK），对外提供：
 
@@ -6,10 +6,6 @@
 - A2A JSON-RPC：`POST /`（用于扩展能力，例如会话查询）
 
 它本质上是一个“协议桥接”与“安全边界收口”：将 A2A 的 message/task 语义转发到 OpenCode 的 session/message/event 接口，并补齐鉴权、可观测与续聊契约。
-
-命名说明：
-- 部署脚本与历史仓库名可能使用 `opencode-a2a-serve`
-- Python 包名与启动命令为 `opencode-a2a`
 
 > 重要：服务启动 **必须** 设置 `A2A_BEARER_TOKEN`，否则会拒绝启动（见 `docs/guide.md`）。
 
@@ -49,7 +45,7 @@ uv sync --all-extras
 3) 启动 A2A 服务：
 
 ```bash
-A2A_BEARER_TOKEN=dev-token uv run opencode-a2a
+A2A_BEARER_TOKEN=dev-token uv run opencode-a2a-serve
 ```
 
 默认监听：`http://127.0.0.1:8000`

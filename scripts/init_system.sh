@@ -537,7 +537,7 @@ fi
 log_done "Repository check completed."
 
 log_start "Checking A2A virtual environment..."
-if [[ -x "${OPENCODE_A2A_DIR}/.venv/bin/opencode-a2a" ]]; then
+if [[ -x "${OPENCODE_A2A_DIR}/.venv/bin/opencode-a2a-serve" ]]; then
   log_done "A2A venv already initialized; skip."
 else
   if ! command -v uv >/dev/null 2>&1; then

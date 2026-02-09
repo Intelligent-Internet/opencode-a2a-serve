@@ -1,5 +1,5 @@
 [project]
-name = "opencode-a2a"
+name = "opencode-a2a-serve"
 version = "0.1.0"
 description = "A2A wrapper service for opencode"
 readme = "README.md"
@@ -22,7 +22,7 @@ dev = [
 ]
 
 [project.scripts]
-opencode-a2a = "opencode_a2a.app:main"
+opencode-a2a-serve = "opencode_a2a.app:main"
 
 [tool.ruff]
 line-length = 100
