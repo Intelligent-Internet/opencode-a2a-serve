@@ -26,6 +26,7 @@
 - `A2A_LOG_LEVEL`：A2A 服务日志级别（`DEBUG/INFO/WARNING/ERROR`），默认 `INFO`
 - `A2A_LOG_PAYLOADS`：是否记录 A2A 与 OpenCode 的请求/响应正文，默认 `false`
 - `A2A_LOG_BODY_LIMIT`：日志正文最大长度，默认 `0`（不截断）
+- `A2A_DOCUMENTATION_URL`：可选；用于在 Agent Card 的 `documentationUrl` 字段中暴露文档地址（建议指向本仓库或内部文档站点）
 - `A2A_OAUTH_AUTHORIZATION_URL`：OAuth2 授权地址（预留配置）
 - `A2A_OAUTH_TOKEN_URL`：OAuth2 token 地址（预留配置）
 - `A2A_OAUTH_METADATA_URL`：OAuth2 元数据地址（可选，预留配置）
@@ -39,6 +40,47 @@
 - 需在请求中携带 `Authorization: Bearer <token>`，否则返回 401（Agent Card 不受鉴权限制）。
 - OAuth2 相关配置目前仅用于 Agent Card 声明，鉴权校验需后续接入。
 
+## OpenCode 会话查询（A2A Extension）
+
+本服务通过 A2A Extension 的方式暴露“OpenCode 会话列表/历史消息查询”能力，不额外提供自定义 REST 端点。
+
+- 触发方式：通过 **A2A JSON-RPC**（默认 `POST /`）调用扩展方法。
+- 鉴权：复用同一个 `Authorization: Bearer <token>`。
+- 安全：即使开启 `A2A_LOG_PAYLOADS=true`，当检测到 `method=opencode.sessions.*` 的 JSON-RPC 请求时，服务也不会将请求/响应 body 写入日志（避免泄露聊天历史）。
+- 调用 URL：建议从 Agent Card 的 `additional_interfaces[]` 中选择 `transport=jsonrpc` 的 `url`，避免自行拼接推导。
+
+### 会话列表（method: opencode.sessions.list）
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "opencode.sessions.list",
+    "params": {"page": 1, "size": 20}
+  }'
+```
+
+### 会话消息历史（method: opencode.sessions.messages.list）
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "opencode.sessions.messages.list",
+    "params": {
+      "session_id": "<session_id>",
+      "page": 1,
+      "size": 50
+    }
+  }'
+```
+
 ## 鉴权示例（curl）
 
 ```bash
@@ -47,9 +89,9 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
   -H 'Authorization: Bearer <your-token>' \
   -d '{
     "message": {
-      "message_id": "msg-1",
-      "role": "user",
-      "parts": [{"kind": "text", "text": "你好，介绍下这个仓库"}]
+      "messageId": "msg-1",
+      "role": "ROLE_USER",
+      "content": [{"text": "你好，介绍下这个仓库"}]
     }
   }'
 ```

@@ -39,6 +39,7 @@ class OpencodeAgentExecutor(AgentExecutor):
 
         streaming_request = self._should_stream(context)
         user_text = context.get_user_input().strip()
+
         if not user_text:
             await self._emit_error(
                 event_queue,
@@ -244,7 +245,11 @@ class OpencodeAgentExecutor(AgentExecutor):
         call_context = context.call_context
         if not call_context:
             return False
-        return bool(call_context.state.get("a2a_streaming_request"))
+        if call_context.state.get("a2a_streaming_request"):
+            return True
+        # JSON-RPC transport sets method in call context state.
+        method = call_context.state.get("method")
+        return method == "message/stream"
 
     async def _consume_opencode_stream(
         self,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -7,12 +8,13 @@ from typing import TYPE_CHECKING
 
 import uvicorn
 from a2a.server.apps.jsonrpc.jsonrpc_app import DefaultCallContextBuilder
-from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
+from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.request_handlers.default_request_handler import DefaultRequestHandler
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
+    AgentExtension,
     AgentInterface,
     AgentSkill,
     AuthorizationCodeOAuthFlow,
@@ -28,12 +30,22 @@ from starlette.responses import StreamingResponse
 
 from .agent import OpencodeAgentExecutor
 from .config import Settings
+from .jsonrpc_ext import (
+    SESSION_QUERY_PAGINATION_DEFAULT_SIZE,
+    SESSION_QUERY_PAGINATION_MAX_SIZE,
+    OpencodeSessionQueryJSONRPCApplication,
+)
 from .opencode_client import OpencodeClient
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from a2a.server.context import ServerCallContext
+
+SESSION_QUERY_METHODS = {
+    "list_sessions": "opencode.sessions.list",
+    "get_session_messages": "opencode.sessions.messages.list",
+}
 
 
 class StreamingCallContextBuilder(DefaultCallContextBuilder):
@@ -91,12 +103,55 @@ def build_agent_card(settings: Settings) -> AgentCard:
         name=settings.a2a_title,
         description=settings.a2a_description,
         url=base_url,
+        documentation_url=settings.a2a_documentation_url,
         version=settings.a2a_version,
         protocol_version=settings.a2a_protocol_version,
         preferred_transport=TransportProtocol.http_json,
         default_input_modes=["text/plain"],
         default_output_modes=["text/plain"],
-        capabilities=AgentCapabilities(streaming=settings.a2a_streaming),
+        capabilities=AgentCapabilities(
+            streaming=settings.a2a_streaming,
+            extensions=[
+                AgentExtension(
+                    uri="urn:opencode-a2a:opencode-session-query/v1",
+                    required=False,
+                    description=(
+                        "Support OpenCode session list/history queries via custom JSON-RPC methods "
+                        "on the agent's A2A JSON-RPC interface."
+                    ),
+                    params={
+                        "methods": SESSION_QUERY_METHODS,
+                        "pagination": {
+                            # Explicit, discoverable contract for generic clients.
+                            "mode": "page_size",
+                            "behavior": "passthrough",
+                            "params": ["page", "size"],
+                            "default_size": SESSION_QUERY_PAGINATION_DEFAULT_SIZE,
+                            "max_size": SESSION_QUERY_PAGINATION_MAX_SIZE,
+                        },
+                        "errors": {
+                            # JSON-RPC standard errors still apply (e.g. -32602 invalid params).
+                            # Business-level, server-defined errors (JSON-RPC reserved range).
+                            "business_codes": {
+                                "SESSION_NOT_FOUND": -32001,
+                                "UPSTREAM_UNREACHABLE": -32002,
+                                "UPSTREAM_HTTP_ERROR": -32003,
+                            },
+                            # Stable fields returned in error.data for business errors.
+                            "error_data_fields": ["type", "session_id", "upstream_status"],
+                        },
+                        # Result envelope avoids binding callers to OpenCode private schema.
+                        # "raw" is always present and contains the upstream JSON payload as-is.
+                        "result_envelope": {
+                            "fields": ["raw", "items", "pagination"],
+                            "raw_field": "raw",
+                            "items_field": "items",
+                            "pagination_field": "pagination",
+                        },
+                    },
+                )
+            ],
+        ),
         skills=[
             AgentSkill(
                 id="opencode.chat",
@@ -107,9 +162,25 @@ def build_agent_card(settings: Settings) -> AgentCard:
                     "Explain what this repository does.",
                     "Summarize the API endpoints in this project.",
                 ],
-            )
+            ),
+            AgentSkill(
+                id="opencode.sessions.query",
+                name="OpenCode Sessions Query",
+                description=(
+                    "Query OpenCode server sessions and message histories via JSON-RPC extension "
+                    "methods (see documentationUrl / extensions)."
+                ),
+                tags=["opencode", "sessions", "history"],
+                examples=[
+                    "List OpenCode sessions (method opencode.sessions.list).",
+                    "List messages for a session (method opencode.sessions.messages.list).",
+                ],
+            ),
         ],
-        additional_interfaces=[AgentInterface(transport=TransportProtocol.http_json, url=base_url)],
+        additional_interfaces=[
+            AgentInterface(transport=TransportProtocol.http_json, url=base_url),
+            AgentInterface(transport=TransportProtocol.jsonrpc, url=base_url),
+        ],
         security_schemes=security_schemes,
         security=security,
     )
@@ -122,7 +193,10 @@ def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
 
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):
-        if request.method == "OPTIONS" or request.url.path == "/.well-known/agent-card.json":
+        if request.method == "OPTIONS" or request.url.path in {
+            "/.well-known/agent-card.json",
+            "/.well-known/agent.json",
+        }:
             return await call_next(request)
 
         auth_header = request.headers.get("authorization", "")
@@ -156,11 +230,38 @@ def create_app(settings: Settings) -> FastAPI:
         yield
         await client.close()
 
-    app = A2ARESTFastAPIApplication(
-        agent_card=build_agent_card(settings),
+    agent_card = build_agent_card(settings)
+
+    # Build JSON-RPC app (POST / by default) and attach REST endpoints (HTTP+JSON) to the same app.
+    app = OpencodeSessionQueryJSONRPCApplication(
+        agent_card=agent_card,
+        http_handler=handler,
+        context_builder=DefaultCallContextBuilder(),
+        opencode_client=client,
+        methods=SESSION_QUERY_METHODS,
+    ).build(title=settings.a2a_title, version=settings.a2a_version, lifespan=lifespan)
+
+    rest_adapter = RESTAdapter(
+        agent_card=agent_card,
         http_handler=handler,
         context_builder=StreamingCallContextBuilder(),
-    ).build(title=settings.a2a_title, version=settings.a2a_version, lifespan=lifespan)
+    )
+    for route, callback in rest_adapter.routes().items():
+        app.add_api_route(route[0], callback, methods=[route[1]])
+
+    def _detect_opencode_session_query_method(body_bytes: bytes) -> str | None:
+        try:
+            payload = json.loads(body_bytes.decode("utf-8", errors="replace"))
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        method = payload.get("method")
+        if not isinstance(method, str):
+            return None
+        if method.startswith("opencode.sessions."):
+            return method
+        return None
 
     @app.middleware("http")
     async def log_payloads(request: Request, call_next):
@@ -169,6 +270,26 @@ def create_app(settings: Settings) -> FastAPI:
 
         body = await request.body()
         request._body = body  # allow downstream to read again
+        path = request.url.path
+        # Detect session-query JSON-RPC methods regardless of deployment prefixes/root_path.
+        sensitive_method = _detect_opencode_session_query_method(body)
+
+        if sensitive_method:
+            logger.debug("A2A request %s %s method=%s", request.method, path, sensitive_method)
+            response = await call_next(request)
+            if isinstance(response, StreamingResponse):
+                logger.debug("A2A response %s streaming method=%s", path, sensitive_method)
+                return response
+            response_body = getattr(response, "body", b"") or b""
+            logger.debug(
+                "A2A response %s status=%s bytes=%s method=%s",
+                path,
+                response.status_code,
+                len(response_body),
+                sensitive_method,
+            )
+            return response
+
         body_text = body.decode("utf-8", errors="replace")
         limit = settings.a2a_log_body_limit
         if limit > 0 and len(body_text) > limit:
@@ -202,10 +323,6 @@ def create_app(settings: Settings) -> FastAPI:
     return app
 
 
-settings = Settings.from_env()
-app = create_app(settings)
-
-
 def _normalize_log_level(value: str) -> str:
     normalized = (value or "").strip().upper()
     if normalized in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}:
@@ -223,6 +340,8 @@ def _configure_logging(level: str) -> None:
 
 
 def main() -> None:
+    settings = Settings.from_env()
+    app = create_app(settings)
     log_level = _normalize_log_level(settings.a2a_log_level)
     _configure_logging(log_level)
     uvicorn.run(app, host=settings.a2a_host, port=settings.a2a_port, log_level=log_level.lower())
