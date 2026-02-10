@@ -1,13 +1,14 @@
-
-import os
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from a2a.server.agent_execution import RequestContext
+from a2a.server.events.event_queue import EventQueue
+
 from opencode_a2a.agent import OpencodeAgentExecutor
 from opencode_a2a.config import Settings
 from opencode_a2a.opencode_client import OpencodeClient
-from a2a.server.agent_execution import RequestContext
-from a2a.server.events.event_queue import EventQueue
+
 
 @pytest.fixture
 def mock_client():
@@ -17,18 +18,19 @@ def mock_client():
         A2A_JWT_ISSUER="test",
         OPENCODE_BASE_URL="http://localhost",
         OPENCODE_DIRECTORY="/tmp/workspace",
-        A2A_ALLOW_DIRECTORY_OVERRIDE=True
+        A2A_ALLOW_DIRECTORY_OVERRIDE=True,
     )
-    
+
     client = OpencodeClient(settings)
     return client
 
+
 def test_resolve_and_validate_directory_valid(mock_client):
     executor = OpencodeAgentExecutor(mock_client, streaming_enabled=False)
-    
+
     # Setup mock workspace
     base_dir = Path("/tmp/workspace").resolve()
-    
+
     # Valid subpath
     requested = "/tmp/workspace/project1"
     resolved = executor._resolve_and_validate_directory(requested)
@@ -38,45 +40,49 @@ def test_resolve_and_validate_directory_valid(mock_client):
     resolved = executor._resolve_and_validate_directory("/tmp/workspace")
     assert resolved == str(base_dir)
 
+
 def test_resolve_and_validate_directory_traversal(mock_client):
     executor = OpencodeAgentExecutor(mock_client, streaming_enabled=False)
-    
+
     # Attempt traversal
     with pytest.raises(ValueError, match="outside the allowed workspace"):
         executor._resolve_and_validate_directory("/tmp/workspace/../secret")
-        
+
     with pytest.raises(ValueError, match="outside the allowed workspace"):
         executor._resolve_and_validate_directory("/etc/passwd")
+
 
 def test_resolve_and_validate_directory_override_disabled(mock_client):
     # Disable override
     mock_client._settings.a2a_allow_directory_override = False
     executor = OpencodeAgentExecutor(mock_client, streaming_enabled=False)
-    
+
     # Deny different path
     with pytest.raises(ValueError, match="override is disabled"):
         executor._resolve_and_validate_directory("/tmp/workspace/other")
-    
+
     # Allow same path (resolved)
     resolved = executor._resolve_and_validate_directory("/tmp/workspace/./")
     assert resolved == str(Path("/tmp/workspace").resolve())
+
 
 @pytest.mark.asyncio
 async def test_execute_with_invalid_directory(mock_client):
     executor = OpencodeAgentExecutor(mock_client, streaming_enabled=False)
     event_queue = AsyncMock(spec=EventQueue)
-    
+
     context = MagicMock(spec=RequestContext)
     context.task_id = "task-1"
     context.context_id = "ctx-1"
-    context.metadata = {"directory": "/etc"} # Illegal
+    context.metadata = {"directory": "/etc"}  # Illegal
     context.call_context = None
-    
+
     await executor.execute(context, event_queue)
-    
+
     # Verify error emission
     event_queue.enqueue_event.assert_called()
     from a2a.types import Task
+
     found_error = False
     for call in event_queue.enqueue_event.call_args_list:
         event = call[0][0]

@@ -131,8 +131,8 @@ class OpencodeClient:
 
     async def list_sessions(self, *, params: dict[str, Any] | None = None) -> Any:
         """List sessions from OpenCode."""
-        # Note: directory override for list_sessions is currently not explicitly supported via method params
-        # but could be added if needed. For now we use the default.
+        # Note: directory override is not explicitly supported by list_sessions params yet.
+        # If needed, we can add it later. For now we use the default.
         response = await self._client.get("/session", params=self._merge_params(params))
         response.raise_for_status()
         return response.json()

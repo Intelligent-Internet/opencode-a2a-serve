@@ -136,8 +136,10 @@ class OpencodeAgentExecutor(AgentExecutor):
         # 3. Boundary check: must be subpath of base_path
         try:
             requested_path.relative_to(base_path)
-        except ValueError:
-            raise ValueError(f"Directory {requested} is outside the allowed workspace {base_path}")
+        except ValueError as err:
+            raise ValueError(
+                f"Directory {requested} is outside the allowed workspace {base_path}"
+            ) from err
 
         return str(requested_path)
 
@@ -165,7 +167,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         requested_dir = None
         if context.metadata:
             requested_dir = context.metadata.get("directory")
-        
+
         try:
             directory = self._resolve_and_validate_directory(requested_dir)
         except ValueError as e:
