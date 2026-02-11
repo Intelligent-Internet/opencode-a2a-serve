@@ -5,6 +5,7 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
 
@@ -175,8 +176,18 @@ class OpencodeAgentExecutor(AgentExecutor):
 
         # Directory validation
         requested_dir = None
-        if context.metadata:
-            requested_dir = context.metadata.get("directory")
+        metadata = context.metadata
+        if metadata is not None and not isinstance(metadata, Mapping):
+            await self._emit_error(
+                event_queue,
+                task_id=task_id,
+                context_id=context_id,
+                message="Invalid metadata: expected an object/map.",
+                streaming_request=streaming_request,
+            )
+            return
+        if isinstance(metadata, Mapping):
+            requested_dir = metadata.get("directory")
 
         try:
             directory = self._resolve_and_validate_directory(requested_dir)
@@ -640,14 +651,15 @@ def _extract_opencode_session_id(context: RequestContext) -> str | None:
     # (MessageSendParams.metadata) or message-level metadata (Message.metadata).
     candidate = None
     try:
-        meta = context.metadata or {}
-        candidate = meta.get("opencode_session_id")
+        meta = context.metadata
+        if isinstance(meta, Mapping):
+            candidate = meta.get("opencode_session_id")
     except Exception:
         candidate = None
 
     if not candidate and context.message is not None:
         msg_meta = getattr(context.message, "metadata", None) or {}
-        if isinstance(msg_meta, dict):
+        if isinstance(msg_meta, Mapping):
             candidate = msg_meta.get("opencode_session_id")
 
     if isinstance(candidate, str):

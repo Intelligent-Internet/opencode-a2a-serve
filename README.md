@@ -81,7 +81,7 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 - `A2A_JWT_ISSUER`：必填；JWT issuer（当前主要用于配置约束与后续鉴权接入）
 - `A2A_PUBLIC_URL`：对外可访问的 A2A 地址前缀（用于 Agent Card 的 `url`/interfaces；反代/域名场景建议设置）
 - `A2A_STREAMING`：是否启用 SSE streaming（默认 `true`）
-- `A2A_SESSION_CACHE_TTL_SECONDS` / `A2A_SESSION_CACHE_MAXSIZE`：`contextId -> session_id` 内存映射缓存配置（用于未显式绑定 session 的续聊）
+- `A2A_SESSION_CACHE_TTL_SECONDS` / `A2A_SESSION_CACHE_MAXSIZE`：`(identity, contextId) -> session_id` 内存映射缓存配置（用于未显式绑定 session 的续聊）
 
 ## 续聊契约（绑定到历史 OpenCode session）
 
