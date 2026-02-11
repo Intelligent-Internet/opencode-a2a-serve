@@ -33,7 +33,7 @@ class _TTLCache:
 
     This is intentionally tiny and dependency-free. It provides best-effort cleanup:
     - Expired entries are removed on get/set.
-    - When maxsize is exceeded, we evict expired entries first, then arbitrary entries.
+    - When maxsize is exceeded, we evict expired entries first, then the earliest-expiring entries.
     """
 
     def __init__(
