@@ -185,6 +185,11 @@ curl -sS http://127.0.0.1:8000/ \
 - Systemd multi-instance deployment details:
   [`docs/deployment.md`](docs/deployment.md)
 
+## License
+
+This project is licensed under the Apache License 2.0.
+See [`LICENSE`](LICENSE).
+
 ## Development & Validation
 
 ```bash
