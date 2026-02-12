@@ -102,7 +102,8 @@ def _build_agent_card_description(
     summary = (
         "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging "
         "(message/send, message/stream), task APIs (tasks/get, tasks/cancel, "
-        "tasks/resubscribe via REST subscribe endpoint), and OpenCode session-query extensions."
+        "tasks/resubscribe; REST mapping: GET /v1/tasks/{id}:subscribe), and "
+        "OpenCode session-query extensions."
     )
     parts: list[str] = [base, summary]
     parts.append(
