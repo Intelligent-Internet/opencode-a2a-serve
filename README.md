@@ -29,6 +29,8 @@ Additional notes:
 - When `A2A_LOG_PAYLOADS=true`, payload logs may include request/response
   bodies. For `opencode.sessions.*` JSON-RPC queries, request/response body
   logging is intentionally suppressed to reduce chat-history exposure risk.
+- Deployment-side LLM provider coverage and known gaps are documented in
+  `docs/deployment.md` (`Current Provider Coverage and Gaps`).
 
 ## Capabilities
 

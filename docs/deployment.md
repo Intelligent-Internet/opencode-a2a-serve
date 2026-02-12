@@ -125,10 +125,44 @@ GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' ANTHROPIC_API_KEY='<anthrop
 ./scripts/deploy.sh project=alpha opencode_provider_id=anthropic opencode_model_id='<anthropic-model-id>'
 ```
 
+Azure OpenAI:
+
+```bash
+GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' AZURE_OPENAI_API_KEY='<azure-openai-key>' \
+./scripts/deploy.sh project=alpha opencode_provider_id=azure opencode_model_id='<azure-deployment-or-model-id>'
+```
+
+OpenRouter:
+
+```bash
+GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' OPENROUTER_API_KEY='<openrouter-key>' \
+./scripts/deploy.sh project=alpha opencode_provider_id=openrouter opencode_model_id='<openrouter-model-id>'
+```
+
 Notes:
 
 - Use model IDs that your OpenCode installation/provider mapping supports.
-- `run_opencode.sh` currently performs explicit key enforcement only for Google/Gemini (`GOOGLE_GENERATIVE_AI_API_KEY`).
+- This deploy layer mainly passes through provider identity/model (`OPENCODE_PROVIDER_ID`/`OPENCODE_MODEL_ID`) and selected provider keys.
+- Provider-specific connection settings beyond API key (for example endpoint/base URL, api-version, deployment name) must follow OpenCode's own provider configuration rules.
+
+### Current Provider Coverage and Gaps
+
+This section describes what this repository's deploy scripts currently cover.
+It is not a full OpenCode provider capability matrix.
+
+| Provider | Secret key persisted by deploy scripts | Example in this doc | Startup key enforcement in `run_opencode.sh` |
+| --- | --- | --- | --- |
+| Google / Gemini | `GOOGLE_GENERATIVE_AI_API_KEY` | Yes | Yes (explicitly required for `provider=google` or `model=*gemini*`) |
+| OpenAI | `OPENAI_API_KEY` | Yes | No explicit provider-specific check |
+| Anthropic | `ANTHROPIC_API_KEY` | Yes | No explicit provider-specific check |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY` | Yes | No explicit provider-specific check |
+| OpenRouter | `OPENROUTER_API_KEY` | Yes | No explicit provider-specific check |
+
+Known gaps:
+
+- Missing provider-specific validation matrix in scripts (required env vars are only enforced for Google/Gemini).
+- Missing compatibility verification checklist per provider/model family.
+- Missing explicit documentation that deploy scripts do not replace OpenCode `/connect`-level provider setup.
 
 Script actions:
 
