@@ -219,6 +219,13 @@ def build_agent_card(settings: Settings) -> AgentCard:
 def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
     token = settings.a2a_bearer_token
 
+    def _unauthorized_response() -> JSONResponse:
+        return JSONResponse(
+            {"error": "Unauthorized"},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):
         if request.method == "OPTIONS" or request.url.path in {
@@ -229,18 +236,10 @@ def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
 
         auth_header = request.headers.get("authorization", "")
         if not auth_header.lower().startswith("bearer "):
-            return JSONResponse(
-                {"error": "Unauthorized"},
-                status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            return _unauthorized_response()
         provided = auth_header.split(" ", 1)[1].strip()
         if not secrets.compare_digest(provided, token):
-            return JSONResponse(
-                {"error": "Unauthorized"},
-                status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            return _unauthorized_response()
 
         return await call_next(request)
 
@@ -265,12 +264,13 @@ def create_app(settings: Settings) -> FastAPI:
         await client.close()
 
     agent_card = build_agent_card(settings)
+    context_builder = IdentityAwareCallContextBuilder()
 
     # Build JSON-RPC app (POST / by default) and attach REST endpoints (HTTP+JSON) to the same app.
     app = OpencodeSessionQueryJSONRPCApplication(
         agent_card=agent_card,
         http_handler=handler,
-        context_builder=IdentityAwareCallContextBuilder(),
+        context_builder=context_builder,
         opencode_client=client,
         methods=SESSION_QUERY_METHODS,
     ).build(title=settings.a2a_title, version=settings.a2a_version, lifespan=lifespan)
@@ -278,7 +278,7 @@ def create_app(settings: Settings) -> FastAPI:
     rest_adapter = RESTAdapter(
         agent_card=agent_card,
         http_handler=handler,
-        context_builder=IdentityAwareCallContextBuilder(),
+        context_builder=context_builder,
     )
     for route, callback in rest_adapter.routes().items():
         app.add_api_route(route[0], callback, methods=[route[1]])

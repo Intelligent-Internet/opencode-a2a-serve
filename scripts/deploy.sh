@@ -2,12 +2,7 @@
 # Deploy an isolated OpenCode + A2A instance (systemd services).
 # Usage: ./deploy.sh project=<name> [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] [opencode_provider_id=<id>] [opencode_model_id=<id>] [repo_url=<url>] [repo_branch=<branch>] [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [git_identity_email=<email>] [update_a2a=true] [force_restart=true]
 # Required env: GH_TOKEN, A2A_BEARER_TOKEN
-# Optional provider secret env:
-# - GOOGLE_GENERATIVE_AI_API_KEY
-# - OPENAI_API_KEY
-# - ANTHROPIC_API_KEY
-# - AZURE_OPENAI_API_KEY
-# - OPENROUTER_API_KEY
+# Optional provider secret env: see scripts/deploy/provider_secret_env_keys.sh
 # Requires: sudo access to write systemd units and create users/directories.
 #
 # Key environment variables:
@@ -22,6 +17,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/deploy/provider_secret_env_keys.sh"
+PROVIDER_SECRET_ENV_LIST="$(join_provider_secret_env_keys " | ")"
 
 PROJECT_NAME=""
 GH_TOKEN="${GH_TOKEN:-}"
@@ -76,10 +74,6 @@ for arg in "$@"; do
     opencode_model_id)
       OPENCODE_MODEL_ID_INPUT="$value"
       ;;
-    google_generative_ai_api_key|google_api_key)
-      echo "Sensitive parameter '${key}' is not allowed via CLI. Use environment variable GOOGLE_GENERATIVE_AI_API_KEY." >&2
-      exit 1
-      ;;
     repo_url)
       REPO_URL_INPUT="$value"
       ;;
@@ -105,6 +99,10 @@ for arg in "$@"; do
       FORCE_RESTART_INPUT="$value"
       ;;
     *)
+      if provider_env_key="$(provider_secret_env_for_cli_key "${key,,}" 2>/dev/null)"; then
+        echo "Sensitive parameter '${key}' is not allowed via CLI. Use environment variable ${provider_env_key}." >&2
+        exit 1
+      fi
       echo "Unknown argument: $arg" >&2
       exit 1
       ;;
@@ -112,7 +110,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$PROJECT_NAME" || -z "$GH_TOKEN" || -z "$A2A_BEARER_TOKEN" ]]; then
-  cat >&2 <<'USAGE'
+  cat >&2 <<USAGE
 Usage:
   GH_TOKEN=<token> A2A_BEARER_TOKEN=<token> [<PROVIDER_SECRET_ENV>=<key>] \
   ./scripts/deploy.sh project=<name> [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] \
@@ -121,7 +119,7 @@ Usage:
   [git_identity_email=<email>] [update_a2a=true] [force_restart=true]
 
 Provider secret env vars:
-  GOOGLE_GENERATIVE_AI_API_KEY | OPENAI_API_KEY | ANTHROPIC_API_KEY | AZURE_OPENAI_API_KEY | OPENROUTER_API_KEY
+  ${PROVIDER_SECRET_ENV_LIST}
 USAGE
   exit 1
 fi
@@ -131,30 +129,22 @@ export OPENCODE_CORE_DIR="${OPENCODE_CORE_DIR:-/opt/.opencode}"
 export UV_PYTHON_DIR="${UV_PYTHON_DIR:-/opt/uv-python}"
 export DATA_ROOT="${DATA_ROOT:-/data/opencode-a2a}"
 
-if [[ -n "$OPENCODE_PROVIDER_ID_INPUT" ]]; then
-  export OPENCODE_PROVIDER_ID="$OPENCODE_PROVIDER_ID_INPUT"
-fi
-if [[ -n "$OPENCODE_MODEL_ID_INPUT" ]]; then
-  export OPENCODE_MODEL_ID="$OPENCODE_MODEL_ID_INPUT"
-fi
-if [[ -n "$REPO_URL_INPUT" ]]; then
-  export REPO_URL="$REPO_URL_INPUT"
-fi
-if [[ -n "$REPO_BRANCH_INPUT" ]]; then
-  export REPO_BRANCH="$REPO_BRANCH_INPUT"
-fi
-if [[ -n "$OPENCODE_TIMEOUT_INPUT" ]]; then
-  export OPENCODE_TIMEOUT="$OPENCODE_TIMEOUT_INPUT"
-fi
-if [[ -n "$OPENCODE_TIMEOUT_STREAM_INPUT" ]]; then
-  export OPENCODE_TIMEOUT_STREAM="$OPENCODE_TIMEOUT_STREAM_INPUT"
-fi
-if [[ -n "$GIT_IDENTITY_NAME_INPUT" ]]; then
-  export GIT_IDENTITY_NAME="$GIT_IDENTITY_NAME_INPUT"
-fi
-if [[ -n "$GIT_IDENTITY_EMAIL_INPUT" ]]; then
-  export GIT_IDENTITY_EMAIL="$GIT_IDENTITY_EMAIL_INPUT"
-fi
+export_if_present() {
+  local target="$1"
+  local value="$2"
+  if [[ -n "$value" ]]; then
+    export "${target}=${value}"
+  fi
+}
+
+export_if_present "OPENCODE_PROVIDER_ID" "$OPENCODE_PROVIDER_ID_INPUT"
+export_if_present "OPENCODE_MODEL_ID" "$OPENCODE_MODEL_ID_INPUT"
+export_if_present "REPO_URL" "$REPO_URL_INPUT"
+export_if_present "REPO_BRANCH" "$REPO_BRANCH_INPUT"
+export_if_present "OPENCODE_TIMEOUT" "$OPENCODE_TIMEOUT_INPUT"
+export_if_present "OPENCODE_TIMEOUT_STREAM" "$OPENCODE_TIMEOUT_STREAM_INPUT"
+export_if_present "GIT_IDENTITY_NAME" "$GIT_IDENTITY_NAME_INPUT"
+export_if_present "GIT_IDENTITY_EMAIL" "$GIT_IDENTITY_EMAIL_INPUT"
 
 export OPENCODE_BIND_HOST="${OPENCODE_BIND_HOST:-127.0.0.1}"
 export OPENCODE_LOG_LEVEL="${OPENCODE_LOG_LEVEL:-DEBUG}"

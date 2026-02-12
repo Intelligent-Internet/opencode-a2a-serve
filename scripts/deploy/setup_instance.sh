@@ -3,14 +3,13 @@
 # Usage: GH_TOKEN=<token> A2A_BEARER_TOKEN=<token> ./setup_instance.sh <project_name>
 # Requires env: DATA_ROOT, OPENCODE_BIND_HOST, OPENCODE_BIND_PORT, OPENCODE_LOG_LEVEL,
 #               A2A_HOST, A2A_PORT, A2A_PUBLIC_URL.
-# Optional env:
-# - GOOGLE_GENERATIVE_AI_API_KEY
-# - OPENAI_API_KEY
-# - ANTHROPIC_API_KEY
-# - AZURE_OPENAI_API_KEY
-# - OPENROUTER_API_KEY
+# Optional provider secret env: see scripts/deploy/provider_secret_env_keys.sh
 # All provided keys are persisted into config/opencode.secret.env.
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/provider_secret_env_keys.sh"
 
 PROJECT_NAME="${1:-}"
 
@@ -44,13 +43,7 @@ STATE_DIR="${LOCAL_DIR}/state"
 OPENCODE_LOCAL_SHARE_DIR="${PROJECT_DIR}/.local/share/opencode"
 OPENCODE_BIN_DIR="${OPENCODE_LOCAL_SHARE_DIR}/bin"
 DATA_DIR="${PROJECT_DIR}/.local/share/opencode/storage/session"
-SECRET_ENV_KEYS=(
-  GOOGLE_GENERATIVE_AI_API_KEY
-  OPENAI_API_KEY
-  ANTHROPIC_API_KEY
-  AZURE_OPENAI_API_KEY
-  OPENROUTER_API_KEY
-)
+SECRET_ENV_KEYS=("${PROVIDER_SECRET_ENV_KEYS[@]}")
 
 # DATA_ROOT must be traversable by the per-project system user. In hardened
 # deployments, using a non-traversable DATA_ROOT (missing o+x) will break

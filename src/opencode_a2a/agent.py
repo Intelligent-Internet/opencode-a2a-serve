@@ -265,17 +265,14 @@ class OpencodeAgentExecutor(AgentExecutor):
                     final=False,
                 )
             )
+            send_kwargs: dict[str, str | float | None] = {"directory": directory}
             if streaming_request:
-                response = await self._client.send_message(
-                    session_id,
-                    user_text,
-                    directory=directory,
-                    timeout_override=self._client.stream_timeout,
-                )
-            else:
-                response = await self._client.send_message(
-                    session_id, user_text, directory=directory
-                )
+                send_kwargs["timeout_override"] = self._client.stream_timeout
+            response = await self._client.send_message(
+                session_id,
+                user_text,
+                **send_kwargs,
+            )
 
             if pending_preferred_claim:
                 await self._finalize_preferred_session_binding(
