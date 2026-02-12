@@ -3,8 +3,8 @@
 `opencode-a2a-serve` is an adapter layer that exposes OpenCode as an A2A service (FastAPI + A2A SDK). It provides:
 
 - A2A HTTP+JSON (REST): `/v1/message:send`, `/v1/message:stream`,
-  `/v1/tasks/{task_id}:resubscribe`, and related endpoints
-- A2A JSON-RPC: `POST /` (used for extensions such as session queries)
+  `GET /v1/tasks/{task_id}:subscribe`, and related endpoints
+- A2A JSON-RPC: `POST /` (for standard methods and extensions such as session queries)
 
 In practice, this service is a protocol bridge and security boundary: it maps A2A message/task semantics to OpenCode session/message/event APIs, while adding authentication, observability, and session-continuation contracts.
 
@@ -37,12 +37,20 @@ Additional notes:
 - Standard A2A chat: forwards `message:send` / `message:stream` to OpenCode.
 - SSE streaming: `/v1/message:stream` emits incremental
   `TaskArtifactUpdateEvent`, then `TaskStatusUpdateEvent(final=true)`.
-- Re-subscribe after disconnect: `POST /v1/tasks/{task_id}:resubscribe`
+- Re-subscribe after disconnect: `GET /v1/tasks/{task_id}:subscribe`
   (available while the task is not in a terminal state).
 - Session continuation contract: clients can explicitly bind to an existing
   OpenCode session via `metadata.opencode_session_id`.
 - OpenCode session query extension (JSON-RPC):
   `opencode.sessions.list` / `opencode.sessions.messages.list`.
+
+## Transport Notes
+
+- The service keeps dual-stack transport support: HTTP+JSON (REST routes) and JSON-RPC (`POST /`).
+- Agent Card sets `preferredTransport=HTTP+JSON` and still declares JSON-RPC via `additionalInterfaces`.
+- Request payloads are transport-specific and must not be mixed:
+  - REST (`/v1/message:send`): typically `message.content` with role values like `ROLE_USER`
+  - JSON-RPC (`method=message/send`): `params.message.parts` with role values `user` / `agent`
 
 ## Quick Start
 

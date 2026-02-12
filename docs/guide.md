@@ -2,6 +2,16 @@
 
 This guide covers configuration, authentication, API behavior, streaming re-subscription, and A2A client usage examples.
 
+## Transport Contracts
+
+- The service supports both transports:
+  - HTTP+JSON (REST endpoints such as `/v1/message:send`)
+  - JSON-RPC (`POST /`)
+- Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
+- Payload schema is transport-specific and should not be mixed:
+  - REST send payload usually uses `message.content` and role values like `ROLE_USER`
+  - JSON-RPC `message/send` payload uses `params.message.parts` and role values `user` / `agent`
+
 ## Environment Variables
 
 - `OPENCODE_BASE_URL`: OpenCode base URL, default `http://127.0.0.1:4096`
@@ -160,9 +170,29 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
   }'
 ```
 
-## Streaming Re-Subscription (`resubscribe`)
+## JSON-RPC Send Example (curl)
 
-If an SSE connection drops, use `POST /v1/tasks/{task_id}:resubscribe` to re-subscribe while the task is still non-terminal.
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 101,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "msg-1",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Explain what this repository does."}]
+      }
+    }
+  }'
+```
+
+## Streaming Re-Subscription (`subscribe`)
+
+If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscribe while the task is still non-terminal.
 
 ## Development Setup
 
