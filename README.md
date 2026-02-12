@@ -22,6 +22,9 @@ In practice, this service is a protocol bridge and security boundary: it maps A2
 - This project is best suited for trusted/internal environments until a stronger
   token isolation model is implemented (for example tenant isolation, hosted
   proxy credentials, auditing, and rotation/revocation strategy).
+- Within one `opencode-a2a-serve` instance, all consumers operate on the same
+  underlying OpenCode workspace/environment. It is not tenant-isolated by
+  default.
 
 Additional notes:
 
@@ -100,6 +103,7 @@ For full configuration, see `docs/guide.md`. Most commonly used options:
   server and cannot be overridden by clients)
 - `A2A_BEARER_TOKEN`: required bearer token for authentication
 - `A2A_PUBLIC_URL`: externally reachable URL prefix exposed in Agent Card
+- `A2A_PROJECT`: optional project label injected into Agent Card metadata/examples
 - `A2A_STREAMING`: enables SSE streaming (default: `true`)
 - `A2A_SESSION_CACHE_TTL_SECONDS` / `A2A_SESSION_CACHE_MAXSIZE`:
   in-memory `(identity, contextId) -> session_id` mapping cache settings
@@ -191,6 +195,8 @@ This project is licensed under the Apache License 2.0.
 See [`LICENSE`](LICENSE).
 
 ## Development & Validation
+
+CI (`.github/workflows/ci.yml`) runs the same baseline checks on PRs and `main` pushes.
 
 ```bash
 uv run pre-commit run --all-files

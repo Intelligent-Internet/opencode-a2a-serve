@@ -28,6 +28,7 @@ This guide covers configuration, authentication, API behavior, streaming re-subs
 
 - `A2A_PUBLIC_URL`: externally reachable A2A URL prefix,
   default `http://127.0.0.1:8000`
+- `A2A_PROJECT`: optional project label injected into Agent Card extensions and examples
 - `A2A_TITLE`: agent name, default `OpenCode A2A`
 - `A2A_DESCRIPTION`: agent description
 - `A2A_VERSION`: agent version
@@ -59,6 +60,9 @@ This guide covers configuration, authentication, API behavior, streaming re-subs
   artifacts; non-streaming requests return a `Task` directly.
 - Requests require `Authorization: Bearer <token>`; otherwise `401` is
   returned. Agent Card endpoints are public.
+- Within one `opencode-a2a-serve` instance, all consumers share the same
+  underlying OpenCode workspace/environment. This deployment model is not
+  tenant-isolated by default.
 - Error handling:
   - For validation failures, missing context (`task_id`/`context_id`), or
     internal errors, the service attempts to return standard A2A failure events
