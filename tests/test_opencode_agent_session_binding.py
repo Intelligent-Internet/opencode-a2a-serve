@@ -54,7 +54,8 @@ class DummyOpencodeClient:
         )
 
     async def stream_events(self, stop_event=None, *, directory: str | None = None):  # noqa: ANN001
-        if False:
+        del stop_event, directory
+        for _ in ():
             yield {}
 
 
