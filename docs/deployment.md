@@ -79,9 +79,20 @@ GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
 ./scripts/deploy.sh project=alpha a2a_port=8010 a2a_host=127.0.0.1 a2a_public_url=https://a2a.example.com
 ```
 
-Supported CLI keys (case-insensitive): `project`/`project_name`, `a2a_port`, `a2a_host`, `a2a_public_url`, `opencode_provider_id`, `opencode_model_id`, `repo_url`, `repo_branch`, `opencode_timeout`, `opencode_timeout_stream`, `git_identity_name`, `git_identity_email`, `update_a2a`, `force_restart`.
+Supported CLI keys (case-insensitive): `project`/`project_name`, `data_root`, `a2a_port`, `a2a_host`, `a2a_public_url`, `a2a_streaming`, `a2a_log_level`, `a2a_log_payloads`, `a2a_log_body_limit`, `opencode_provider_id`, `opencode_model_id`, `repo_url`, `repo_branch`, `opencode_timeout`, `opencode_timeout_stream`, `git_identity_name`, `git_identity_email`, `update_a2a`, `force_restart`.
 
 Required secret env vars: `GH_TOKEN`, `A2A_BEARER_TOKEN`
+
+Recommended style: keep only secret values in process env; pass non-secret overrides as CLI keys:
+
+```bash
+GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
+./scripts/deploy.sh \
+  project=alpha \
+  data_root=/data/opencode-a2a \
+  a2a_log_payloads=true \
+  a2a_log_body_limit=2000
+```
 
 Optional provider secret env vars: `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`, `OPENROUTER_API_KEY`
 
@@ -176,7 +187,7 @@ Script actions:
 
 ### `deploy.sh` Environment Variables
 
-Set these before running `deploy.sh`. Secret env vars are required/optional as marked below; most non-secret vars have defaults when unset:
+Set these before running `deploy.sh`. Secret env vars are required/optional as marked below; most non-secret vars have defaults when unset and can also be passed via CLI keys.
 
 - `GH_TOKEN`: required GitHub token used by OpenCode and `gh auth login`
 - `A2A_BEARER_TOKEN`: required bearer token written to `a2a.env`
@@ -204,6 +215,7 @@ Set these before running `deploy.sh`. Secret env vars are required/optional as m
 
 - `A2A_HOST`: A2A bind host, default `127.0.0.1`
 - `A2A_PORT`: A2A bind port, default `8000`
+- `A2A_PROJECT`: auto-written as `<project>` in `a2a.env`
 - `A2A_LOG_LEVEL`: A2A log level, default `DEBUG`
 - `A2A_LOG_PAYLOADS`: payload logging switch, default `true`
 - `A2A_LOG_BODY_LIMIT`: payload body max length, default `0` (unbounded)
