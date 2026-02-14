@@ -62,8 +62,6 @@ Additional notes:
 
 ## Quick Start
 
-*Prerequisites: Ensure you have [`uv`](https://github.com/astral-sh/uv) installed and your LLM provider API keys exported as environment variables (e.g., `GOOGLE_GENERATIVE_AI_API_KEY`).*
-
 1. Start OpenCode:
 
 ```bash
