@@ -87,3 +87,15 @@ async def test_cancel_interrupts_running_execute_and_keeps_queue_open():
     assert ("task-1", "context-A") not in executor._running_requests
     assert ("task-1", "context-A") not in executor._running_stop_events
     assert ("task-1", "context-A") not in executor._running_identities
+
+
+@pytest.mark.asyncio
+async def test_cancel_does_not_block_with_real_event_queue() -> None:
+    executor = OpencodeAgentExecutor(MagicMock(), streaming_enabled=False)
+    context = MagicMock(spec=RequestContext)
+    context.task_id = None
+    context.context_id = None
+    context.call_context = None
+    queue = EventQueue()
+
+    await asyncio.wait_for(executor.cancel(context, queue), timeout=0.5)
