@@ -1036,11 +1036,26 @@ def _parse_embedded_channels(text: str) -> dict[str, str]:
         if text.startswith("[tool_call:", i):
             j = i + 11
             depth = 1
+            in_string = False
+            quote_char = ""
+            escaped = False
             while j < len(text) and depth > 0:
-                if text[j] == "[":
-                    depth += 1
-                elif text[j] == "]":
-                    depth -= 1
+                ch = text[j]
+                if in_string:
+                    if escaped:
+                        escaped = False
+                    elif ch == "\\":
+                        escaped = True
+                    elif ch == quote_char:
+                        in_string = False
+                else:
+                    if ch in {'"', "'"}:
+                        in_string = True
+                        quote_char = ch
+                    elif ch == "[":
+                        depth += 1
+                    elif ch == "]":
+                        depth -= 1
                 j += 1
             if depth > 0:
                 # Keep incomplete tool call in pending tail; wait for next chunk.
