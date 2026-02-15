@@ -145,17 +145,25 @@ async def test_concurrent_session_create_isolated_by_identity():
     event_queue_1 = AsyncMock(spec=EventQueue)
     event_queue_2 = AsyncMock(spec=EventQueue)
 
-    def _context(task_id: str, identity: str):
-        return make_request_context_mock(
-            task_id=task_id,
-            context_id="context-A",
-            identity=identity,
-            user_input="hello",
-        )
-
     await asyncio.gather(
-        executor.execute(_context("task-1", "user-1"), event_queue_1),
-        executor.execute(_context("task-2", "user-2"), event_queue_2),
+        executor.execute(
+            make_request_context_mock(
+                task_id="task-1",
+                context_id="context-A",
+                identity="user-1",
+                user_input="hello",
+            ),
+            event_queue_1,
+        ),
+        executor.execute(
+            make_request_context_mock(
+                task_id="task-2",
+                context_id="context-A",
+                identity="user-2",
+                user_input="hello",
+            ),
+            event_queue_2,
+        ),
     )
 
     assert client.create_session.call_count == 2
