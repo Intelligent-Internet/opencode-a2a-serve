@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from .config import Settings
+from .utils import extract_message_id, extract_session_id, extract_text
 
 _UNSET = object()
 
@@ -124,7 +125,7 @@ class OpencodeClient:
         )
         response.raise_for_status()
         data = response.json()
-        session_id = data.get("id")
+        session_id = extract_session_id(data)
         if not session_id:
             raise RuntimeError("OpenCode session response missing id")
         return session_id
@@ -193,23 +194,12 @@ class OpencodeClient:
         if self._log_payloads:
             logger = logging.getLogger(__name__)
             logger.debug("OpenCode response payload=%s", data)
-        parts = data.get("parts", [])
-        text_content = _extract_text(parts)
-        message_id = None
-        info = data.get("info")
-        if isinstance(info, dict):
-            message_id = info.get("id")
+
+        text_content = extract_text(data)
+        message_id = extract_message_id(data)
         return OpencodeMessage(
             text=text_content,
             session_id=session_id,
             message_id=message_id,
             raw=data,
         )
-
-
-def _extract_text(parts: list[dict[str, Any]]) -> str:
-    texts: list[str] = []
-    for part in parts:
-        if part.get("type") == "text" and isinstance(part.get("text"), str):
-            texts.append(part["text"])
-    return "".join(texts).strip()

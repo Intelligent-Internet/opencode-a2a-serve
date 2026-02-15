@@ -25,6 +25,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from .opencode_client import OpencodeClient
+from .utils import extract_message_id, extract_role, extract_session_id, extract_text
 
 logger = logging.getLogger(__name__)
 
@@ -85,10 +86,9 @@ def _extract_session_title(session: dict[str, Any], *, session_id: str) -> str:
 def _as_a2a_session_task(session: Any) -> dict[str, Any] | None:
     if not isinstance(session, dict):
         return None
-    raw_id = session.get("id") or session.get("session_id") or session.get("sessionId")
-    if not isinstance(raw_id, str) or not raw_id.strip():
+    session_id = extract_session_id(session)
+    if not session_id:
         return None
-    session_id = raw_id.strip()
     title = _extract_session_title(session, session_id=session_id)
     task = Task(
         id=session_id,
@@ -104,33 +104,10 @@ def _as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
     if not isinstance(item, dict):
         return None
 
-    info = item.get("info")
-    raw_id = item.get("id") or item.get("message_id") or item.get("messageId")
-    if raw_id is None and isinstance(info, dict):
-        raw_id = info.get("id") or info.get("messageID") or info.get("messageId")
-    message_id = raw_id.strip() if isinstance(raw_id, str) and raw_id.strip() else str(uuid.uuid4())
-
-    role_raw = item.get("role")
-    if not isinstance(role_raw, str) and isinstance(info, dict):
-        role_raw = info.get("role")
-    role = Role.agent
-    if isinstance(role_raw, str) and role_raw.strip().lower() == "user":
-        role = Role.user
-
-    text = item.get("text")
-    if not isinstance(text, str):
-        # Best-effort extraction from OpenCode-like parts.
-        parts = item.get("parts")
-        if isinstance(parts, list):
-            texts: list[str] = []
-            for part in parts:
-                if isinstance(part, dict) and part.get("type") == "text":
-                    part_text = part.get("text")
-                    if isinstance(part_text, str) and part_text:
-                        texts.append(part_text)
-            text = "".join(texts).strip()
-        else:
-            text = ""
+    message_id = extract_message_id(item) or str(uuid.uuid4())
+    role_name = extract_role(item)
+    role = Role.user if role_name == "user" else Role.agent
+    text = extract_text(item)
 
     msg = Message(
         message_id=message_id,

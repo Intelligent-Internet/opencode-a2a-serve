@@ -29,6 +29,11 @@ from a2a.types import (
 )
 
 from .opencode_client import OpencodeClient
+from .utils import (
+    extract_message_id,
+    extract_role,
+    extract_session_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -936,9 +941,9 @@ class OpencodeAgentExecutor(AgentExecutor):
                         part = props.get("part")
                         if not isinstance(part, Mapping):
                             part = {}
-                        if _extract_stream_session_id(part, props) != session_id:
+                        if extract_session_id(part, props) != session_id:
                             continue
-                        message_id = _extract_stream_message_id(part, props)
+                        message_id = extract_message_id(part, props)
                         part_id = _extract_stream_part_id(part, props)
                         if not part_id and event_type == "message.part.updated":
                             part_id = _build_fallback_part_id(part, props, message_id=message_id)
@@ -973,7 +978,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                                 await _emit_chunks(chunks)
                             continue
 
-                        role = _extract_stream_role(part, props)
+                        role = extract_role(part, props)
                         state = _upsert_part_state(
                             part_id=part_id,
                             part=part,
@@ -1114,84 +1119,6 @@ def _build_stream_artifact_metadata(
     if sequence is not None:
         opencode_meta["sequence"] = sequence
     return {"opencode": opencode_meta}
-
-
-def _normalize_role(role: Any) -> str | None:
-    if not isinstance(role, str):
-        return None
-    value = role.strip().lower()
-    if not value:
-        return None
-    if value.startswith("role_"):
-        value = value[5:]
-    if value in {"assistant", "agent", "model", "ai"}:
-        return "agent"
-    if value in {"user", "human"}:
-        return "user"
-    if value == "system":
-        return "system"
-    return value
-
-
-def _extract_stream_role(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:
-    role = part.get("role") or props.get("role")
-    if role is None:
-        message = props.get("message")
-        if isinstance(message, Mapping):
-            role = message.get("role")
-    return _normalize_role(role)
-
-
-def _extract_stream_session_id(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:
-    session_keys = ("sessionID", "sessionId", "session_id")
-    for key in session_keys:
-        value = part.get(key)
-        if isinstance(value, str) and value:
-            return value
-    for key in session_keys:
-        value = props.get(key)
-        if isinstance(value, str) and value:
-            return value
-    message = props.get("message")
-    if isinstance(message, Mapping):
-        for key in session_keys:
-            value = message.get(key)
-            if isinstance(value, str) and value:
-                return value
-    return None
-
-
-def _extract_stream_message_id(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:
-    message_keys = ("messageID", "messageId", "message_id", "id")
-    for key in message_keys:
-        value = part.get(key)
-        if isinstance(value, str):
-            normalized = value.strip()
-            if normalized:
-                return normalized
-    for key in message_keys:
-        value = props.get(key)
-        if isinstance(value, str):
-            normalized = value.strip()
-            if normalized:
-                return normalized
-    message = props.get("message")
-    if isinstance(message, Mapping):
-        for key in message_keys:
-            value = message.get(key)
-            if isinstance(value, str):
-                normalized = value.strip()
-                if normalized:
-                    return normalized
-        info = message.get("info")
-        if isinstance(info, Mapping):
-            for key in message_keys:
-                value = info.get(key)
-                if isinstance(value, str):
-                    normalized = value.strip()
-                    if normalized:
-                        return normalized
-    return None
 
 
 def _extract_stream_part_id(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:

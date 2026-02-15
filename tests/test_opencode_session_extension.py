@@ -5,25 +5,7 @@ import pytest
 
 from opencode_a2a_serve.config import Settings
 
-
-class DummyOpencodeClient:
-    def __init__(self, _settings: Settings) -> None:
-        self._sessions_payload = {"items": [{"id": "s-1"}]}
-        self._messages_payload = {"items": [{"id": "m-1", "text": "SECRET_HISTORY"}]}
-        self.last_sessions_params = None
-        self.last_messages_params = None
-
-    async def close(self) -> None:
-        return None
-
-    async def list_sessions(self, *, params=None):
-        self.last_sessions_params = params
-        return self._sessions_payload
-
-    async def list_messages(self, session_id: str, *, params=None):
-        assert session_id
-        self.last_messages_params = params
-        return self._messages_payload
+from .mocks import DummyOpencodeClient
 
 
 def _settings(*, token: str, log_payloads: bool) -> Settings:
@@ -91,6 +73,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
     import opencode_a2a_serve.app as app_module
 
     dummy = DummyOpencodeClient(_settings(token="t-1", log_payloads=False))
+    dummy._messages_payload = {"items": [{"id": "m-1", "text": "SECRET_HISTORY"}]}
     monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
     app = app_module.create_app(_settings(token="t-1", log_payloads=False))
 
@@ -410,7 +393,9 @@ async def test_session_query_extension_maps_404_to_session_not_found(monkeypatch
 async def test_session_query_extension_does_not_log_response_bodies(monkeypatch, caplog):
     import opencode_a2a_serve.app as app_module
 
-    monkeypatch.setattr(app_module, "OpencodeClient", DummyOpencodeClient)
+    dummy = DummyOpencodeClient(_settings(token="t-1", log_payloads=True))
+    dummy._messages_payload = {"items": [{"id": "m-1", "text": "SECRET_HISTORY"}]}
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
     caplog.set_level(logging.DEBUG, logger="opencode_a2a_serve.app")
 
     app = app_module.create_app(_settings(token="t-1", log_payloads=True))

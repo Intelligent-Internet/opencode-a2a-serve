@@ -8,16 +8,7 @@ from opencode_a2a_serve.agent import OpencodeAgentExecutor
 from opencode_a2a_serve.config import Settings
 from opencode_a2a_serve.opencode_client import OpencodeMessage
 
-
-class DummyEventQueue:
-    def __init__(self) -> None:
-        self.events = []
-
-    async def enqueue_event(self, event) -> None:  # noqa: ANN001
-        self.events.append(event)
-
-    async def close(self) -> None:
-        return None
+from .mocks import DummyEventQueue
 
 
 class DummyStreamingClient:

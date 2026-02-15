@@ -4,7 +4,8 @@ from a2a.types import TransportProtocol
 
 from opencode_a2a_serve.app import build_agent_card, create_app
 from opencode_a2a_serve.config import Settings
-from opencode_a2a_serve.opencode_client import OpencodeMessage
+
+from .mocks import DummyOpencodeClient
 
 
 def _settings() -> Settings:
@@ -29,46 +30,6 @@ def test_rest_subscription_route_matches_current_sdk_contract() -> None:
 
     assert "/v1/tasks/{id}:subscribe" in route_paths
     assert "/v1/tasks/{id}:resubscribe" not in route_paths
-
-
-class DummyOpencodeClient:
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-        self.directory = None
-        self.stream_timeout = None
-
-    async def close(self) -> None:
-        return None
-
-    async def create_session(
-        self,
-        title: str | None = None,
-        *,
-        directory: str | None = None,
-    ) -> str:
-        del title, directory
-        return "ses-1"
-
-    async def send_message(
-        self,
-        session_id: str,
-        text: str,
-        *,
-        directory: str | None = None,
-        timeout_override=None,  # noqa: ANN001
-    ) -> OpencodeMessage:
-        del directory, timeout_override
-        return OpencodeMessage(
-            text=f"echo:{text}",
-            session_id=session_id,
-            message_id="m-1",
-            raw={},
-        )
-
-    async def stream_events(self, stop_event=None, *, directory: str | None = None):  # noqa: ANN001
-        del stop_event, directory
-        for _ in ():
-            yield {}
 
 
 @pytest.mark.asyncio
