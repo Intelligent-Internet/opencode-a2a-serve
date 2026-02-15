@@ -6,7 +6,7 @@ import logging
 import os
 import time
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -31,6 +31,40 @@ from a2a.types import (
 from .opencode_client import OpencodeClient
 
 logger = logging.getLogger(__name__)
+
+_TOKEN_USAGE_INPUT_KEYS = (
+    "input_tokens",
+    "input_token",
+    "inputtokens",
+    "prompt_tokens",
+    "prompt_token",
+    "prompttokens",
+)
+_TOKEN_USAGE_OUTPUT_KEYS = (
+    "output_tokens",
+    "output_token",
+    "outputtokens",
+    "completion_tokens",
+    "completion_token",
+    "completiontokens",
+)
+_TOKEN_USAGE_TOTAL_KEYS = (
+    "total_tokens",
+    "total_token",
+    "totaltokens",
+)
+_TOKEN_USAGE_COST_KEYS = (
+    "cost",
+    "total_cost",
+    "totalcost",
+    "cost_usd",
+    "costusd",
+)
+_TOKEN_USAGE_CURRENCY_KEYS = (
+    "currency",
+    "currency_code",
+    "currencycode",
+)
 
 
 class BlockType(str, Enum):
@@ -71,6 +105,7 @@ class _StreamOutputState:
     stable_message_id: str
     event_id_namespace: str
     content_buffers: dict[BlockType, str] = field(default_factory=dict)
+    token_usage: dict[str, Any] | None = None
     saw_any_chunk: bool = False
     emitted_stream_chunk: bool = False
     sequence: int = 0
@@ -131,6 +166,9 @@ class _StreamOutputState:
 
     def build_event_id(self, sequence: int) -> str:
         return f"{self.event_id_namespace}:{sequence}"
+
+    def ingest_token_usage(self, usage: Mapping[str, Any] | None) -> None:
+        self.token_usage = _merge_token_usage(self.token_usage, usage)
 
 
 class _TTLCache:
@@ -409,6 +447,10 @@ class OpencodeAgentExecutor(AgentExecutor):
 
             response_text = response.text or ""
             resolved_message_id = stream_state.resolve_message_id(response.message_id)
+            resolved_token_usage = _merge_token_usage(
+                _extract_token_usage(response.raw),
+                stream_state.token_usage,
+            )
             logger.debug(
                 "OpenCode response task_id=%s session_id=%s message_id=%s text=%s",
                 task_id,
@@ -448,6 +490,11 @@ class OpencodeAgentExecutor(AgentExecutor):
                                 "session_id": response.session_id,
                                 "message_id": resolved_message_id,
                                 "event_id": f"{stream_state.event_id_namespace}:status",
+                                **(
+                                    {"usage": resolved_token_usage}
+                                    if resolved_token_usage is not None
+                                    else {}
+                                ),
                             }
                         },
                     )
@@ -476,6 +523,11 @@ class OpencodeAgentExecutor(AgentExecutor):
                         "opencode": {
                             "session_id": response.session_id,
                             "message_id": resolved_message_id,
+                            **(
+                                {"usage": resolved_token_usage}
+                                if resolved_token_usage is not None
+                                else {}
+                            ),
                         }
                     },
                 )
@@ -936,10 +988,15 @@ class OpencodeAgentExecutor(AgentExecutor):
                         if stop_event.is_set():
                             break
                         event_type = event.get("type")
-                        if event_type not in {"message.part.updated", "message.part.delta"}:
-                            continue
                         props = event.get("properties")
                         if not isinstance(props, Mapping):
+                            continue
+                        event_session_id = _extract_event_session_id(event)
+                        if event_session_id == session_id:
+                            usage = _extract_token_usage(event)
+                            if usage is not None:
+                                stream_state.ingest_token_usage(usage)
+                        if event_type not in {"message.part.updated", "message.part.delta"}:
                             continue
                         part = props.get("part")
                         if not isinstance(part, Mapping):
@@ -1121,6 +1178,147 @@ def _build_stream_artifact_metadata(
     return {"opencode": opencode_meta}
 
 
+def _normalize_usage_key(key: str) -> str:
+    return "".join(ch for ch in key.lower() if ch.isalnum())
+
+
+def _coerce_number(value: Any) -> int | float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        return value
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    try:
+        if "." in normalized or "e" in normalized.lower():
+            parsed = float(normalized)
+            if parsed.is_integer():
+                return int(parsed)
+            return parsed
+        return int(normalized)
+    except ValueError:
+        return None
+
+
+def _iter_nested_mappings(value: Any, *, max_depth: int = 6) -> list[Mapping[str, Any]]:
+    queue: deque[tuple[Any, int]] = deque([(value, 0)])
+    visited: set[int] = set()
+    mappings: list[Mapping[str, Any]] = []
+    while queue:
+        node, depth = queue.popleft()
+        if depth > max_depth:
+            continue
+        if isinstance(node, Mapping):
+            node_id = id(node)
+            if node_id in visited:
+                continue
+            visited.add(node_id)
+            mappings.append(node)
+            for child in node.values():
+                queue.append((child, depth + 1))
+            continue
+        if isinstance(node, list):
+            for child in node:
+                queue.append((child, depth + 1))
+    return mappings
+
+
+def _usage_like_score(value: Mapping[str, Any]) -> int:
+    normalized = {_normalize_usage_key(key) for key in value.keys() if isinstance(key, str)}
+    score = 0
+    for keys in (
+        _TOKEN_USAGE_INPUT_KEYS,
+        _TOKEN_USAGE_OUTPUT_KEYS,
+        _TOKEN_USAGE_TOTAL_KEYS,
+    ):
+        if any(key in normalized for key in keys):
+            score += 2
+    if any(key in normalized for key in _TOKEN_USAGE_COST_KEYS):
+        score += 1
+    return score
+
+
+def _first_scalar_by_keys(value: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
+    normalized_lookup: dict[str, Any] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            normalized_lookup[_normalize_usage_key(key)] = item
+    for key in keys:
+        if key in normalized_lookup:
+            return normalized_lookup[key]
+    return None
+
+
+def _extract_token_usage(payload: Any) -> dict[str, Any] | None:
+    best: Mapping[str, Any] | None = None
+    best_score = 0
+    for mapping in _iter_nested_mappings(payload):
+        score = _usage_like_score(mapping)
+        if score > best_score:
+            best = mapping
+            best_score = score
+    if best is None or best_score <= 0:
+        return None
+
+    usage: dict[str, Any] = {}
+
+    input_tokens = _coerce_number(_first_scalar_by_keys(best, _TOKEN_USAGE_INPUT_KEYS))
+    if input_tokens is not None:
+        usage["input_tokens"] = input_tokens
+
+    output_tokens = _coerce_number(_first_scalar_by_keys(best, _TOKEN_USAGE_OUTPUT_KEYS))
+    if output_tokens is not None:
+        usage["output_tokens"] = output_tokens
+
+    total_tokens = _coerce_number(_first_scalar_by_keys(best, _TOKEN_USAGE_TOTAL_KEYS))
+    if total_tokens is not None:
+        usage["total_tokens"] = total_tokens
+    elif input_tokens is not None and output_tokens is not None:
+        usage["total_tokens"] = input_tokens + output_tokens
+
+    cost = _coerce_number(_first_scalar_by_keys(best, _TOKEN_USAGE_COST_KEYS))
+    if cost is not None:
+        usage["cost"] = cost
+
+    currency = _first_scalar_by_keys(best, _TOKEN_USAGE_CURRENCY_KEYS)
+    if isinstance(currency, str) and currency.strip():
+        usage["currency"] = currency.strip()
+
+    if not usage:
+        return None
+    usage["raw"] = dict(best)
+    return usage
+
+
+def _merge_token_usage(
+    base: Mapping[str, Any] | None,
+    incoming: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if base is None and incoming is None:
+        return None
+    merged: dict[str, Any] = dict(base) if base else {}
+    if incoming:
+        for key, value in incoming.items():
+            if value is None:
+                continue
+            if key == "raw" and isinstance(value, Mapping):
+                existing = merged.get("raw")
+                if isinstance(existing, Mapping):
+                    merged["raw"] = {**dict(existing), **dict(value)}
+                else:
+                    merged["raw"] = dict(value)
+                continue
+            merged[key] = value
+    return merged or None
+
+
 def _normalize_role(role: Any) -> str | None:
     if not isinstance(role, str):
         return None
@@ -1172,6 +1370,25 @@ def _extract_stream_session_id(part: Mapping[str, Any], props: Mapping[str, Any]
     candidate = _extract_first_nonempty_string(message, session_keys)
     if candidate:
         return candidate
+    return None
+
+
+def _extract_event_session_id(event: Mapping[str, Any]) -> str | None:
+    session_keys = ("sessionID", "sessionId", "session_id")
+    props = event.get("properties")
+    sources: list[Mapping[str, Any] | None] = [event]
+    if isinstance(props, Mapping):
+        sources.append(props)
+        message = props.get("message")
+        if isinstance(message, Mapping):
+            sources.append(message)
+        part = props.get("part")
+        if isinstance(part, Mapping):
+            sources.append(part)
+    for source in sources:
+        candidate = _extract_first_nonempty_string(source, session_keys)
+        if candidate:
+            return candidate
     return None
 
 

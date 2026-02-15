@@ -45,6 +45,8 @@ Additional notes:
 - SSE streaming: `/v1/message:stream` emits incremental updates and then
   closes with `TaskStatusUpdateEvent(final=true)`. For detailed streaming
   contract and event semantics, see `docs/guide.md`.
+- Token usage passthrough: normalized usage/cost stats are exposed at
+  `metadata.opencode.usage` (stream final status and non-streaming task metadata).
 - Re-subscribe after disconnect: `GET /v1/tasks/{task_id}:subscribe`
   (available while the task is not in a terminal state).
 - Session continuation contract: clients can explicitly bind to an existing

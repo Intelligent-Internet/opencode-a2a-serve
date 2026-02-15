@@ -15,11 +15,13 @@ class DummyStreamingClient:
         stream_events_payload: list[dict],
         response_text: str,
         response_message_id: str | None = "msg-1",
+        response_raw: dict | None = None,
         send_delay: float = 0.02,
     ) -> None:
         self._stream_events_payload = stream_events_payload
         self._response_text = response_text
         self._response_message_id = response_message_id
+        self._response_raw = response_raw or {}
         self._send_delay = send_delay
         self._in_flight_send = 0
         self.max_in_flight_send = 0
@@ -56,7 +58,7 @@ class DummyStreamingClient:
             text=self._response_text,
             session_id=session_id,
             message_id=self._response_message_id,
-            raw={},
+            raw=self._response_raw,
         )
 
     async def stream_events(self, stop_event=None, *, directory: str | None = None):  # noqa: ANN001
@@ -120,6 +122,16 @@ def _delta_event(
     return {
         "type": "message.part.delta",
         "properties": properties,
+    }
+
+
+def _finalized_event(*, session_id: str, usage: dict) -> dict:
+    return {
+        "type": "message.finalized",
+        "properties": {
+            "sessionID": session_id,
+            "usage": usage,
+        },
     }
 
 
@@ -297,6 +309,38 @@ async def test_streaming_drops_events_without_message_id_and_falls_back_to_snaps
     ][-1]
     assert final_status.metadata["opencode"]["message_id"] == "task-6:ctx-6:assistant"
     assert final_status.metadata["opencode"]["event_id"] == "task-6:ctx-6:task-6:stream:status"
+
+
+@pytest.mark.asyncio
+async def test_streaming_includes_usage_in_final_status_metadata() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            _event(session_id="ses-1", role="assistant", part_type="text", delta="answer"),
+            _finalized_event(
+                session_id="ses-1",
+                usage={"inputTokens": 12, "outputTokens": 4, "totalTokens": 16, "cost": 0.0012},
+            ),
+        ],
+        response_text="answer",
+        response_raw={"usage": {"promptTokens": 11, "completionTokens": 5, "totalTokens": 16}},
+    )
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(task_id="task-usage", context_id="ctx-usage", text="hello"),
+        queue,
+    )
+
+    final_status = [
+        event for event in queue.events if isinstance(event, TaskStatusUpdateEvent) and event.final
+    ][-1]
+    usage = final_status.metadata["opencode"]["usage"]
+    assert usage["input_tokens"] == 12
+    assert usage["output_tokens"] == 4
+    assert usage["total_tokens"] == 16
+    assert usage["cost"] == 0.0012
 
 
 def _unique(items: list[str]) -> list[str]:

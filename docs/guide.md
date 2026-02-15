@@ -68,8 +68,12 @@ This guide covers configuration, authentication, API behavior, streaming re-subs
   `message.part.delta` and `message.part.updated` are merged per `part_id`;
   out-of-order deltas are buffered and replayed when the corresponding
   `part.updated` arrives. Structured `tool` parts are emitted as `tool_call`
-  blocks with normalized state payload.
+  blocks with normalized state payload. Final status event metadata may include
+  normalized token usage at `metadata.opencode.usage` with fields like
+  `input_tokens`, `output_tokens`, `total_tokens`, and optional `cost`.
   Non-streaming requests return a `Task` directly.
+- Non-streaming `message:send` responses may include normalized token usage at
+  `Task.metadata.opencode.usage` with the same field schema.
 - Requests require `Authorization: Bearer <token>`; otherwise `401` is
   returned. Agent Card endpoints are public.
 - Within one `opencode-a2a-serve` instance, all consumers share the same
