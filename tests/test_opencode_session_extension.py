@@ -104,7 +104,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_session_query_extension_items_is_always_array(monkeypatch):
+async def test_session_query_extension_rejects_non_array_upstream_payload(monkeypatch):
     import opencode_a2a_serve.app as app_module
 
     class WeirdPayloadClient(DummyOpencodeClient):
@@ -132,7 +132,8 @@ async def test_session_query_extension_items_is_always_array(monkeypatch):
         )
         assert resp.status_code == 200
         payload = resp.json()
-        assert payload["result"]["items"] == []
+        assert payload["error"]["code"] == -32005
+        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
 
 
 @pytest.mark.asyncio
@@ -272,7 +273,8 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
             json={"jsonrpc": "2.0", "id": 1, "method": "opencode.sessions.list", "params": {}},
         )
         payload = resp.json()
-        assert payload["result"]["items"] == []
+        assert payload["error"]["code"] == -32005
+        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
 
         resp = await client.post(
             "/",
@@ -285,7 +287,8 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
             },
         )
         payload = resp.json()
-        assert payload["result"]["items"] == []
+        assert payload["error"]["code"] == -32005
+        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,7 @@ import logging
 import os
 import time
 import uuid
-from collections import defaultdict, deque
+from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -32,39 +32,6 @@ from .opencode_client import OpencodeClient
 
 logger = logging.getLogger(__name__)
 
-_TOKEN_USAGE_INPUT_KEYS = (
-    "input_tokens",
-    "input_token",
-    "inputtokens",
-    "prompt_tokens",
-    "prompt_token",
-    "prompttokens",
-)
-_TOKEN_USAGE_OUTPUT_KEYS = (
-    "output_tokens",
-    "output_token",
-    "outputtokens",
-    "completion_tokens",
-    "completion_token",
-    "completiontokens",
-)
-_TOKEN_USAGE_TOTAL_KEYS = (
-    "total_tokens",
-    "total_token",
-    "totaltokens",
-)
-_TOKEN_USAGE_COST_KEYS = (
-    "cost",
-    "total_cost",
-    "totalcost",
-    "cost_usd",
-    "costusd",
-)
-_TOKEN_USAGE_CURRENCY_KEYS = (
-    "currency",
-    "currency_code",
-    "currencycode",
-)
 _INTERRUPT_ASKED_EVENT_TYPES = {"permission.asked", "question.asked"}
 _INTERRUPT_RESOLVED_EVENT_TYPES = {"permission.replied", "question.replied", "question.rejected"}
 
@@ -1067,8 +1034,6 @@ class OpencodeAgentExecutor(AgentExecutor):
                             continue
                         message_id = _extract_stream_message_id(part, props)
                         part_id = _extract_stream_part_id(part, props)
-                        if not part_id and event_type == "message.part.updated":
-                            part_id = _build_fallback_part_id(part, props, message_id=message_id)
                         if not part_id:
                             continue
 
@@ -1240,10 +1205,6 @@ def _build_stream_artifact_metadata(
     return {"opencode": opencode_meta}
 
 
-def _normalize_usage_key(key: str) -> str:
-    return "".join(ch for ch in key.lower() if ch.isalnum())
-
-
 def _coerce_number(value: Any) -> int | float | None:
     if isinstance(value, bool):
         return None
@@ -1269,94 +1230,78 @@ def _coerce_number(value: Any) -> int | float | None:
         return None
 
 
-def _iter_nested_mappings(value: Any, *, max_depth: int = 6) -> list[Mapping[str, Any]]:
-    queue: deque[tuple[Any, int]] = deque([(value, 0)])
-    visited: set[int] = set()
-    mappings: list[Mapping[str, Any]] = []
-    while queue:
-        node, depth = queue.popleft()
-        if depth > max_depth:
-            continue
-        if isinstance(node, Mapping):
-            node_id = id(node)
-            if node_id in visited:
-                continue
-            visited.add(node_id)
-            mappings.append(node)
-            for child in node.values():
-                queue.append((child, depth + 1))
-            continue
-        if isinstance(node, list):
-            for child in node:
-                queue.append((child, depth + 1))
-    return mappings
-
-
-def _usage_like_score(value: Mapping[str, Any]) -> int:
-    normalized = {_normalize_usage_key(key) for key in value.keys() if isinstance(key, str)}
-    score = 0
-    for keys in (
-        _TOKEN_USAGE_INPUT_KEYS,
-        _TOKEN_USAGE_OUTPUT_KEYS,
-        _TOKEN_USAGE_TOTAL_KEYS,
-    ):
-        if any(key in normalized for key in keys):
-            score += 2
-    if any(key in normalized for key in _TOKEN_USAGE_COST_KEYS):
-        score += 1
-    return score
-
-
-def _first_scalar_by_keys(value: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
-    normalized_lookup: dict[str, Any] = {}
-    for key, item in value.items():
-        if isinstance(key, str):
-            normalized_lookup[_normalize_usage_key(key)] = item
-    for key in keys:
-        if key in normalized_lookup:
-            return normalized_lookup[key]
-    return None
-
-
-def _extract_token_usage(payload: Any) -> dict[str, Any] | None:
-    best: Mapping[str, Any] | None = None
-    best_score = 0
-    for mapping in _iter_nested_mappings(payload):
-        score = _usage_like_score(mapping)
-        if score > best_score:
-            best = mapping
-            best_score = score
-    if best is None or best_score <= 0:
+def _extract_usage_from_info_like(info: Mapping[str, Any]) -> dict[str, Any] | None:
+    tokens = info.get("tokens")
+    if not isinstance(tokens, Mapping):
         return None
 
     usage: dict[str, Any] = {}
+    raw: dict[str, Any] = {"tokens": dict(tokens)}
 
-    input_tokens = _coerce_number(_first_scalar_by_keys(best, _TOKEN_USAGE_INPUT_KEYS))
+    input_tokens = _coerce_number(tokens.get("input"))
     if input_tokens is not None:
         usage["input_tokens"] = input_tokens
 
-    output_tokens = _coerce_number(_first_scalar_by_keys(best, _TOKEN_USAGE_OUTPUT_KEYS))
+    output_tokens = _coerce_number(tokens.get("output"))
     if output_tokens is not None:
         usage["output_tokens"] = output_tokens
 
-    total_tokens = _coerce_number(_first_scalar_by_keys(best, _TOKEN_USAGE_TOTAL_KEYS))
+    total_tokens = _coerce_number(tokens.get("total"))
     if total_tokens is not None:
         usage["total_tokens"] = total_tokens
     elif input_tokens is not None and output_tokens is not None:
         usage["total_tokens"] = input_tokens + output_tokens
 
-    cost = _coerce_number(_first_scalar_by_keys(best, _TOKEN_USAGE_COST_KEYS))
+    reasoning_tokens = _coerce_number(tokens.get("reasoning"))
+    if reasoning_tokens is not None:
+        usage["reasoning_tokens"] = reasoning_tokens
+
+    cache = tokens.get("cache")
+    if isinstance(cache, Mapping):
+        cache_usage: dict[str, Any] = {}
+        cache_read = _coerce_number(cache.get("read"))
+        if cache_read is not None:
+            cache_usage["read_tokens"] = cache_read
+        cache_write = _coerce_number(cache.get("write"))
+        if cache_write is not None:
+            cache_usage["write_tokens"] = cache_write
+        if cache_usage:
+            usage["cache_tokens"] = cache_usage
+
+    cost = _coerce_number(info.get("cost"))
     if cost is not None:
         usage["cost"] = cost
-
-    currency = _first_scalar_by_keys(best, _TOKEN_USAGE_CURRENCY_KEYS)
-    if isinstance(currency, str) and currency.strip():
-        usage["currency"] = currency.strip()
+        raw["cost"] = cost
 
     if not usage:
         return None
-    usage["raw"] = dict(best)
+    usage["raw"] = raw
     return usage
+
+
+def _extract_token_usage(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, Mapping):
+        return None
+
+    candidates: list[Mapping[str, Any]] = []
+    info = payload.get("info")
+    if isinstance(info, Mapping):
+        candidates.append(info)
+
+    props = payload.get("properties")
+    if isinstance(props, Mapping):
+        props_info = props.get("info")
+        if isinstance(props_info, Mapping):
+            candidates.append(props_info)
+        part = props.get("part")
+        if isinstance(part, Mapping):
+            candidates.append(part)
+
+    for candidate in candidates:
+        usage = _extract_usage_from_info_like(candidate)
+        if usage is not None:
+            return usage
+    return None
 
 
 def _merge_token_usage(
@@ -1423,34 +1368,29 @@ def _extract_first_nonempty_string(
 
 
 def _extract_stream_session_id(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:
-    session_keys = ("sessionID", "sessionId", "session_id")
-    for source in (part, props):
-        candidate = _extract_first_nonempty_string(source, session_keys)
-        if candidate:
-            return candidate
-    message = props.get("message")
-    candidate = _extract_first_nonempty_string(message, session_keys)
+    candidate = _extract_first_nonempty_string(part, ("sessionID",))
     if candidate:
         return candidate
-    return None
+    return _extract_first_nonempty_string(props, ("sessionID",))
 
 
 def _extract_event_session_id(event: Mapping[str, Any]) -> str | None:
-    session_keys = ("sessionID", "sessionId", "session_id")
     props = event.get("properties")
-    sources: list[Mapping[str, Any] | None] = [event]
-    if isinstance(props, Mapping):
-        sources.append(props)
-        message = props.get("message")
-        if isinstance(message, Mapping):
-            sources.append(message)
-        part = props.get("part")
-        if isinstance(part, Mapping):
-            sources.append(part)
-    for source in sources:
-        candidate = _extract_first_nonempty_string(source, session_keys)
-        if candidate:
-            return candidate
+    if not isinstance(props, Mapping):
+        return None
+    direct = _extract_first_nonempty_string(props, ("sessionID",))
+    if direct:
+        return direct
+    info = props.get("info")
+    if isinstance(info, Mapping):
+        info_session_id = _extract_first_nonempty_string(info, ("sessionID",))
+        if info_session_id:
+            return info_session_id
+    part = props.get("part")
+    if isinstance(part, Mapping):
+        part_session_id = _extract_first_nonempty_string(part, ("sessionID",))
+        if part_session_id:
+            return part_session_id
     return None
 
 
@@ -1534,42 +1474,17 @@ def _extract_interrupt_resolved_event(event: Mapping[str, Any]) -> dict[str, str
 
 
 def _extract_stream_message_id(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:
-    message_keys = ("messageID", "messageId", "message_id", "id")
-    for source in (part, props):
-        candidate = _extract_first_nonempty_string(source, message_keys)
-        if candidate:
-            return candidate
-    message = props.get("message")
-    if isinstance(message, Mapping):
-        candidate = _extract_first_nonempty_string(message, message_keys)
-        if candidate:
-            return candidate
-        info = message.get("info")
-        candidate = _extract_first_nonempty_string(info, message_keys)
-        if candidate:
-            return candidate
-    return None
+    candidate = _extract_first_nonempty_string(part, ("messageID",))
+    if candidate:
+        return candidate
+    return _extract_first_nonempty_string(props, ("messageID",))
 
 
 def _extract_stream_part_id(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:
-    part_keys = ("partID", "partId", "part_id", "id")
-    for source in (part, props):
-        candidate = _extract_first_nonempty_string(source, part_keys)
-        if candidate:
-            return candidate
-    return None
-
-
-def _build_fallback_part_id(
-    part: Mapping[str, Any],
-    props: Mapping[str, Any],
-    *,
-    message_id: str | None,
-) -> str | None:
-    if not message_id:
-        return None
-    part_type = _extract_stream_part_type(part, props) or "unknown"
-    return f"fallback:{message_id}:{part_type}"
+    candidate = _extract_first_nonempty_string(part, ("id",))
+    if candidate:
+        return candidate
+    return _extract_first_nonempty_string(props, ("partID",))
 
 
 def _extract_stream_part_type(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:

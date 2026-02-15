@@ -237,9 +237,15 @@ def build_agent_card(settings: Settings) -> AgentCard:
                                 "SESSION_NOT_FOUND": -32001,
                                 "UPSTREAM_UNREACHABLE": -32002,
                                 "UPSTREAM_HTTP_ERROR": -32003,
+                                "UPSTREAM_PAYLOAD_ERROR": -32005,
                             },
                             # Stable fields returned in error.data for business errors.
-                            "error_data_fields": ["type", "session_id", "upstream_status"],
+                            "error_data_fields": [
+                                "type",
+                                "session_id",
+                                "upstream_status",
+                                "detail",
+                            ],
                         },
                         # Result envelope is A2A-first.
                         # items are serialized A2A Task/Message objects.

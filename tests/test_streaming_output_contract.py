@@ -91,8 +91,10 @@ def _event(
     text: str | None = None,
     part_overrides: dict | None = None,
 ) -> dict:
+    resolved_part_id = part_id or f"prt-{message_id or 'missing'}-{part_type}"
     properties: dict = {
         "part": {
+            "id": resolved_part_id,
             "sessionID": session_id,
             "type": part_type,
         },
@@ -102,8 +104,6 @@ def _event(
         properties["part"]["role"] = role
     if message_id is not None:
         properties["part"]["messageID"] = message_id
-    if part_id is not None:
-        properties["part"]["id"] = part_id
     if text is not None:
         properties["part"]["text"] = text
     if part_overrides:
@@ -135,12 +135,34 @@ def _delta_event(
     }
 
 
-def _finalized_event(*, session_id: str, usage: dict) -> dict:
+def _step_finish_usage_event(
+    *,
+    session_id: str,
+    message_id: str = "msg-1",
+    part_id: str = "prt-step-finish",
+    input_tokens: int,
+    output_tokens: int,
+    total_tokens: int,
+    cost: float,
+) -> dict:
     return {
-        "type": "message.finalized",
+        "type": "message.part.updated",
         "properties": {
-            "sessionID": session_id,
-            "usage": usage,
+            "part": {
+                "id": part_id,
+                "sessionID": session_id,
+                "messageID": message_id,
+                "type": "step-finish",
+                "reason": "stop",
+                "cost": cost,
+                "tokens": {
+                    "input": input_tokens,
+                    "output": output_tokens,
+                    "total": total_tokens,
+                    "reasoning": 0,
+                    "cache": {"read": 0, "write": 0},
+                },
+            }
         },
     }
 
@@ -341,13 +363,26 @@ async def test_streaming_includes_usage_in_final_status_metadata() -> None:
     client = DummyStreamingClient(
         stream_events_payload=[
             _event(session_id="ses-1", role="assistant", part_type="text", delta="answer"),
-            _finalized_event(
+            _step_finish_usage_event(
                 session_id="ses-1",
-                usage={"inputTokens": 12, "outputTokens": 4, "totalTokens": 16, "cost": 0.0012},
+                input_tokens=12,
+                output_tokens=4,
+                total_tokens=16,
+                cost=0.0012,
             ),
         ],
         response_text="answer",
-        response_raw={"usage": {"promptTokens": 11, "completionTokens": 5, "totalTokens": 16}},
+        response_raw={
+            "info": {
+                "tokens": {
+                    "input": 11,
+                    "output": 5,
+                    "reasoning": 0,
+                    "cache": {"read": 0, "write": 0},
+                },
+                "cost": 0.0009,
+            }
+        },
     )
     executor = OpencodeAgentExecutor(client, streaming_enabled=True)
     executor._should_stream = lambda context: True  # type: ignore[method-assign]
@@ -552,6 +587,7 @@ async def test_streaming_never_resets_single_artifact_after_first_chunk() -> Non
                 "type": "message.part.updated",
                 "properties": {
                     "part": {
+                        "id": "prt-no-reset-1",
                         "sessionID": "ses-1",
                         "type": "text",
                         "role": "assistant",
@@ -565,6 +601,7 @@ async def test_streaming_never_resets_single_artifact_after_first_chunk() -> Non
                 "type": "message.part.updated",
                 "properties": {
                     "part": {
+                        "id": "prt-no-reset-1",
                         "sessionID": "ses-1",
                         "type": "text",
                         "role": "assistant",

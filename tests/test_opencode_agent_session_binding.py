@@ -138,7 +138,17 @@ async def test_agent_includes_usage_in_non_stream_task_metadata() -> None:
                 text="echo:hello",
                 session_id=session_id,
                 message_id="msg-usage",
-                raw={"usage": {"promptTokens": 7, "completionTokens": 3}},
+                raw={
+                    "info": {
+                        "tokens": {
+                            "input": 7,
+                            "output": 3,
+                            "reasoning": 0,
+                            "cache": {"read": 0, "write": 0},
+                        },
+                        "cost": 0.0007,
+                    }
+                },
             )
 
     client = UsageClient()

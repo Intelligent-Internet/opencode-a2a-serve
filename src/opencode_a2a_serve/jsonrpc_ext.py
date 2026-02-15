@@ -32,6 +32,7 @@ ERR_SESSION_NOT_FOUND = -32001
 ERR_UPSTREAM_UNREACHABLE = -32002
 ERR_UPSTREAM_HTTP_ERROR = -32003
 ERR_INTERRUPT_NOT_FOUND = -32004
+ERR_UPSTREAM_PAYLOAD_ERROR = -32005
 
 
 def _normalize_permission_reply(value: Any) -> str:
@@ -147,9 +148,7 @@ def _extract_raw_items(raw_result: Any, *, kind: str) -> list[Any]:
     """Extract list payloads from OpenCode responses."""
     if isinstance(raw_result, list):
         return raw_result
-
-    logger.warning("OpenCode %s payload is not a list; type=%s", kind, type(raw_result).__name__)
-    return []
+    raise ValueError(f"OpenCode {kind} payload must be an array; got {type(raw_result).__name__}")
 
 
 class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
@@ -351,10 +350,21 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 A2AError(root=InternalError(message=str(exc))),
             )
 
-        if base_request.method == self._method_list_sessions:
-            raw_items = _extract_raw_items(raw_result, kind="sessions")
-        else:
-            raw_items = _extract_raw_items(raw_result, kind="messages")
+        try:
+            if base_request.method == self._method_list_sessions:
+                raw_items = _extract_raw_items(raw_result, kind="sessions")
+            else:
+                raw_items = _extract_raw_items(raw_result, kind="messages")
+        except ValueError as exc:
+            logger.warning("Upstream OpenCode payload mismatch: %s", exc)
+            return self._generate_error_response(
+                base_request.id,
+                JSONRPCError(
+                    code=ERR_UPSTREAM_PAYLOAD_ERROR,
+                    message="Upstream OpenCode payload mismatch",
+                    data={"type": "UPSTREAM_PAYLOAD_ERROR", "detail": str(exc)},
+                ),
+            )
 
         # Protocol: items are always arrays of A2A objects.
         # Task for sessions; Message for messages.
