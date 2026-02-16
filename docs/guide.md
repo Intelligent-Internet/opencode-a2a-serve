@@ -55,7 +55,7 @@ and JSON-RPC extension details (README stays at overview level).
 ## Service Behavior
 
 - The service forwards A2A `message:send` to OpenCode session/message calls.
-- Task state defaults to `input-required` to support multi-turn interactions.
+- Task state defaults to `completed` for successful turns.
 - Streaming (`/v1/message:stream`) emits incremental
   `TaskArtifactUpdateEvent` and then
   `TaskStatusUpdateEvent(final=true)`. Stream artifacts carry

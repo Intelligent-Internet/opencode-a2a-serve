@@ -462,7 +462,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                         task_id=task_id,
                         context_id=context_id,
                         status=TaskStatus(
-                            state=TaskState.input_required,
+                            state=TaskState.completed,
                         ),
                         final=True,
                         metadata={
@@ -496,7 +496,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                 task = Task(
                     id=task_id,
                     context_id=context_id,
-                    status=TaskStatus(state=TaskState.input_required),
+                    status=TaskStatus(state=TaskState.completed),
                     history=history,
                     artifacts=[artifact],
                     metadata={

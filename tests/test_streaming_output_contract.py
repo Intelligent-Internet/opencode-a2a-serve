@@ -1,7 +1,7 @@
 import asyncio
 
 import pytest
-from a2a.types import TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
+from a2a.types import Task, TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 
 from opencode_a2a_serve.agent import OpencodeAgentExecutor
 from opencode_a2a_serve.opencode_client import OpencodeMessage
@@ -428,6 +428,48 @@ async def test_streaming_includes_usage_in_final_status_metadata() -> None:
     assert usage["total_tokens"] == 16
     assert usage["cost"] == 0.0012
     assert "raw" not in usage
+    assert final_status.status.state == TaskState.completed
+
+
+@pytest.mark.asyncio
+async def test_streaming_final_status_state_is_completed() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[],
+        response_text="answer",
+    )
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(task_id="task-final-stream", context_id="ctx-final-stream", text="hello"),
+        queue,
+    )
+
+    final_statuses = [
+        event for event in queue.events if isinstance(event, TaskStatusUpdateEvent) and event.final
+    ]
+    assert final_statuses
+    assert final_statuses[-1].status.state == TaskState.completed
+
+
+@pytest.mark.asyncio
+async def test_non_streaming_response_task_state_is_completed() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[],
+        response_text="answer",
+    )
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(task_id="task-final-non-stream", context_id="ctx-final-non-stream", text="hello"),
+        queue,
+    )
+
+    tasks = [event for event in queue.events if isinstance(event, Task)]
+    assert tasks
+    assert tasks[-1].status.state == TaskState.completed
 
 
 @pytest.mark.asyncio
