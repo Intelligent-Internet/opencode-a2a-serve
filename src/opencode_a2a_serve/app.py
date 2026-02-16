@@ -273,6 +273,7 @@ def build_agent_card(settings: Settings) -> AgentCard:
                         "question_reply_contract": {
                             "answers": "array of answer arrays (same order as asked questions)"
                         },
+                        "success_result_fields": ["ok", "request_id"],
                         "errors": {
                             "business_codes": {
                                 "INTERRUPT_REQUEST_NOT_FOUND": -32004,
@@ -280,6 +281,7 @@ def build_agent_card(settings: Settings) -> AgentCard:
                             "error_types": [
                                 "INTERRUPT_REQUEST_NOT_FOUND",
                                 "INTERRUPT_REQUEST_EXPIRED",
+                                "INTERRUPT_TYPE_MISMATCH",
                             ],
                             "error_data_fields": ["type", "request_id", "upstream_status"],
                         },

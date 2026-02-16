@@ -456,7 +456,6 @@ class OpencodeAgentExecutor(AgentExecutor):
                             block_type=BlockType.TEXT,
                             source="final_snapshot",
                             message_id=resolved_message_id,
-                            sequence=sequence,
                             event_id=stream_state.build_event_id(sequence),
                         ),
                     )
@@ -505,7 +504,6 @@ class OpencodeAgentExecutor(AgentExecutor):
                     metadata={
                         "opencode": {
                             "session_id": response.session_id,
-                            "message_id": resolved_message_id,
                             **(
                                 {"usage": resolved_token_usage}
                                 if resolved_token_usage is not None
@@ -815,7 +813,6 @@ class OpencodeAgentExecutor(AgentExecutor):
                         source=chunk.source,
                         message_id=resolved_message_id,
                         role=chunk.role,
-                        sequence=sequence,
                         event_id=stream_state.build_event_id(sequence),
                     ),
                 )
@@ -833,7 +830,6 @@ class OpencodeAgentExecutor(AgentExecutor):
             state: TaskState,
             request_id: str,
             interrupt_type: str,
-            event_type: str,
             details: Mapping[str, Any],
         ) -> None:
             sequence = stream_state.next_sequence()
@@ -851,7 +847,6 @@ class OpencodeAgentExecutor(AgentExecutor):
                             "interrupt": {
                                 "request_id": request_id,
                                 "type": interrupt_type,
-                                "event_type": event_type,
                                 "details": dict(details),
                             },
                         }
@@ -1033,7 +1028,6 @@ class OpencodeAgentExecutor(AgentExecutor):
                                         state=TaskState.input_required,
                                         request_id=request_id,
                                         interrupt_type=asked["interrupt_type"],
-                                        event_type=event_type,
                                         details=asked["details"],
                                     )
                             resolved = _extract_interrupt_resolved_event(event)
@@ -1207,7 +1201,6 @@ def _build_stream_artifact_metadata(
     source: str,
     message_id: str | None = None,
     role: str | None = None,
-    sequence: int | None = None,
     event_id: str | None = None,
 ) -> dict[str, Any]:
     opencode_meta: dict[str, Any] = {
@@ -1218,8 +1211,6 @@ def _build_stream_artifact_metadata(
         opencode_meta["message_id"] = message_id
     if role:
         opencode_meta["role"] = role
-    if sequence is not None:
-        opencode_meta["sequence"] = sequence
     if event_id:
         opencode_meta["event_id"] = event_id
     return {"opencode": opencode_meta}
@@ -1256,7 +1247,6 @@ def _extract_usage_from_info_like(info: Mapping[str, Any]) -> dict[str, Any] | N
         return None
 
     usage: dict[str, Any] = {}
-    raw: dict[str, Any] = {"tokens": dict(tokens)}
 
     input_tokens = _coerce_number(tokens.get("input"))
     if input_tokens is not None:
@@ -1291,11 +1281,9 @@ def _extract_usage_from_info_like(info: Mapping[str, Any]) -> dict[str, Any] | N
     cost = _coerce_number(info.get("cost"))
     if cost is not None:
         usage["cost"] = cost
-        raw["cost"] = cost
 
     if not usage:
         return None
-    usage["raw"] = raw
     return usage
 
 
@@ -1449,14 +1437,7 @@ def _extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] |
         details: dict[str, Any] = {
             "permission": props.get("permission"),
             "patterns": _extract_string_list(props.get("patterns")),
-            "always": _extract_string_list(props.get("always")),
-            "metadata": dict(props.get("metadata"))
-            if isinstance(props.get("metadata"), Mapping)
-            else {},
         }
-        tool = props.get("tool")
-        if isinstance(tool, Mapping):
-            details["tool"] = dict(tool)
         return {
             "request_id": request_id,
             "interrupt_type": "permission",
@@ -1464,9 +1445,6 @@ def _extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] |
         }
     questions = props.get("questions")
     details = {"questions": questions if isinstance(questions, list) else []}
-    tool = props.get("tool")
-    if isinstance(tool, Mapping):
-        details["tool"] = dict(tool)
     return {
         "request_id": request_id,
         "interrupt_type": "question",

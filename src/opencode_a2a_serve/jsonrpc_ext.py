@@ -106,7 +106,7 @@ def _as_a2a_session_task(session: Any) -> dict[str, Any] | None:
         context_id=session_id,
         # Model OpenCode sessions as completed A2A Tasks for stable downstream rendering.
         status=TaskStatus(state=TaskState.completed),
-        metadata={"opencode": {"raw": session, "title": title}},
+        metadata={"opencode": {"title": title}},
     )
     return task.model_dump(by_alias=True, exclude_none=True)
 
@@ -137,7 +137,6 @@ def _as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
         role=role,
         parts=[TextPart(text=text)],
         context_id=session_id,
-        metadata={"opencode": {"raw": item, "session_id": session_id}},
     )
     return msg.model_dump(by_alias=True, exclude_none=True)
 
@@ -429,9 +428,6 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         expected_interrupt_type = (
             "permission" if base_request.method == self._method_reply_permission else "question"
         )
-        resolved_session_id: str | None = None
-        resolved_task_id: str | None = None
-        resolved_context_id: str | None = None
         resolve_request = getattr(self._opencode_client, "resolve_interrupt_request", None)
         if callable(resolve_request):
             status, binding = resolve_request(request_id)
@@ -488,14 +484,10 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                         },
                     ),
                 )
-            resolved_session_id = binding.session_id
-            resolved_task_id = binding.task_id
-            resolved_context_id = binding.context_id
         else:
             resolve_session = getattr(self._opencode_client, "resolve_interrupt_session", None)
             if callable(resolve_session):
-                resolved_session_id = resolve_session(request_id)
-                if not resolved_session_id:
+                if not resolve_session(request_id):
                     return self._generate_error_response(
                         base_request.id,
                         JSONRPCError(
@@ -540,7 +532,6 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 result: dict[str, Any] = {
                     "ok": True,
                     "request_id": request_id,
-                    "reply": reply,
                 }
             elif base_request.method == self._method_reply_question:
                 answers = _parse_question_answers(params.get("answers"))
@@ -552,7 +543,6 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 result = {
                     "ok": True,
                     "request_id": request_id,
-                    "answers": answers,
                 }
             else:
                 await self._opencode_client.question_reject(request_id, directory=directory)
@@ -560,12 +550,6 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                     "ok": True,
                     "request_id": request_id,
                 }
-            if resolved_session_id is not None:
-                result["session_id"] = resolved_session_id
-            if resolved_task_id is not None:
-                result["task_id"] = resolved_task_id
-            if resolved_context_id is not None:
-                result["context_id"] = resolved_context_id
             discard_request = getattr(self._opencode_client, "discard_interrupt_request", None)
             if callable(discard_request):
                 discard_request(request_id)

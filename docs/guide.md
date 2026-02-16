@@ -62,7 +62,7 @@ and JSON-RPC extension details (README stays at overview level).
   `artifact.metadata.opencode.block_type` with values
   `text` / `reasoning` / `tool_call`. All chunks share one stream
   artifact ID and preserve original timeline via
-  `artifact.metadata.opencode.sequence`. Events without
+  `artifact.metadata.opencode.event_id`. Events without
   `message_id` are dropped. A final snapshot is only emitted when stream
   chunks did not already produce the same final text.
   Stream routing is schema-first: the service classifies chunks primarily by
@@ -75,8 +75,8 @@ and JSON-RPC extension details (README stays at overview level).
   `input_tokens`, `output_tokens`, `total_tokens`, and optional `cost`.
   Interrupt events (`permission.asked` / `question.asked`) are mapped to
   `TaskStatusUpdateEvent(final=false, state=input-required)` with details at
-  `metadata.opencode.interrupt` (including `request_id`, event type, and
-  structured payload for downstream callback handling).
+  `metadata.opencode.interrupt` (including `request_id`, interrupt `type`, and
+  minimal callback payload).
   Non-streaming requests return a `Task` directly.
 - Non-streaming `message:send` responses may include normalized token usage at
   `Task.metadata.opencode.usage` with the same field schema.
@@ -146,7 +146,6 @@ This service exposes OpenCode session list and message-history queries via A2A J
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
   - message history => `Message`
-  - raw upstream payload is preserved at `metadata.opencode.raw`
   - session title is available at `metadata.opencode.title`
 
 ### Session List (`opencode.sessions.list`)
@@ -202,6 +201,7 @@ Notes:
 - The server keeps an in-memory interrupt binding cache; callbacks with unknown
   or expired `request_id` are rejected.
 - Callback requests are validated against interrupt type and caller identity.
+- Successful callback responses are minimal: only `ok` and `request_id`.
 - Error types:
   - `INTERRUPT_REQUEST_NOT_FOUND`
   - `INTERRUPT_REQUEST_EXPIRED`

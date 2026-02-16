@@ -252,10 +252,8 @@ async def test_streaming_filters_user_echo_and_emits_single_artifact_block_types
     assert _unique(block_types) == ["reasoning", "tool_call", "text"]
     artifact_ids = [event.artifact.artifact_id for event in updates]
     assert len(set(artifact_ids)) == 1
-    sequences = [event.artifact.metadata["opencode"]["sequence"] for event in updates]
-    assert sequences == list(range(1, len(updates) + 1))
     event_ids = [event.artifact.metadata["opencode"]["event_id"] for event in updates]
-    assert event_ids == [f"task-1:ctx-1:task-1:stream:{seq}" for seq in sequences]
+    assert event_ids == [f"task-1:ctx-1:task-1:stream:{seq}" for seq in range(1, len(updates) + 1)]
 
 
 @pytest.mark.asyncio
@@ -429,6 +427,7 @@ async def test_streaming_includes_usage_in_final_status_metadata() -> None:
     assert usage["output_tokens"] == 4
     assert usage["total_tokens"] == 16
     assert usage["cost"] == 0.0012
+    assert "raw" not in usage
 
 
 @pytest.mark.asyncio
@@ -461,10 +460,10 @@ async def test_streaming_emits_interrupt_status_for_permission_asked_event() -> 
     assert len(interrupt_statuses) == 1
     interrupt = interrupt_statuses[0].metadata["opencode"]["interrupt"]
     assert interrupt["request_id"] == "perm-req-1"
-    assert interrupt["event_type"] == "permission.asked"
     assert interrupt["details"]["permission"] == "read"
     assert "/data/project/.env.secret" in interrupt["details"]["patterns"]
-    assert interrupt["details"]["metadata"]["path"] == "/data/project/.env.secret"
+    assert "metadata" not in interrupt["details"]
+    assert "tool" not in interrupt["details"]
     assert interrupt_statuses[0].status.state == TaskState.input_required
 
 
@@ -497,8 +496,8 @@ async def test_streaming_emits_interrupt_status_for_question_asked_event() -> No
     assert len(interrupt_statuses) == 1
     interrupt = interrupt_statuses[0].metadata["opencode"]["interrupt"]
     assert interrupt["request_id"] == "q-req-1"
-    assert interrupt["event_type"] == "question.asked"
     assert isinstance(interrupt["details"]["questions"], list)
+    assert "tool" not in interrupt["details"]
     assert interrupt_statuses[0].status.state == TaskState.input_required
 
 

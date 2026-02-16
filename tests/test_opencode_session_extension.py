@@ -75,8 +75,8 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         session = payload["result"]["items"][0]
         assert session["id"] == "s-1"
         assert session["contextId"] == "s-1"
-        assert session["metadata"]["opencode"]["raw"]["id"] == "s-1"
         assert session["metadata"]["opencode"]["title"] == "Session s-1"
+        assert "raw" not in session["metadata"]["opencode"]
         assert dummy.last_sessions_params is not None
         assert dummy.last_sessions_params.get("limit") == 10
 
@@ -98,7 +98,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         message = payload["result"]["items"][0]
         assert message["contextId"] == "s-1"
         assert message["parts"][0]["text"] == "SECRET_HISTORY"
-        assert message["metadata"]["opencode"]["session_id"] == "s-1"
+        assert "metadata" not in message
         assert dummy.last_messages_params is not None
         assert dummy.last_messages_params.get("limit") == 5
 
@@ -512,10 +512,7 @@ async def test_interrupt_callback_extension_permission_reply(monkeypatch):
         assert payload.get("error") is None
         assert payload["result"]["ok"] is True
         assert payload["result"]["request_id"] == "perm-1"
-        assert payload["result"]["reply"] == "once"
-        assert payload["result"]["session_id"] == "ses-1"
-        assert payload["result"]["task_id"] == "task-perm"
-        assert payload["result"]["context_id"] == "ctx-perm"
+        assert set(payload["result"]) == {"ok", "request_id"}
         assert len(dummy.permission_reply_calls) == 1
         assert dummy.permission_reply_calls[0]["request_id"] == "perm-1"
         assert dummy.permission_reply_calls[0]["reply"] == "once"
@@ -616,7 +613,7 @@ async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatc
         reply_payload = reply_resp.json()
         assert reply_payload["result"]["ok"] is True
         assert reply_payload["result"]["request_id"] == "q-1"
-        assert reply_payload["result"]["session_id"] == "ses-1"
+        assert set(reply_payload["result"]) == {"ok", "request_id"}
         assert dummy.question_reply_calls[0]["answers"] == [["A"], ["B"]]
 
         reject_resp = await client.post(
