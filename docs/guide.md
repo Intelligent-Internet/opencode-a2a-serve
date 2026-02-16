@@ -193,6 +193,16 @@ clients can reply through JSON-RPC extension methods:
 - `opencode.question.reject`
   - required: `request_id`
 
+Notes:
+
+- `request_id` must be a live interrupt request observed from stream metadata
+  (`metadata.opencode.interrupt.request_id`).
+- The server keeps an in-memory interrupt binding cache; callbacks with unknown
+  or expired `request_id` are rejected.
+- Error types:
+  - `INTERRUPT_REQUEST_NOT_FOUND`
+  - `INTERRUPT_REQUEST_EXPIRED`
+
 Permission reply example:
 
 ```bash

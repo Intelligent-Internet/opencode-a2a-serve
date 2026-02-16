@@ -161,6 +161,9 @@ The service exposes OpenCode session list/history queries through A2A extension 
   - `opencode.permission.reply`
   - `opencode.question.reply`
   - `opencode.question.reject`
+  - `request_id` must come from a previously streamed interrupt event.
+  - Unknown or expired request IDs return business errors
+    `INTERRUPT_REQUEST_NOT_FOUND` / `INTERRUPT_REQUEST_EXPIRED`.
 
 List sessions (`opencode.sessions.list`):
 

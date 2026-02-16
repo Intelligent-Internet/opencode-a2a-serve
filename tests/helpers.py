@@ -138,8 +138,18 @@ class DummyChatOpencodeClient:
         for _ in ():
             yield {}
 
-    def remember_interrupt_request(self, *, request_id: str, session_id: str) -> None:
-        del request_id, session_id
+    def remember_interrupt_request(
+        self,
+        *,
+        request_id: str,
+        session_id: str,
+        interrupt_type: str | None = None,
+        identity: str | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        ttl_seconds: float | None = None,
+    ) -> None:
+        del request_id, session_id, interrupt_type, identity, task_id, context_id, ttl_seconds
 
     def resolve_interrupt_session(self, request_id: str) -> str | None:
         del request_id
@@ -160,6 +170,7 @@ class DummySessionQueryOpencodeClient:
         ]
         self.last_sessions_params = None
         self.last_messages_params = None
+        self._interrupt_requests: dict[str, dict[str, str | None]] = {}
 
     async def close(self) -> None:
         return None
@@ -172,6 +183,50 @@ class DummySessionQueryOpencodeClient:
         assert session_id
         self.last_messages_params = params
         return self._messages_payload
+
+    def remember_interrupt_request(
+        self,
+        *,
+        request_id: str,
+        session_id: str,
+        interrupt_type: str,
+        identity: str | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        ttl_seconds: float | None = None,
+    ) -> None:
+        del ttl_seconds
+        self._interrupt_requests[request_id] = {
+            "session_id": session_id,
+            "interrupt_type": interrupt_type,
+            "identity": identity,
+            "task_id": task_id,
+            "context_id": context_id,
+        }
+
+    def resolve_interrupt_request(self, request_id: str):
+        payload = self._interrupt_requests.get(request_id)
+        if payload is None:
+            return "missing", None
+
+        class _Binding:
+            def __init__(self, data: dict[str, str | None]) -> None:
+                self.session_id = data.get("session_id")
+                self.interrupt_type = data.get("interrupt_type")
+                self.identity = data.get("identity")
+                self.task_id = data.get("task_id")
+                self.context_id = data.get("context_id")
+
+        return "active", _Binding(payload)
+
+    def resolve_interrupt_session(self, request_id: str) -> str | None:
+        payload = self._interrupt_requests.get(request_id)
+        if payload is None:
+            return None
+        return payload.get("session_id")
+
+    def discard_interrupt_request(self, request_id: str) -> None:
+        self._interrupt_requests.pop(request_id, None)
 
     async def permission_reply(
         self,

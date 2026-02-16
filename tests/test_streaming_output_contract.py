@@ -70,7 +70,18 @@ class DummyStreamingClient:
             await asyncio.sleep(0)
             yield event
 
-    def remember_interrupt_request(self, *, request_id: str, session_id: str) -> None:
+    def remember_interrupt_request(
+        self,
+        *,
+        request_id: str,
+        session_id: str,
+        interrupt_type: str | None = None,
+        identity: str | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        ttl_seconds: float | None = None,
+    ) -> None:
+        del interrupt_type, identity, task_id, context_id, ttl_seconds
         self._interrupt_sessions[request_id] = session_id
 
     def resolve_interrupt_session(self, request_id: str) -> str | None:
@@ -178,6 +189,23 @@ def _permission_asked_event(*, session_id: str, request_id: str) -> dict:
             "always": ["/data/project/.env.example"],
             "metadata": {"path": "/data/project/.env.secret"},
             "tool": {"messageID": "msg-tool-1", "callID": "call-tool-1"},
+        },
+    }
+
+
+def _question_asked_event(*, session_id: str, request_id: str) -> dict:
+    return {
+        "type": "question.asked",
+        "properties": {
+            "id": request_id,
+            "sessionID": session_id,
+            "questions": [
+                {
+                    "header": "Confirm",
+                    "question": "Proceed?",
+                    "options": [{"label": "Yes", "value": "yes"}],
+                }
+            ],
         },
     }
 
@@ -437,6 +465,40 @@ async def test_streaming_emits_interrupt_status_for_permission_asked_event() -> 
     assert interrupt["details"]["permission"] == "read"
     assert "/data/project/.env.secret" in interrupt["details"]["patterns"]
     assert interrupt["details"]["metadata"]["path"] == "/data/project/.env.secret"
+    assert interrupt_statuses[0].status.state == TaskState.input_required
+
+
+@pytest.mark.asyncio
+async def test_streaming_emits_interrupt_status_for_question_asked_event() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            _question_asked_event(session_id="ses-1", request_id="q-req-1"),
+            _event(session_id="ses-1", role="assistant", part_type="text", delta="answer"),
+        ],
+        response_text="answer",
+    )
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(task_id="task-question", context_id="ctx-question", text="hello"),
+        queue,
+    )
+
+    interrupt_statuses = [
+        event
+        for event in queue.events
+        if isinstance(event, TaskStatusUpdateEvent)
+        and event.final is False
+        and (event.metadata or {}).get("opencode", {}).get("interrupt", {}).get("type")
+        == "question"
+    ]
+    assert len(interrupt_statuses) == 1
+    interrupt = interrupt_statuses[0].metadata["opencode"]["interrupt"]
+    assert interrupt["request_id"] == "q-req-1"
+    assert interrupt["event_type"] == "question.asked"
+    assert isinstance(interrupt["details"]["questions"], list)
     assert interrupt_statuses[0].status.state == TaskState.input_required
 
 

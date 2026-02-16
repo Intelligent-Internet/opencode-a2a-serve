@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import secrets
@@ -272,6 +273,16 @@ def build_agent_card(settings: Settings) -> AgentCard:
                         "question_reply_contract": {
                             "answers": "array of answer arrays (same order as asked questions)"
                         },
+                        "errors": {
+                            "business_codes": {
+                                "INTERRUPT_REQUEST_NOT_FOUND": -32004,
+                            },
+                            "error_types": [
+                                "INTERRUPT_REQUEST_NOT_FOUND",
+                                "INTERRUPT_REQUEST_EXPIRED",
+                            ],
+                            "error_data_fields": ["type", "request_id", "upstream_status"],
+                        },
                         "shared_workspace_across_consumers": True,
                         "tenant_isolation": "none",
                         "deployment_context": deployment_context,
@@ -351,6 +362,7 @@ def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
         provided = auth_header.split(" ", 1)[1].strip()
         if not secrets.compare_digest(provided, token):
             return _unauthorized_response()
+        request.state.user_identity = f"bearer:{hashlib.sha256(provided.encode()).hexdigest()[:12]}"
 
         return await call_next(request)
 

@@ -158,3 +158,41 @@ async def test_question_reject_rejects_non_boolean_payload(monkeypatch):
         await client.question_reject("q-1")
 
     await client.close()
+
+
+@pytest.mark.asyncio
+async def test_interrupt_request_binding_expires_after_ttl() -> None:
+    client = OpencodeClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            opencode_timeout=1.0,
+            a2a_log_level="DEBUG",
+            a2a_log_payloads=False,
+        )
+    )
+
+    now = 1000.0
+    client._interrupt_request_clock = lambda: now  # type: ignore[method-assign]
+    client.remember_interrupt_request(
+        request_id="perm-1",
+        session_id="ses-1",
+        interrupt_type="permission",
+        task_id="task-1",
+        context_id="ctx-1",
+        identity="user-1",
+        ttl_seconds=5.0,
+    )
+
+    status, binding = client.resolve_interrupt_request("perm-1")
+    assert status == "active"
+    assert binding is not None
+    assert binding.session_id == "ses-1"
+    assert binding.interrupt_type == "permission"
+
+    now = 1006.0
+    status, binding = client.resolve_interrupt_request("perm-1")
+    assert status == "expired"
+    assert binding is None
+    assert client.resolve_interrupt_session("perm-1") is None
+
+    await client.close()

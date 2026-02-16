@@ -392,6 +392,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                 stream_task = asyncio.create_task(
                     self._consume_opencode_stream(
                         session_id=session_id,
+                        identity=identity,
                         task_id=task_id,
                         context_id=context_id,
                         artifact_id=stream_artifact_id,
@@ -768,6 +769,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         self,
         *,
         session_id: str,
+        identity: str,
         task_id: str,
         context_id: str,
         artifact_id: str,
@@ -1015,6 +1017,18 @@ class OpencodeAgentExecutor(AgentExecutor):
                             if asked is not None:
                                 request_id = asked["request_id"]
                                 if stream_state.mark_interrupt_pending(request_id):
+                                    remember_request = getattr(
+                                        self._client, "remember_interrupt_request", None
+                                    )
+                                    if callable(remember_request):
+                                        remember_request(
+                                            request_id=request_id,
+                                            session_id=session_id,
+                                            interrupt_type=asked["interrupt_type"],
+                                            identity=identity,
+                                            task_id=task_id,
+                                            context_id=context_id,
+                                        )
                                     await _emit_interrupt_status(
                                         state=TaskState.input_required,
                                         request_id=request_id,
@@ -1024,7 +1038,13 @@ class OpencodeAgentExecutor(AgentExecutor):
                                     )
                             resolved = _extract_interrupt_resolved_event(event)
                             if resolved is not None:
-                                stream_state.clear_interrupt_pending(resolved["request_id"])
+                                resolved_request_id = resolved["request_id"]
+                                stream_state.clear_interrupt_pending(resolved_request_id)
+                                discard_request = getattr(
+                                    self._client, "discard_interrupt_request", None
+                                )
+                                if callable(discard_request):
+                                    discard_request(resolved_request_id)
                         if event_type not in {"message.part.updated", "message.part.delta"}:
                             continue
                         part = props.get("part")
