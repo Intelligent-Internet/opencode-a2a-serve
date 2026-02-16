@@ -1,6 +1,8 @@
 # Usage Guide
 
 This guide covers configuration, authentication, API behavior, streaming re-subscription, and A2A client usage examples.
+It is also the canonical document for implementation-level protocol contracts
+and JSON-RPC extension details (README stays at overview level).
 
 ## Transport Contracts
 
@@ -199,9 +201,11 @@ Notes:
   (`metadata.opencode.interrupt.request_id`).
 - The server keeps an in-memory interrupt binding cache; callbacks with unknown
   or expired `request_id` are rejected.
+- Callback requests are validated against interrupt type and caller identity.
 - Error types:
   - `INTERRUPT_REQUEST_NOT_FOUND`
   - `INTERRUPT_REQUEST_EXPIRED`
+  - `INTERRUPT_TYPE_MISMATCH`
 
 Permission reply example:
 
