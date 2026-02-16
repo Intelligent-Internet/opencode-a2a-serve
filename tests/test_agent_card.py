@@ -4,6 +4,7 @@ from opencode_a2a_serve.app import (
     SESSION_QUERY_EXTENSION_URI,
     build_agent_card,
 )
+from opencode_a2a_serve.jsonrpc_ext import SESSION_CONTEXT_PREFIX
 from tests.helpers import make_settings
 
 
@@ -51,6 +52,13 @@ def test_agent_card_injects_deployment_context_into_extensions() -> None:
     assert session_query.params["deployment_context"]["project"] == "alpha"
     assert session_query.params["shared_workspace_across_consumers"] is True
     assert session_query.params["tenant_isolation"] == "none"
+    assert (
+        session_query.params["context_semantics"]["a2a_context_id_prefix"] == SESSION_CONTEXT_PREFIX
+    )
+    assert (
+        session_query.params["context_semantics"]["upstream_session_id_field"]
+        == "metadata.opencode.session_id"
+    )
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     assert interrupt.params["deployment_context"]["project"] == "alpha"

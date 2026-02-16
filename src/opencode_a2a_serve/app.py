@@ -32,6 +32,7 @@ from starlette.responses import StreamingResponse
 from .agent import OpencodeAgentExecutor
 from .config import Settings
 from .jsonrpc_ext import (
+    SESSION_CONTEXT_PREFIX,
     OpencodeSessionQueryJSONRPCApplication,
 )
 from .opencode_client import OpencodeClient
@@ -253,6 +254,11 @@ def build_agent_card(settings: Settings) -> AgentCard:
                         "result_envelope": {
                             "fields": ["items"],
                             "items_field": "items",
+                        },
+                        "context_semantics": {
+                            "a2a_context_id_field": "contextId",
+                            "a2a_context_id_prefix": SESSION_CONTEXT_PREFIX,
+                            "upstream_session_id_field": "metadata.opencode.session_id",
                         },
                     },
                 ),

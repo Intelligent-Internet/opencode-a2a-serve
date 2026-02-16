@@ -33,6 +33,7 @@ ERR_UPSTREAM_UNREACHABLE = -32002
 ERR_UPSTREAM_HTTP_ERROR = -32003
 ERR_INTERRUPT_NOT_FOUND = -32004
 ERR_UPSTREAM_PAYLOAD_ERROR = -32005
+SESSION_CONTEXT_PREFIX = "ctx:opencode-session:"
 
 
 def _normalize_permission_reply(value: Any) -> str:
@@ -91,6 +92,10 @@ def _extract_session_title(session: dict[str, Any]) -> str:
     return title.strip()
 
 
+def _as_a2a_session_context_id(session_id: str) -> str:
+    return f"{SESSION_CONTEXT_PREFIX}{session_id}"
+
+
 def _as_a2a_session_task(session: Any) -> dict[str, Any] | None:
     if not isinstance(session, dict):
         return None
@@ -100,13 +105,14 @@ def _as_a2a_session_task(session: Any) -> dict[str, Any] | None:
     session_id = raw_id.strip()
     if not session_id:
         return None
+    context_id = _as_a2a_session_context_id(session_id)
     title = _extract_session_title(session)
     task = Task(
         id=session_id,
-        context_id=session_id,
+        context_id=context_id,
         # Model OpenCode sessions as completed A2A Tasks for stable downstream rendering.
         status=TaskStatus(state=TaskState.completed),
-        metadata={"opencode": {"title": title}},
+        metadata={"opencode": {"session_id": session_id, "title": title}},
     )
     return task.model_dump(by_alias=True, exclude_none=True)
 
@@ -132,11 +138,13 @@ def _as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
 
     text = extract_text_from_parts(item.get("parts"))
 
+    context_id = _as_a2a_session_context_id(session_id)
     msg = Message(
         message_id=message_id,
         role=role,
         parts=[TextPart(text=text)],
-        context_id=session_id,
+        context_id=context_id,
+        metadata={"opencode": {"session_id": session_id}},
     )
     return msg.model_dump(by_alias=True, exclude_none=True)
 

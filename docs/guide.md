@@ -146,6 +146,9 @@ This service exposes OpenCode session list and message-history queries via A2A J
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
   - message history => `Message`
+  - `contextId` is an A2A context key derived by the adapter
+    (format: `ctx:opencode-session:<session_id>`, not raw OpenCode session ID)
+  - OpenCode session identity is exposed explicitly at `metadata.opencode.session_id`
   - session title is available at `metadata.opencode.title`
 
 ### Session List (`opencode.sessions.list`)

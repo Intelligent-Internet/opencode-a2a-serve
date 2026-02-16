@@ -74,7 +74,9 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         assert "raw" not in payload["result"]
         session = payload["result"]["items"][0]
         assert session["id"] == "s-1"
-        assert session["contextId"] == "s-1"
+        assert session["contextId"] == "ctx:opencode-session:s-1"
+        assert session["contextId"] != session["metadata"]["opencode"]["session_id"]
+        assert session["metadata"]["opencode"]["session_id"] == "s-1"
         assert session["metadata"]["opencode"]["title"] == "Session s-1"
         assert "raw" not in session["metadata"]["opencode"]
         assert dummy.last_sessions_params is not None
@@ -96,9 +98,9 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         assert payload["id"] == 2
         assert "raw" not in payload["result"]
         message = payload["result"]["items"][0]
-        assert message["contextId"] == "s-1"
+        assert message["contextId"] == "ctx:opencode-session:s-1"
         assert message["parts"][0]["text"] == "SECRET_HISTORY"
-        assert "metadata" not in message
+        assert message["metadata"]["opencode"]["session_id"] == "s-1"
         assert dummy.last_messages_params is not None
         assert dummy.last_messages_params.get("limit") == 5
 
@@ -261,6 +263,8 @@ async def test_session_query_extension_accepts_top_level_list_payload(monkeypatc
         )
         payload = resp.json()
         assert payload["result"]["items"][0]["id"] == "s-1"
+        assert payload["result"]["items"][0]["contextId"] == "ctx:opencode-session:s-1"
+        assert payload["result"]["items"][0]["metadata"]["opencode"]["session_id"] == "s-1"
 
         resp = await client.post(
             "/",
@@ -273,7 +277,8 @@ async def test_session_query_extension_accepts_top_level_list_payload(monkeypatc
             },
         )
         payload = resp.json()
-        assert payload["result"]["items"][0]["contextId"] == "s-1"
+        assert payload["result"]["items"][0]["contextId"] == "ctx:opencode-session:s-1"
+        assert payload["result"]["items"][0]["metadata"]["opencode"]["session_id"] == "s-1"
         assert payload["result"]["items"][0]["parts"][0]["text"] == "SECRET_HISTORY"
 
 
