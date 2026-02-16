@@ -229,7 +229,7 @@ Naming rule in the tables below:
 | `OPENCODE_A2A_DIR` | - | Optional | `/opt/opencode-a2a/opencode-a2a-serve` | Repo path for opencode-a2a-serve. |
 | `OPENCODE_CORE_DIR` | - | Optional | `/opt/.opencode` | OpenCode core path. |
 | `UV_PYTHON_DIR` | - | Optional | `/opt/uv-python` | uv Python cache path. |
-| `UV_PYTHON_DIR_GROUP` | - | Optional | Empty | Optional group for uv python shared directory access control. |
+| `UV_PYTHON_DIR_GROUP` | - | Optional | `opencode` | Optional group for uv python shared directory access control. |
 | `DATA_ROOT` | `data_root` | Optional | `/data/opencode-a2a` | Instance root directory. |
 | `OPENCODE_BIND_HOST` | - | Optional | `127.0.0.1` | OpenCode bind host. |
 | `OPENCODE_BIND_PORT` | - | Optional | `A2A_PORT + 1` fallback to `4096` | Multi-instance should use unique port. |
