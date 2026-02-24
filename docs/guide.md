@@ -147,6 +147,8 @@ This service exposes OpenCode session list/message-history queries and async pro
   suppressed for `method=opencode.sessions.*`
 - Endpoint discovery: prefer `additional_interfaces[]` with
   `transport=jsonrpc` from Agent Card
+- Notification behavior: for `opencode.sessions.*`, requests without `id`
+  return HTTP `204 No Content`
 - Result format (query methods):
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
@@ -249,6 +251,8 @@ Notes:
   - `INTERRUPT_REQUEST_NOT_FOUND`
   - `INTERRUPT_REQUEST_EXPIRED`
   - `INTERRUPT_TYPE_MISMATCH`
+  - `UPSTREAM_UNREACHABLE`
+  - `UPSTREAM_HTTP_ERROR`
 
 Permission reply example:
 

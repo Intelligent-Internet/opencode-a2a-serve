@@ -22,6 +22,7 @@ class InterruptMethodContract:
     method: str
     required_params: tuple[str, ...] = ()
     optional_params: tuple[str, ...] = ()
+    notification_response_status: int | None = None
 
 
 PROMPT_ASYNC_REQUEST_REQUIRED_FIELDS: tuple[str, ...] = ("parts",)
@@ -53,6 +54,7 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         result_fields=("items",),
         items_type="Task[]",
         items_field="items",
+        notification_response_status=204,
         pagination_mode=SESSION_QUERY_PAGINATION_MODE,
     ),
     "get_session_messages": SessionQueryMethodContract(
@@ -63,6 +65,7 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         result_fields=("items",),
         items_type="Message[]",
         items_field="items",
+        notification_response_status=204,
         pagination_mode=SESSION_QUERY_PAGINATION_MODE,
     ),
     "prompt_async": SessionQueryMethodContract(
@@ -100,22 +103,32 @@ SESSION_QUERY_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "upstream_status",
     "detail",
 )
+SESSION_QUERY_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "field",
+    "fields",
+    "supported",
+    "unsupported",
+)
 
 INTERRUPT_CALLBACK_METHOD_CONTRACTS: dict[str, InterruptMethodContract] = {
     "reply_permission": InterruptMethodContract(
         method="opencode.permission.reply",
         required_params=("request_id", "reply"),
         optional_params=("message", "metadata"),
+        notification_response_status=204,
     ),
     "reply_question": InterruptMethodContract(
         method="opencode.question.reply",
         required_params=("request_id", "answers"),
         optional_params=("metadata",),
+        notification_response_status=204,
     ),
     "reject_question": InterruptMethodContract(
         method="opencode.question.reject",
         required_params=("request_id",),
         optional_params=("metadata",),
+        notification_response_status=204,
     ),
 }
 
@@ -137,6 +150,14 @@ INTERRUPT_ERROR_TYPES: tuple[str, ...] = (
     "UPSTREAM_HTTP_ERROR",
 )
 INTERRUPT_ERROR_DATA_FIELDS: tuple[str, ...] = ("type", "request_id", "upstream_status")
+INTERRUPT_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "field",
+    "fields",
+    "request_id",
+    "expected",
+    "actual",
+)
 
 
 def _build_method_contract_params(
@@ -207,6 +228,7 @@ def build_session_query_extension_params(
         "errors": {
             "business_codes": dict(SESSION_QUERY_ERROR_BUSINESS_CODES),
             "error_data_fields": list(SESSION_QUERY_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(SESSION_QUERY_INVALID_PARAMS_DATA_FIELDS),
         },
         "result_envelope": {
             "by_method": result_envelope_by_method,
@@ -225,7 +247,7 @@ def build_interrupt_callback_extension_params(
 ) -> dict[str, Any]:
     method_contracts: dict[str, Any] = {}
     for contract in INTERRUPT_CALLBACK_METHOD_CONTRACTS.values():
-        method_contracts[contract.method] = {
+        method_contract_doc: dict[str, Any] = {
             "params": _build_method_contract_params(
                 required=contract.required_params,
                 optional=contract.optional_params,
@@ -233,6 +255,11 @@ def build_interrupt_callback_extension_params(
             ),
             "result": {"fields": list(INTERRUPT_SUCCESS_RESULT_FIELDS)},
         }
+        if contract.notification_response_status is not None:
+            method_contract_doc["notification_response_status"] = (
+                contract.notification_response_status
+            )
+        method_contracts[contract.method] = method_contract_doc
 
     return {
         "methods": dict(INTERRUPT_CALLBACK_METHODS),
@@ -255,6 +282,7 @@ def build_interrupt_callback_extension_params(
             "business_codes": dict(INTERRUPT_ERROR_BUSINESS_CODES),
             "error_types": list(INTERRUPT_ERROR_TYPES),
             "error_data_fields": list(INTERRUPT_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(INTERRUPT_INVALID_PARAMS_DATA_FIELDS),
         },
         "shared_workspace_across_consumers": True,
         "tenant_isolation": "none",
