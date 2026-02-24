@@ -339,8 +339,34 @@ If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscr
   - `a2a_cancel_abort_attempt_total`
   - `a2a_cancel_abort_success_total`
   - `a2a_cancel_abort_timeout_total`
-  - `a2a_cancel_abort_error_total`
-  - `a2a_cancel_duration_ms` (with `abort_outcome` label)
+- `a2a_cancel_abort_error_total`
+- `a2a_cancel_duration_ms` (with `abort_outcome` label)
+
+## Extension Contract Change Checklist
+
+When changing extension methods/errors or extension metadata, validate the
+single-source contract and generated surfaces together:
+
+1. Update `src/opencode_a2a_serve/extension_contracts.py` first (SSOT).
+2. Run focused contract checks:
+
+```bash
+uv run pytest tests/test_extension_contract_consistency.py
+```
+
+3. Run baseline quality gates before commit:
+
+```bash
+uv run pre-commit run --all-files
+uv run mypy src/opencode_a2a_serve
+uv run pytest
+```
+
+The contract check fails when any of these drift:
+- SSOT (`extension_contracts.py`)
+- Agent Card extension params
+- OpenAPI `POST /` extension metadata (`x-opencode-extension-contracts`) or examples
+- Notification behavior (`204 No Content`) for extension methods
 
 ## Development Setup
 

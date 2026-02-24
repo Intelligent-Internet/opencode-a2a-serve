@@ -7,7 +7,7 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 from a2a.server.apps.jsonrpc.jsonrpc_app import DefaultCallContextBuilder
@@ -39,6 +39,7 @@ from a2a.types import (
 from a2a.utils.errors import ServerError
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from starlette.responses import StreamingResponse
 
 from .agent import OpencodeAgentExecutor
@@ -300,6 +301,118 @@ def _build_chat_examples(project: str | None) -> list[str]:
     return examples
 
 
+def _build_jsonrpc_extension_openapi_description() -> str:
+    session_methods = ", ".join(sorted(SESSION_QUERY_METHODS.values()))
+    interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
+    return (
+        "A2A JSON-RPC entrypoint. Supports core A2A methods "
+        "(message/send, message/stream, tasks/get, tasks/cancel, tasks/resubscribe) "
+        "and OpenCode extension methods.\n\n"
+        f"Session query/control extension methods: {session_methods}.\n"
+        f"Interrupt callback extension methods: {interrupt_methods}.\n\n"
+        "Notification semantics: extension requests without JSON-RPC id return HTTP 204."
+    )
+
+
+def _build_jsonrpc_extension_openapi_examples() -> dict[str, Any]:
+    return {
+        "session_list": {
+            "summary": "List OpenCode sessions",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": SESSION_QUERY_METHODS["list_sessions"],
+                "params": {"limit": 20},
+            },
+        },
+        "session_messages": {
+            "summary": "List session messages",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": SESSION_QUERY_METHODS["get_session_messages"],
+                "params": {"session_id": "s-1", "limit": 20},
+            },
+        },
+        "session_prompt_async": {
+            "summary": "Send async prompt to an existing session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 21,
+                "method": SESSION_QUERY_METHODS["prompt_async"],
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "parts": [{"type": "text", "text": "Continue and summarize next steps."}]
+                    },
+                },
+            },
+        },
+        "permission_reply": {
+            "summary": "Reply to permission interrupt request",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 31,
+                "method": INTERRUPT_CALLBACK_METHODS["reply_permission"],
+                "params": {"request_id": "req-1", "reply": "once"},
+            },
+        },
+        "question_reply": {
+            "summary": "Reply to question interrupt request",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 32,
+                "method": INTERRUPT_CALLBACK_METHODS["reply_question"],
+                "params": {"request_id": "req-2", "answers": [["answer"]]},
+            },
+        },
+        "question_reject": {
+            "summary": "Reject question interrupt request",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 33,
+                "method": INTERRUPT_CALLBACK_METHODS["reject_question"],
+                "params": {"request_id": "req-3"},
+            },
+        },
+    }
+
+
+def _patch_jsonrpc_openapi_contract(
+    app: FastAPI,
+    *,
+    deployment_context: dict[str, str | bool],
+) -> None:
+    session_query = build_session_query_extension_params(
+        deployment_context=deployment_context,
+        context_id_prefix=SESSION_CONTEXT_PREFIX,
+    )
+    interrupt_callback = build_interrupt_callback_extension_params(
+        deployment_context=deployment_context,
+    )
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        if route.path != "/" or "POST" not in route.methods:
+            continue
+        route.summary = "Handle A2A JSON-RPC Requests"
+        route.description = _build_jsonrpc_extension_openapi_description()
+        existing_openapi_extra = route.openapi_extra or {}
+        route.openapi_extra = {
+            **existing_openapi_extra,
+            "x-opencode-extension-contracts": {
+                "session_query": session_query,
+                "interrupt_callback": interrupt_callback,
+            },
+            "requestBody": {
+                "content": {
+                    "application/json": {"examples": _build_jsonrpc_extension_openapi_examples()}
+                }
+            },
+        }
+        break
+
+
 def build_agent_card(settings: Settings) -> AgentCard:
     public_url = settings.a2a_public_url.rstrip("/")
     base_url = public_url
@@ -523,6 +636,8 @@ def create_app(settings: Settings) -> FastAPI:
         },
     ).build(title=settings.a2a_title, version=settings.a2a_version, lifespan=lifespan)
     app.state.opencode_agent_executor = executor
+    deployment_context = _build_deployment_context(settings)
+    _patch_jsonrpc_openapi_contract(app, deployment_context=deployment_context)
 
     rest_adapter = RESTAdapter(
         agent_card=agent_card,
