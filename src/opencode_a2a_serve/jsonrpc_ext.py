@@ -463,10 +463,6 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
     ):
         super().__init__(*args, **kwargs)
         self._opencode_client = opencode_client
-        self._directory_resolver = directory_resolver
-        self._session_claim = session_claim
-        self._session_claim_finalize = session_claim_finalize
-        self._session_claim_release = session_claim_release
         self._method_list_sessions = methods["list_sessions"]
         self._method_get_session_messages = methods["get_session_messages"]
         self._method_prompt_async = methods["prompt_async"]
@@ -479,10 +475,10 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         missing_control_hooks = [
             name
             for name, hook in (
-                ("directory_resolver", self._directory_resolver),
-                ("session_claim", self._session_claim),
-                ("session_claim_finalize", self._session_claim_finalize),
-                ("session_claim_release", self._session_claim_release),
+                ("directory_resolver", directory_resolver),
+                ("session_claim", session_claim),
+                ("session_claim_finalize", session_claim_finalize),
+                ("session_claim_release", session_claim_release),
             )
             if hook is None
         ]
@@ -490,6 +486,10 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             raise ValueError(
                 "Control methods require guard hooks: " + ", ".join(sorted(missing_control_hooks))
             )
+        self._directory_resolver = cast(Callable[[str | None], str | None], directory_resolver)
+        self._session_claim = cast(Callable[..., Awaitable[bool]], session_claim)
+        self._session_claim_finalize = cast(Callable[..., Awaitable[None]], session_claim_finalize)
+        self._session_claim_release = cast(Callable[..., Awaitable[None]], session_claim_release)
 
     def _session_forbidden_response(
         self,
@@ -503,6 +503,25 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 code=ERR_SESSION_FORBIDDEN,
                 message="Session forbidden",
                 data={"type": "SESSION_FORBIDDEN", "session_id": session_id},
+            ),
+        )
+
+    def _invalid_pagination_mode_response(
+        self,
+        request_id: str | int | None,
+        unsupported_fields: tuple[str, ...],
+    ) -> Response:
+        return self._generate_error_response(
+            request_id,
+            A2AError(
+                root=InvalidParamsError(
+                    message="Only limit pagination is supported",
+                    data={
+                        "type": "INVALID_PAGINATION_MODE",
+                        "supported": ["limit"],
+                        "unsupported": list(unsupported_fields),
+                    },
+                )
             ),
         )
 
@@ -648,32 +667,12 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
 
         unsupported_pagination_fields = tuple(SESSION_QUERY_PAGINATION_UNSUPPORTED)
         if any(field in params for field in unsupported_pagination_fields):
-            return self._generate_error_response(
-                base_request.id,
-                A2AError(
-                    root=InvalidParamsError(
-                        message="Only limit pagination is supported",
-                        data={
-                            "type": "INVALID_PAGINATION_MODE",
-                            "supported": ["limit"],
-                            "unsupported": list(unsupported_pagination_fields),
-                        },
-                    )
-                ),
+            return self._invalid_pagination_mode_response(
+                base_request.id, unsupported_pagination_fields
             )
         if any(field in query for field in unsupported_pagination_fields):
-            return self._generate_error_response(
-                base_request.id,
-                A2AError(
-                    root=InvalidParamsError(
-                        message="Only limit pagination is supported",
-                        data={
-                            "type": "INVALID_PAGINATION_MODE",
-                            "supported": ["limit"],
-                            "unsupported": list(unsupported_pagination_fields),
-                        },
-                    )
-                ),
+            return self._invalid_pagination_mode_response(
+                base_request.id, unsupported_pagination_fields
             )
 
         if "limit" in params and "limit" in query and params["limit"] != query["limit"]:
@@ -911,19 +910,18 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         if metadata_error is not None:
             return metadata_error
 
-        if self._directory_resolver is not None:
-            try:
-                directory = self._directory_resolver(directory)
-            except ValueError as exc:
-                return self._generate_error_response(
-                    base_request.id,
-                    A2AError(
-                        root=InvalidParamsError(
-                            message=str(exc),
-                            data={"type": "INVALID_FIELD", "field": "metadata.opencode.directory"},
-                        )
-                    ),
-                )
+        try:
+            directory = self._directory_resolver(directory)
+        except ValueError as exc:
+            return self._generate_error_response(
+                base_request.id,
+                A2AError(
+                    root=InvalidParamsError(
+                        message=str(exc),
+                        data={"type": "INVALID_FIELD", "field": "metadata.opencode.directory"},
+                    )
+                ),
+            )
 
         if base_request.method == self._method_shell and not self._enable_session_shell:
             _log_shell_audit("disabled")
@@ -944,12 +942,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
 
         pending_claim = False
         claim_finalized = False
-        if (
-            identity
-            and self._session_claim is not None
-            and self._session_claim_finalize is not None
-            and self._session_claim_release is not None
-        ):
+        if identity:
             try:
                 pending_claim = await self._session_claim(
                     identity=identity,
@@ -998,7 +991,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                     )
                 result = {"item": item}
 
-            if pending_claim and identity and self._session_claim_finalize is not None:
+            if pending_claim and identity:
                 await self._session_claim_finalize(
                     identity=identity,
                     session_id=session_id,
@@ -1074,12 +1067,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 A2AError(root=InternalError(message=str(exc))),
             )
         finally:
-            if (
-                pending_claim
-                and not claim_finalized
-                and identity
-                and self._session_claim_release is not None
-            ):
+            if pending_claim and not claim_finalized and identity:
                 try:
                     await self._session_claim_release(
                         identity=identity,
@@ -1217,6 +1205,10 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             )
 
         try:
+            result: dict[str, Any] = {
+                "ok": True,
+                "request_id": request_id,
+            }
             if base_request.method == self._method_reply_permission:
                 reply = _normalize_permission_reply(params.get("reply"))
                 message = params.get("message")
@@ -1228,10 +1220,6 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                     message=message,
                     directory=directory,
                 )
-                result: dict[str, Any] = {
-                    "ok": True,
-                    "request_id": request_id,
-                }
             elif base_request.method == self._method_reply_question:
                 answers = _parse_question_answers(params.get("answers"))
                 await self._opencode_client.question_reply(
@@ -1239,16 +1227,8 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                     answers=answers,
                     directory=directory,
                 )
-                result = {
-                    "ok": True,
-                    "request_id": request_id,
-                }
             else:
                 await self._opencode_client.question_reject(request_id, directory=directory)
-                result = {
-                    "ok": True,
-                    "request_id": request_id,
-                }
             discard_request = getattr(self._opencode_client, "discard_interrupt_request", None)
             if callable(discard_request):
                 discard_request(request_id)
