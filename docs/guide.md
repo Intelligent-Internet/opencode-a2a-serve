@@ -56,6 +56,9 @@ and JSON-RPC extension details (README stays at overview level).
 - `A2A_SESSION_CACHE_MAXSIZE`: max cache entries, default `10000`
 - `A2A_ENABLE_SESSION_SHELL`: enable `opencode.sessions.shell` JSON-RPC control
   method, default `false`
+  - Security warning: high-risk capability. It can execute shell commands in
+    the OpenCode session workspace. Enable only in trusted/internal
+    environments with strict bearer-token management and audit controls.
 
 ## Service Behavior
 
@@ -268,6 +271,14 @@ Response:
 
 `opencode.sessions.shell` is disabled by default. Enable with
 `A2A_ENABLE_SESSION_SHELL=true`.
+
+Security warning:
+
+- This is a high-risk method because it can execute shell commands in the
+  workspace context.
+- Enable only for trusted operators/internal scenarios.
+- Keep bearer-token rotation, owner/directory guard checks, and audit log
+  monitoring enabled before turning it on.
 
 ```bash
 curl -sS http://127.0.0.1:8000/ \
