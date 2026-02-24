@@ -1,37 +1,31 @@
 # scripts
 
-Executable scripts live here. This file is the primary script-entry guide.
+Executable scripts live in this directory. This file is the entry index for script usage and script-specific documentation.
 
-## Start Here
+## Product Contract vs Script Docs
 
-- [Usage guide](../docs/guide.md)
-- [Deployment guide](../docs/deployment.md)
+- Product/API behavior (transport, protocol contracts, extension semantics):
+  - [`../docs/guide.md`](../docs/guide.md)
+- Script operational details (how to run and operate each script):
+  - kept in this `scripts/` directory as `about_*.md`
 
-## Which Script to Use
+## Script Docs Index
 
-- [`scripts/init_system.sh`](./init_system.sh):
-  bootstrap host prerequisites for systemd deployment.
-- [`scripts/deploy.sh`](./deploy.sh):
-  create/update one long-running systemd instance.
-- [`scripts/start_services.sh`](./start_services.sh):
-  local foreground runner without systemd.
-- [`scripts/uninstall.sh`](./uninstall.sh):
-  remove one deployed instance (preview-first, explicit confirm required).
-- [`scripts/doctor.sh`](./doctor.sh):
-  one-command local environment consistency check (sync + pip check + lint + pytest).
-- [`scripts/dependency_health.sh`](./dependency_health.sh):
-  dependency health check (outdated list + vulnerability audit).
+- [`about_init_system.md`](./about_init_system.md): host bootstrap and shared runtime preparation (`init_system.sh`)
+- [`about_deploy.md`](./about_deploy.md): multi-instance systemd deployment (`deploy.sh`)
+- [`about_start_services.md`](./about_start_services.md): local foreground runner (`start_services.sh`)
+- [`about_uninstall.md`](./about_uninstall.md): preview-first instance removal (`uninstall.sh`)
 
-## Quick Links
+## Script Quick Links
 
-- [`scripts/init_system.sh`](./init_system.sh)
-- [`scripts/deploy.sh`](./deploy.sh)
-- [`scripts/start_services.sh`](./start_services.sh)
-- [`scripts/uninstall.sh`](./uninstall.sh)
-- [`scripts/doctor.sh`](./doctor.sh)
-- [`scripts/dependency_health.sh`](./dependency_health.sh)
+- [`init_system.sh`](./init_system.sh)
+- [`deploy.sh`](./deploy.sh)
+- [`start_services.sh`](./start_services.sh)
+- [`uninstall.sh`](./uninstall.sh)
+- [`doctor.sh`](./doctor.sh)
+- [`dependency_health.sh`](./dependency_health.sh)
 
 ## Notes
 
-- `scripts/deploy/` contains helper scripts orchestrated by `scripts/deploy.sh`.
-- Keep long-form documentation changes in `docs/` to avoid divergence.
+- `deploy/` contains helper scripts orchestrated by `deploy.sh`.
+- Keep script behavior details in `scripts/about_*.md` to avoid drift.

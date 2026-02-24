@@ -6,7 +6,7 @@
 # Requires: sudo access to write systemd units and create users/directories.
 #
 # Source of truth for all variable semantics/defaults:
-# - docs/deployment.md (section: "deploy.sh Inputs and Generated Variables")
+# - scripts/about_deploy.md (sections: "Secrets and Inputs", "Input Precedence")
 # Non-secret options that support both env and CLI key=value use precedence:
 # - CLI > env > default
 set -euo pipefail
