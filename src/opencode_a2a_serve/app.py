@@ -43,6 +43,12 @@ from starlette.responses import StreamingResponse
 
 from .agent import OpencodeAgentExecutor
 from .config import Settings
+from .extension_contracts import (
+    INTERRUPT_CALLBACK_METHODS,
+    SESSION_QUERY_METHODS,
+    build_interrupt_callback_extension_params,
+    build_session_query_extension_params,
+)
 from .jsonrpc_ext import (
     SESSION_CONTEXT_PREFIX,
     OpencodeSessionQueryJSONRPCApplication,
@@ -58,17 +64,6 @@ _REQUEST_BODY_BYTES: ContextVar[bytes | None] = ContextVar(
 
 if TYPE_CHECKING:
     from a2a.server.context import ServerCallContext
-
-SESSION_QUERY_METHODS = {
-    "list_sessions": "opencode.sessions.list",
-    "get_session_messages": "opencode.sessions.messages.list",
-    "prompt_async": "opencode.sessions.prompt_async",
-}
-INTERRUPT_CALLBACK_METHODS = {
-    "reply_permission": "opencode.permission.reply",
-    "reply_question": "opencode.question.reply",
-    "reject_question": "opencode.question.reject",
-}
 
 SESSION_BINDING_EXTENSION_URI = "urn:opencode-a2a:opencode-session-binding/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:opencode-a2a:opencode-session-query/v1"
@@ -335,6 +330,14 @@ def build_agent_card(settings: Settings) -> AgentCard:
         )
         security.append({"oauth2": list(settings.a2a_oauth_scopes.keys())})
 
+    session_query_extension_params = build_session_query_extension_params(
+        deployment_context=deployment_context,
+        context_id_prefix=SESSION_CONTEXT_PREFIX,
+    )
+    interrupt_callback_extension_params = build_interrupt_callback_extension_params(
+        deployment_context=deployment_context,
+    )
+
     return AgentCard(
         name=settings.a2a_title,
         description=_build_agent_card_description(settings, deployment_context),
@@ -387,96 +390,7 @@ def build_agent_card(settings: Settings) -> AgentCard:
                         "Support OpenCode session list/history queries and async prompt injection "
                         "via custom JSON-RPC methods on the agent's A2A JSON-RPC interface."
                     ),
-                    params={
-                        "methods": SESSION_QUERY_METHODS,
-                        "shared_workspace_across_consumers": True,
-                        "tenant_isolation": "none",
-                        "deployment_context": deployment_context,
-                        "pagination": {
-                            # Explicit, discoverable contract for generic clients.
-                            "mode": "limit",
-                            "behavior": "passthrough",
-                            "params": ["limit"],
-                            "applies_to": [
-                                SESSION_QUERY_METHODS["list_sessions"],
-                                SESSION_QUERY_METHODS["get_session_messages"],
-                            ],
-                        },
-                        "method_contracts": {
-                            SESSION_QUERY_METHODS["list_sessions"]: {
-                                "params": {
-                                    "optional": ["limit", "query.limit"],
-                                    "unsupported": ["cursor", "page", "size"],
-                                },
-                                "result": {"fields": ["items"], "items_type": "Task[]"},
-                            },
-                            SESSION_QUERY_METHODS["get_session_messages"]: {
-                                "params": {
-                                    "required": ["session_id"],
-                                    "optional": ["limit", "query.limit"],
-                                    "unsupported": ["cursor", "page", "size"],
-                                },
-                                "result": {"fields": ["items"], "items_type": "Message[]"},
-                            },
-                            SESSION_QUERY_METHODS["prompt_async"]: {
-                                "params": {
-                                    "required": ["session_id", "request.parts"],
-                                    "optional": [
-                                        "request.messageID",
-                                        "request.model",
-                                        "request.agent",
-                                        "request.noReply",
-                                        "request.tools",
-                                        "request.format",
-                                        "request.system",
-                                        "request.variant",
-                                        "metadata.opencode.directory",
-                                    ],
-                                },
-                                "result": {"fields": ["ok", "session_id"]},
-                                "notification_response_status": 204,
-                            },
-                        },
-                        "errors": {
-                            # JSON-RPC standard errors still apply (e.g. -32602 invalid params).
-                            # Business-level, server-defined errors (JSON-RPC reserved range).
-                            "business_codes": {
-                                "SESSION_NOT_FOUND": -32001,
-                                "UPSTREAM_UNREACHABLE": -32002,
-                                "UPSTREAM_HTTP_ERROR": -32003,
-                                "UPSTREAM_PAYLOAD_ERROR": -32005,
-                            },
-                            # Stable fields returned in error.data for business errors.
-                            "error_data_fields": [
-                                "type",
-                                "session_id",
-                                "upstream_status",
-                                "detail",
-                            ],
-                        },
-                        # Result envelope varies by method:
-                        # query methods return items[], prompt_async returns ack fields.
-                        "result_envelope": {
-                            "by_method": {
-                                SESSION_QUERY_METHODS["list_sessions"]: {
-                                    "fields": ["items"],
-                                    "items_field": "items",
-                                },
-                                SESSION_QUERY_METHODS["get_session_messages"]: {
-                                    "fields": ["items"],
-                                    "items_field": "items",
-                                },
-                                SESSION_QUERY_METHODS["prompt_async"]: {
-                                    "fields": ["ok", "session_id"],
-                                },
-                            }
-                        },
-                        "context_semantics": {
-                            "a2a_context_id_field": "contextId",
-                            "a2a_context_id_prefix": SESSION_CONTEXT_PREFIX,
-                            "upstream_session_id_field": "metadata.opencode.session_id",
-                        },
-                    },
+                    params=session_query_extension_params,
                 ),
                 AgentExtension(
                     uri=INTERRUPT_CALLBACK_EXTENSION_URI,
@@ -485,41 +399,7 @@ def build_agent_card(settings: Settings) -> AgentCard:
                         "Handle interactive interrupt callbacks generated by OpenCode "
                         "(permission/question asked events) through JSON-RPC methods."
                     ),
-                    params={
-                        "methods": INTERRUPT_CALLBACK_METHODS,
-                        "supported_interrupt_events": [
-                            "permission.asked",
-                            "question.asked",
-                        ],
-                        "permission_reply_values": ["once", "always", "reject"],
-                        "question_reply_contract": {
-                            "answers": "array of answer arrays (same order as asked questions)"
-                        },
-                        "metadata_namespace": "opencode",
-                        "supported_metadata": ["opencode.directory"],
-                        "context_fields": {
-                            "directory": "metadata.opencode.directory",
-                        },
-                        "success_result_fields": ["ok", "request_id"],
-                        "errors": {
-                            "business_codes": {
-                                "INTERRUPT_REQUEST_NOT_FOUND": -32004,
-                                "UPSTREAM_UNREACHABLE": -32002,
-                                "UPSTREAM_HTTP_ERROR": -32003,
-                            },
-                            "error_types": [
-                                "INTERRUPT_REQUEST_NOT_FOUND",
-                                "INTERRUPT_REQUEST_EXPIRED",
-                                "INTERRUPT_TYPE_MISMATCH",
-                                "UPSTREAM_UNREACHABLE",
-                                "UPSTREAM_HTTP_ERROR",
-                            ],
-                            "error_data_fields": ["type", "request_id", "upstream_status"],
-                        },
-                        "shared_workspace_across_consumers": True,
-                        "tenant_isolation": "none",
-                        "deployment_context": deployment_context,
-                    },
+                    params=interrupt_callback_extension_params,
                 ),
             ],
         ),

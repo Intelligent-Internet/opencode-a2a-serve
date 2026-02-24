@@ -23,6 +23,10 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .extension_contracts import (
+    PROMPT_ASYNC_REQUEST_ALLOWED_FIELDS,
+    SESSION_QUERY_PAGINATION_UNSUPPORTED,
+)
 from .opencode_client import OpencodeClient, UpstreamContractError
 from .text_parts import extract_text_from_parts
 
@@ -197,17 +201,7 @@ def _validate_prompt_async_part(value: Any, *, field: str) -> None:
 
 
 def _validate_prompt_async_request_payload(value: dict[str, Any]) -> None:
-    allowed_fields = {
-        "messageID",
-        "model",
-        "agent",
-        "noReply",
-        "tools",
-        "format",
-        "system",
-        "variant",
-        "parts",
-    }
+    allowed_fields = set(PROMPT_ASYNC_REQUEST_ALLOWED_FIELDS)
     unknown_fields = sorted(set(value) - allowed_fields)
     if unknown_fields:
         joined = ", ".join(f"request.{field}" for field in unknown_fields)
@@ -440,7 +434,8 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         if isinstance(raw_query, dict):
             query.update(raw_query)
 
-        if "cursor" in params or "page" in params or "size" in params:
+        unsupported_pagination_fields = tuple(SESSION_QUERY_PAGINATION_UNSUPPORTED)
+        if any(field in params for field in unsupported_pagination_fields):
             return self._generate_error_response(
                 base_request.id,
                 A2AError(
@@ -449,12 +444,12 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                         data={
                             "type": "INVALID_PAGINATION_MODE",
                             "supported": ["limit"],
-                            "unsupported": ["cursor", "page", "size"],
+                            "unsupported": list(unsupported_pagination_fields),
                         },
                     )
                 ),
             )
-        if "cursor" in query or "page" in query or "size" in query:
+        if any(field in query for field in unsupported_pagination_fields):
             return self._generate_error_response(
                 base_request.id,
                 A2AError(
@@ -463,7 +458,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                         data={
                             "type": "INVALID_PAGINATION_MODE",
                             "supported": ["limit"],
-                            "unsupported": ["cursor", "page", "size"],
+                            "unsupported": list(unsupported_pagination_fields),
                         },
                     )
                 ),
