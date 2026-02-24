@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from opencode_a2a_serve.config import Settings
+from opencode_a2a_serve.opencode_client import UpstreamContractError
 from tests.helpers import DummySessionQueryOpencodeClient as DummyOpencodeClient
 from tests.helpers import make_settings
 
@@ -553,6 +554,46 @@ async def test_session_prompt_async_extension_rejects_invalid_params(monkeypatch
         assert payload["error"]["code"] == -32602
         assert payload["error"]["data"]["field"] == "request.parts"
 
+        bad_field = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 309,
+                "method": "opencode.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "parts": [{"type": "text", "text": "hello"}],
+                        "foo": "bar",
+                    },
+                },
+            },
+        )
+        payload = bad_field.json()
+        assert payload["error"]["code"] == -32602
+        assert payload["error"]["data"]["field"] == "request"
+
+        bad_model = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 310,
+                "method": "opencode.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "parts": [{"type": "text", "text": "hello"}],
+                        "model": {"providerID": "openai"},
+                    },
+                },
+            },
+        )
+        payload = bad_model.json()
+        assert payload["error"]["code"] == -32602
+        assert payload["error"]["data"]["field"] == "request.model.modelID"
+
 
 @pytest.mark.asyncio
 async def test_session_prompt_async_extension_maps_404_to_session_not_found(monkeypatch):
@@ -598,7 +639,7 @@ async def test_session_prompt_async_extension_maps_non_204_to_payload_error(monk
     class InvalidPromptAsyncStatusClient(DummyOpencodeClient):
         async def session_prompt_async(self, session_id: str, request: dict, *, directory=None):
             del session_id, request, directory
-            raise RuntimeError(
+            raise UpstreamContractError(
                 "OpenCode /session/{sessionID}/prompt_async must return 204; got 200"
             )
 
@@ -626,6 +667,80 @@ async def test_session_prompt_async_extension_maps_non_204_to_payload_error(monk
         payload = resp.json()
         assert payload["error"]["code"] == -32005
         assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_session_prompt_async_extension_maps_500_to_upstream_http_error(monkeypatch):
+    import opencode_a2a_serve.app as app_module
+
+    class UpstreamErrorPromptAsyncClient(DummyOpencodeClient):
+        async def session_prompt_async(self, session_id: str, request: dict, *, directory=None):
+            del session_id, request, directory
+            req = httpx.Request("POST", "http://opencode/session/s-1/prompt_async")
+            resp = httpx.Response(500, request=req)
+            raise httpx.HTTPStatusError("Internal Server Error", request=req, response=resp)
+
+    monkeypatch.setattr(app_module, "OpencodeClient", UpstreamErrorPromptAsyncClient)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 307,
+                "method": "opencode.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"parts": [{"type": "text", "text": "x"}]},
+                },
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32003
+        assert payload["error"]["data"]["type"] == "UPSTREAM_HTTP_ERROR"
+        assert payload["error"]["data"]["upstream_status"] == 500
+
+
+@pytest.mark.asyncio
+async def test_session_prompt_async_extension_maps_network_error_to_unreachable(monkeypatch):
+    import opencode_a2a_serve.app as app_module
+
+    class NetworkErrorPromptAsyncClient(DummyOpencodeClient):
+        async def session_prompt_async(self, session_id: str, request: dict, *, directory=None):
+            del session_id, request, directory
+            req = httpx.Request("POST", "http://opencode/session/s-1/prompt_async")
+            raise httpx.ConnectError("network down", request=req)
+
+    monkeypatch.setattr(app_module, "OpencodeClient", NetworkErrorPromptAsyncClient)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 308,
+                "method": "opencode.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"parts": [{"type": "text", "text": "x"}]},
+                },
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32002
+        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
 
 
 @pytest.mark.asyncio

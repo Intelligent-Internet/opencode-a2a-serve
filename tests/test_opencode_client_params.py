@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from opencode_a2a_serve.opencode_client import OpencodeClient
+from opencode_a2a_serve.opencode_client import OpencodeClient, UpstreamContractError
 from tests.helpers import make_settings
 
 
@@ -105,7 +105,7 @@ async def test_session_prompt_async_rejects_non_204_response(monkeypatch):
 
     monkeypatch.setattr(client._client, "post", fake_post)
 
-    with pytest.raises(RuntimeError, match="must return 204"):
+    with pytest.raises(UpstreamContractError, match="must return 204"):
         await client.session_prompt_async("ses-1", {"parts": [{"type": "text", "text": "x"}]})
 
     await client.close()

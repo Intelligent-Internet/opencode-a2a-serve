@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
-from .opencode_client import OpencodeClient
+from .opencode_client import OpencodeClient, UpstreamContractError
 from .text_parts import extract_text_from_parts
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,12 @@ ERR_UPSTREAM_HTTP_ERROR = -32003
 ERR_INTERRUPT_NOT_FOUND = -32004
 ERR_UPSTREAM_PAYLOAD_ERROR = -32005
 SESSION_CONTEXT_PREFIX = "ctx:opencode-session:"
+
+
+class _PromptAsyncValidationError(ValueError):
+    def __init__(self, *, field: str, message: str) -> None:
+        super().__init__(message)
+        self.field = field
 
 
 def _normalize_permission_reply(value: Any) -> str:
@@ -83,6 +89,191 @@ def _parse_positive_int(value: Any, *, field: str) -> int | None:
     if parsed < 1:
         raise ValueError(f"{field} must be >= 1")
     return parsed
+
+
+def _raise_prompt_async_validation_error(*, field: str, message: str) -> None:
+    raise _PromptAsyncValidationError(field=field, message=message)
+
+
+def _validate_model_ref(value: Any, *, field: str) -> None:
+    if not isinstance(value, dict):
+        _raise_prompt_async_validation_error(field=field, message=f"{field} must be an object")
+    provider = value.get("providerID")
+    model = value.get("modelID")
+    if not isinstance(provider, str) or not provider.strip():
+        _raise_prompt_async_validation_error(
+            field=f"{field}.providerID",
+            message=f"{field}.providerID must be a non-empty string",
+        )
+    if not isinstance(model, str) or not model.strip():
+        _raise_prompt_async_validation_error(
+            field=f"{field}.modelID",
+            message=f"{field}.modelID must be a non-empty string",
+        )
+
+
+def _validate_prompt_async_format(value: Any, *, field: str) -> None:
+    if not isinstance(value, dict):
+        _raise_prompt_async_validation_error(field=field, message=f"{field} must be an object")
+    fmt_type = value.get("type")
+    if fmt_type == "text":
+        return
+    if fmt_type == "json_schema":
+        schema = value.get("schema")
+        if not isinstance(schema, dict):
+            _raise_prompt_async_validation_error(
+                field=f"{field}.schema",
+                message=f"{field}.schema must be an object for type=json_schema",
+            )
+        retry_count = value.get("retryCount")
+        if retry_count is not None and (not isinstance(retry_count, int) or retry_count < 0):
+            _raise_prompt_async_validation_error(
+                field=f"{field}.retryCount",
+                message=f"{field}.retryCount must be an integer >= 0",
+            )
+        return
+    _raise_prompt_async_validation_error(
+        field=f"{field}.type",
+        message=f"{field}.type must be 'text' or 'json_schema'",
+    )
+
+
+def _validate_prompt_async_part(value: Any, *, field: str) -> None:
+    if not isinstance(value, dict):
+        _raise_prompt_async_validation_error(field=field, message=f"{field} must be an object")
+    part_type = value.get("type")
+    if not isinstance(part_type, str):
+        _raise_prompt_async_validation_error(
+            field=f"{field}.type",
+            message=f"{field}.type must be a string",
+        )
+    if part_type == "text":
+        if not isinstance(value.get("text"), str):
+            _raise_prompt_async_validation_error(
+                field=f"{field}.text",
+                message=f"{field}.text must be a string",
+            )
+        return
+    if part_type == "file":
+        if not isinstance(value.get("mime"), str):
+            _raise_prompt_async_validation_error(
+                field=f"{field}.mime",
+                message=f"{field}.mime must be a string",
+            )
+        if not isinstance(value.get("url"), str):
+            _raise_prompt_async_validation_error(
+                field=f"{field}.url",
+                message=f"{field}.url must be a string",
+            )
+        return
+    if part_type == "agent":
+        if not isinstance(value.get("name"), str):
+            _raise_prompt_async_validation_error(
+                field=f"{field}.name",
+                message=f"{field}.name must be a string",
+            )
+        return
+    if part_type == "subtask":
+        for key in ("prompt", "description", "agent"):
+            if not isinstance(value.get(key), str):
+                _raise_prompt_async_validation_error(
+                    field=f"{field}.{key}",
+                    message=f"{field}.{key} must be a string",
+                )
+        model = value.get("model")
+        if model is not None:
+            _validate_model_ref(model, field=f"{field}.model")
+        command = value.get("command")
+        if command is not None and not isinstance(command, str):
+            _raise_prompt_async_validation_error(
+                field=f"{field}.command",
+                message=f"{field}.command must be a string",
+            )
+        return
+    _raise_prompt_async_validation_error(
+        field=f"{field}.type",
+        message=f"{field}.type must be one of: text, file, agent, subtask",
+    )
+
+
+def _validate_prompt_async_request_payload(value: dict[str, Any]) -> None:
+    allowed_fields = {
+        "messageID",
+        "model",
+        "agent",
+        "noReply",
+        "tools",
+        "format",
+        "system",
+        "variant",
+        "parts",
+    }
+    unknown_fields = sorted(set(value) - allowed_fields)
+    if unknown_fields:
+        joined = ", ".join(f"request.{field}" for field in unknown_fields)
+        _raise_prompt_async_validation_error(
+            field="request",
+            message=f"Unsupported fields: {joined}",
+        )
+
+    message_id = value.get("messageID")
+    if message_id is not None:
+        if not isinstance(message_id, str) or not message_id.startswith("msg"):
+            _raise_prompt_async_validation_error(
+                field="request.messageID",
+                message="request.messageID must be a string starting with 'msg'",
+            )
+
+    model = value.get("model")
+    if model is not None:
+        _validate_model_ref(model, field="request.model")
+
+    for key in ("agent", "system", "variant"):
+        data = value.get(key)
+        if data is not None and not isinstance(data, str):
+            _raise_prompt_async_validation_error(
+                field=f"request.{key}",
+                message=f"request.{key} must be a string",
+            )
+
+    no_reply = value.get("noReply")
+    if no_reply is not None and not isinstance(no_reply, bool):
+        _raise_prompt_async_validation_error(
+            field="request.noReply",
+            message="request.noReply must be a boolean",
+        )
+
+    tools = value.get("tools")
+    if tools is not None:
+        if not isinstance(tools, dict):
+            _raise_prompt_async_validation_error(
+                field="request.tools",
+                message="request.tools must be an object",
+            )
+        for tool_key, tool_value in tools.items():
+            if not isinstance(tool_key, str):
+                _raise_prompt_async_validation_error(
+                    field="request.tools",
+                    message="request.tools keys must be strings",
+                )
+            if not isinstance(tool_value, bool):
+                _raise_prompt_async_validation_error(
+                    field=f"request.tools.{tool_key}",
+                    message=f"request.tools.{tool_key} must be a boolean",
+                )
+
+    fmt = value.get("format")
+    if fmt is not None:
+        _validate_prompt_async_format(fmt, field="request.format")
+
+    parts = value.get("parts")
+    if not isinstance(parts, list):
+        _raise_prompt_async_validation_error(
+            field="request.parts",
+            message="request.parts must be an array",
+        )
+    for index, part in enumerate(parts):
+        _validate_prompt_async_part(part, field=f"request.parts[{index}]")
 
 
 def _extract_session_title(session: dict[str, Any]) -> str:
@@ -462,14 +653,15 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 ),
             )
 
-        parts = raw_request.get("parts")
-        if not isinstance(parts, list):
+        try:
+            _validate_prompt_async_request_payload(raw_request)
+        except _PromptAsyncValidationError as exc:
             return self._generate_error_response(
                 base_request.id,
                 A2AError(
                     root=InvalidParamsError(
-                        message="params.request.parts must be an array",
-                        data={"type": "INVALID_FIELD", "field": "request.parts"},
+                        message=str(exc),
+                        data={"type": "INVALID_FIELD", "field": exc.field},
                     )
                 ),
             )
@@ -565,7 +757,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                     data={"type": "UPSTREAM_UNREACHABLE", "session_id": session_id},
                 ),
             )
-        except RuntimeError as exc:
+        except UpstreamContractError as exc:
             return self._generate_error_response(
                 base_request.id,
                 JSONRPCError(

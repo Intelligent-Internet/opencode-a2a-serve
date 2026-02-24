@@ -16,6 +16,10 @@ from .text_parts import extract_text_from_parts
 _UNSET = object()
 
 
+class UpstreamContractError(RuntimeError):
+    """Raised when upstream returns a shape/status that violates documented contract."""
+
+
 @dataclass(frozen=True)
 class OpencodeMessage:
     text: str
@@ -264,7 +268,7 @@ class OpencodeClient:
         )
         response.raise_for_status()
         if response.status_code != 204:
-            raise RuntimeError(
+            raise UpstreamContractError(
                 "OpenCode /session/{sessionID}/prompt_async must return 204; "
                 f"got {response.status_code}"
             )
