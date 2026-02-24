@@ -885,8 +885,13 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 _validate_prompt_async_request_payload(raw_request)
             elif base_request.method == self._method_command:
                 _validate_command_request_payload(raw_request)
-            else:
+            elif base_request.method == self._method_shell:
                 _validate_shell_request_payload(raw_request)
+            else:
+                raise _PromptAsyncValidationError(
+                    field="method",
+                    message=f"Unsupported method: {base_request.method}",
+                )
         except _PromptAsyncValidationError as exc:
             return self._generate_error_response(
                 base_request.id,
