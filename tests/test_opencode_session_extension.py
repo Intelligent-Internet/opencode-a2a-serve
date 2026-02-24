@@ -911,6 +911,55 @@ async def test_session_prompt_async_extension_maps_network_error_to_unreachable(
 
 
 @pytest.mark.asyncio
+async def test_session_prompt_async_release_failure_does_not_override_response(monkeypatch, caplog):
+    import opencode_a2a_serve.app as app_module
+    from opencode_a2a_serve.agent import OpencodeAgentExecutor
+
+    class NetworkErrorPromptAsyncClient(DummyOpencodeClient):
+        async def session_prompt_async(self, session_id: str, request: dict, *, directory=None):
+            del session_id, request, directory
+            req = httpx.Request("POST", "http://opencode/session/s-1/prompt_async")
+            raise httpx.ConnectError("network down", request=req)
+
+    async def _release_raises(
+        self: OpencodeAgentExecutor, *, identity: str, session_id: str
+    ) -> None:
+        del identity, session_id
+        raise RuntimeError("release failed")
+
+    caplog.set_level(logging.ERROR)
+    monkeypatch.setattr(app_module, "OpencodeClient", NetworkErrorPromptAsyncClient)
+    monkeypatch.setattr(OpencodeAgentExecutor, "release_session_for_control", _release_raises)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 3081,
+                "method": "opencode.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"parts": [{"type": "text", "text": "x"}]},
+                },
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32002
+        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
+
+    assert any(
+        "Failed to release pending session claim" in record.message for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
 async def test_session_prompt_async_extension_notification_returns_204(monkeypatch):
     import opencode_a2a_serve.app as app_module
 

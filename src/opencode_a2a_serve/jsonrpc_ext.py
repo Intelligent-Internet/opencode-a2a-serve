@@ -375,6 +375,20 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._method_reply_permission = methods["reply_permission"]
         self._method_reply_question = methods["reply_question"]
         self._method_reject_question = methods["reject_question"]
+        missing_control_hooks = [
+            name
+            for name, hook in (
+                ("directory_resolver", self._directory_resolver),
+                ("session_claim", self._session_claim),
+                ("session_claim_finalize", self._session_claim_finalize),
+                ("session_claim_release", self._session_claim_release),
+            )
+            if hook is None
+        ]
+        if missing_control_hooks:
+            raise ValueError(
+                "Control methods require guard hooks: " + ", ".join(sorted(missing_control_hooks))
+            )
 
     def _session_forbidden_response(
         self,
@@ -873,10 +887,16 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 and identity
                 and self._session_claim_release is not None
             ):
-                await self._session_claim_release(
-                    identity=identity,
-                    session_id=session_id,
-                )
+                try:
+                    await self._session_claim_release(
+                        identity=identity,
+                        session_id=session_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to release pending session claim for session_id=%s",
+                        session_id,
+                    )
 
         if base_request.id is None:
             return Response(status_code=204)

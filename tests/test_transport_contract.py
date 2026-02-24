@@ -242,3 +242,46 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
     assert captured["cancel_abort_timeout_seconds"] == 0.25
     assert captured["session_cache_ttl_seconds"] == 11
     assert captured["session_cache_maxsize"] == 22
+
+
+def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
+    import opencode_a2a_serve.app as app_module
+
+    class _BrokenExecutor:
+        def __init__(
+            self,
+            _client,
+            *,
+            streaming_enabled: bool,
+            cancel_abort_timeout_seconds: float,
+            session_cache_ttl_seconds: int,
+            session_cache_maxsize: int,
+        ) -> None:
+            del (
+                streaming_enabled,
+                cancel_abort_timeout_seconds,
+                session_cache_ttl_seconds,
+                session_cache_maxsize,
+            )
+            self.claim_session_for_control = None
+
+        async def execute(self, _context, _event_queue) -> None:  # noqa: ANN001
+            raise NotImplementedError
+
+        async def cancel(self, _context, _event_queue) -> None:  # noqa: ANN001
+            raise NotImplementedError
+
+        def resolve_directory_for_control(self, requested: str | None) -> str | None:
+            return requested
+
+        async def finalize_session_for_control(self, *, identity: str, session_id: str) -> None:
+            del identity, session_id
+
+        async def release_session_for_control(self, *, identity: str, session_id: str) -> None:
+            del identity, session_id
+
+    monkeypatch.setattr(app_module, "OpencodeClient", DummyChatOpencodeClient)
+    monkeypatch.setattr(app_module, "OpencodeAgentExecutor", _BrokenExecutor)
+
+    with pytest.raises(ValueError, match="Control methods require guard hooks"):
+        app_module.create_app(make_settings(a2a_bearer_token="test-token"))
