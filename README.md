@@ -145,3 +145,10 @@ CI (`.github/workflows/ci.yml`) runs the same baseline checks on PRs and `main` 
 uv run pre-commit run --all-files
 uv run pytest
 ```
+
+For local environment consistency and dependency hygiene:
+
+```bash
+bash ./scripts/doctor.sh
+bash ./scripts/dependency_health.sh
+```
