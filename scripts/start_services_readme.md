@@ -4,6 +4,14 @@ This document describes `scripts/start_services.sh`, a local foreground runner w
 
 ## Usage
 
+Required env:
+
+```bash
+export A2A_BEARER_TOKEN='<a2a-token>'
+```
+
+Then run:
+
 ```bash
 ./scripts/start_services.sh
 ```
@@ -17,6 +25,7 @@ It also stops previous matching local processes before startup.
 
 ## Common Environment Variables
 
+- `A2A_BEARER_TOKEN` (required)
 - `A2A_HOST` (default `127.0.0.1`)
 - `A2A_PORT` (default `8000`)
 - `A2A_PUBLIC_URL` (default `http://<A2A_HOST>:<A2A_PORT>`)

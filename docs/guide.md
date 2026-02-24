@@ -20,6 +20,12 @@ This section only lists runtime variables that affect product/protocol behavior.
 For deploy-time inputs and systemd-oriented parameters, see
 [`../scripts/deploy_readme.md`](../scripts/deploy_readme.md).
 
+Source boundaries:
+
+- Runtime behavior defaults: `src/opencode_a2a_serve/config.py`.
+- Deploy workflow defaults and generated env values:
+  `scripts/deploy.sh` and `scripts/deploy/setup_instance.sh`.
+
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset.
 - `OPENCODE_BASE_URL`: OpenCode base URL, default `http://127.0.0.1:4096`.
 - `OPENCODE_DIRECTORY`: default workspace root/boundary used for directory policy.
@@ -28,7 +34,14 @@ For deploy-time inputs and systemd-oriented parameters, see
   request shaping options.
 - `OPENCODE_TIMEOUT`: non-stream request timeout in seconds, default `120`.
 - `OPENCODE_TIMEOUT_STREAM`: streaming request timeout in seconds (optional).
+- `A2A_PUBLIC_URL`: public URL base used in Agent Card, default
+  `http://127.0.0.1:8000`.
+- `A2A_PROJECT`: optional project label used in Agent Card examples/extensions.
+- `A2A_TITLE` / `A2A_DESCRIPTION` / `A2A_VERSION` / `A2A_PROTOCOL_VERSION`:
+  Agent Card metadata fields.
+- `A2A_HOST` / `A2A_PORT`: service bind host/port.
 - `A2A_STREAMING`: enable SSE endpoint (`/v1/message:stream`), default `true`.
+- `A2A_LOG_LEVEL`: runtime log level (`DEBUG/INFO/WARNING/ERROR`).
 - `A2A_ALLOW_DIRECTORY_OVERRIDE`: whether `metadata.opencode.directory` may
   override default directory, default `true`.
 - `A2A_ENABLE_SESSION_SHELL`: enable `opencode.sessions.shell` JSON-RPC method,
@@ -37,6 +50,8 @@ For deploy-time inputs and systemd-oriented parameters, see
     workspace context. Enable only in trusted/internal environments.
 - `A2A_LOG_PAYLOADS`: enable payload body logging, default `false`.
 - `A2A_LOG_BODY_LIMIT`: payload log body limit, default `0` (no truncation).
+- `A2A_DOCUMENTATION_URL`: optional URL surfaced in Agent Card
+  `documentationUrl`.
 - `A2A_SESSION_CACHE_TTL_SECONDS`: cache TTL for
   `(identity, contextId) -> session_id`, default `3600`.
 - `A2A_SESSION_CACHE_MAXSIZE`: cache max entries, default `10000`.

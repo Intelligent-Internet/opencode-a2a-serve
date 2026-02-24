@@ -110,6 +110,8 @@ Sensitive values are blocked from CLI keys by design.
 | `OPENCODE_TIMEOUT_STREAM` | `opencode_timeout_stream` | Optional | None | OpenCode stream timeout. |
 | `GIT_IDENTITY_NAME` | `git_identity_name` | Optional | `OpenCode-<project>` | Git name for instance user. |
 | `GIT_IDENTITY_EMAIL` | `git_identity_email` | Optional | `<project>@example.com` | Git email for instance user. |
+| `REPO_URL` | `repo_url` | Optional | None | Optional repository URL to auto-clone into `workspace/` on first deploy. |
+| `REPO_BRANCH` | `repo_branch` | Optional | None | Optional branch used with `REPO_URL` during first clone. |
 | `A2A_HOST` | `a2a_host` | Optional | `127.0.0.1` | A2A bind host. |
 | `A2A_PORT` | `a2a_port` | Optional | `8000` | A2A bind port. |
 | `A2A_PUBLIC_URL` | `a2a_public_url` | Optional | `http://<A2A_HOST>:<A2A_PORT>` | Public URL in Agent Card. |
