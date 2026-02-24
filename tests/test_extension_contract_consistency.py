@@ -34,12 +34,12 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
         deployment_context=deployment_context,
     )
 
-    assert (
-        session_query.params == expected_session_query
-    ), "Session query extension drifted from extension_contracts SSOT."
-    assert (
-        interrupt_callback.params == expected_interrupt_callback
-    ), "Interrupt callback extension drifted from extension_contracts SSOT."
+    assert session_query.params == expected_session_query, (
+        "Session query extension drifted from extension_contracts SSOT."
+    )
+    assert interrupt_callback.params == expected_interrupt_callback, (
+        "Interrupt callback extension drifted from extension_contracts SSOT."
+    )
 
 
 def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
@@ -48,9 +48,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     post = openapi["paths"]["/"]["post"]
 
     contract = post.get("x-opencode-extension-contracts")
-    assert isinstance(
-        contract, dict
-    ), "POST / OpenAPI is missing x-opencode-extension-contracts metadata."
+    assert isinstance(contract, dict), (
+        "POST / OpenAPI is missing x-opencode-extension-contracts metadata."
+    )
 
     session_query = contract["session_query"]
     interrupt_callback = contract["interrupt_callback"]
@@ -63,12 +63,19 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         deployment_context=deployment_context,
     )
 
-    assert (
-        session_query == expected_session_query
-    ), "OpenAPI session query contract drifted from extension_contracts SSOT."
-    assert (
-        interrupt_callback == expected_interrupt_callback
-    ), "OpenAPI interrupt callback contract drifted from extension_contracts SSOT."
+    assert session_query == expected_session_query, (
+        "OpenAPI session query contract drifted from extension_contracts SSOT."
+    )
+    assert interrupt_callback == expected_interrupt_callback, (
+        "OpenAPI interrupt callback contract drifted from extension_contracts SSOT."
+    )
+
+    json_request_schema = (
+        post.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})
+    )
+    assert json_request_schema.get("$ref") == "#/components/schemas/A2ARequest", (
+        "POST / OpenAPI requestBody schema regressed."
+    )
 
     example_values = (
         post.get("requestBody", {})
@@ -78,15 +85,14 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         .values()
     )
     example_methods = {
-        value.get("value", {}).get("method")
-        for value in example_values
-        if isinstance(value, dict)
+        value.get("value", {}).get("method") for value in example_values if isinstance(value, dict)
     }
-    expected_methods = set(SESSION_QUERY_METHODS.values()) | set(INTERRUPT_CALLBACK_METHODS.values())
+    expected_methods = set(SESSION_QUERY_METHODS.values()) | set(
+        INTERRUPT_CALLBACK_METHODS.values()
+    )
     missing_methods = sorted(method for method in expected_methods if method not in example_methods)
     assert not missing_methods, (
-        "OpenAPI JSON-RPC examples are missing extension methods: "
-        + ", ".join(missing_methods)
+        "OpenAPI JSON-RPC examples are missing extension methods: " + ", ".join(missing_methods)
     )
 
 

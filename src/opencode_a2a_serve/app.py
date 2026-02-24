@@ -39,7 +39,6 @@ from a2a.types import (
 from a2a.utils.errors import ServerError
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
 from starlette.responses import StreamingResponse
 
 from .agent import OpencodeAgentExecutor
@@ -390,27 +389,38 @@ def _patch_jsonrpc_openapi_contract(
     interrupt_callback = build_interrupt_callback_extension_params(
         deployment_context=deployment_context,
     )
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        if route.path != "/" or "POST" not in route.methods:
-            continue
-        route.summary = "Handle A2A JSON-RPC Requests"
-        route.description = _build_jsonrpc_extension_openapi_description()
-        existing_openapi_extra = route.openapi_extra or {}
-        route.openapi_extra = {
-            **existing_openapi_extra,
-            "x-opencode-extension-contracts": {
-                "session_query": session_query,
-                "interrupt_callback": interrupt_callback,
-            },
-            "requestBody": {
-                "content": {
-                    "application/json": {"examples": _build_jsonrpc_extension_openapi_examples()}
-                }
-            },
-        }
-        break
+    original_openapi = app.openapi
+
+    def custom_openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+
+        schema = original_openapi()
+        paths = schema.get("paths")
+        if isinstance(paths, dict):
+            root_path = paths.get("/")
+            if isinstance(root_path, dict):
+                post = root_path.get("post")
+                if isinstance(post, dict):
+                    post["summary"] = "Handle A2A JSON-RPC Requests"
+                    post["description"] = _build_jsonrpc_extension_openapi_description()
+                    post["x-opencode-extension-contracts"] = {
+                        "session_query": session_query,
+                        "interrupt_callback": interrupt_callback,
+                    }
+
+                    request_body = post.setdefault("requestBody", {})
+                    if isinstance(request_body, dict):
+                        content = request_body.setdefault("content", {})
+                        if isinstance(content, dict):
+                            app_json = content.setdefault("application/json", {})
+                            if isinstance(app_json, dict):
+                                app_json["examples"] = _build_jsonrpc_extension_openapi_examples()
+
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi
 
 
 def build_agent_card(settings: Settings) -> AgentCard:
