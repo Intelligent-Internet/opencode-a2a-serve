@@ -147,8 +147,11 @@ CI (`.github/workflows/ci.yml`) runs the same baseline checks on PRs and `main` 
 
 ```bash
 uv run pre-commit run --all-files
+uv run mypy src/opencode_a2a_serve
 uv run pytest
 ```
+
+`uv run pytest` includes coverage reporting and enforces `--cov-fail-under=80`.
 
 For local environment consistency and dependency hygiene:
 

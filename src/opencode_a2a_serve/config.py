@@ -79,4 +79,4 @@ class Settings(BaseSettings):
     @classmethod
     def from_env(cls) -> Settings:
         # Pydantic BaseSettings automatically loads from environment
-        return cls()
+        return cls()  # type: ignore[call-arg]

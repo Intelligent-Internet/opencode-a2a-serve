@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
@@ -14,6 +14,7 @@ from a2a.types import (
     JSONRPCError,
     JSONRPCRequest,
     Message,
+    Part,
     Role,
     Task,
     TaskState,
@@ -270,7 +271,8 @@ def _validate_prompt_async_request_payload(value: dict[str, Any]) -> None:
             field="request.parts",
             message="request.parts must be an array",
         )
-    for index, part in enumerate(parts):
+    parts_list = cast(list[Any], parts)
+    for index, part in enumerate(parts_list):
         _validate_prompt_async_part(part, field=f"request.parts[{index}]")
 
 
@@ -331,7 +333,7 @@ def _as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
     msg = Message(
         message_id=message_id,
         role=role,
-        parts=[TextPart(text=text)],
+        parts=[Part(root=TextPart(text=text))],
         context_id=context_id,
         metadata={"opencode": {"session_id": session_id}},
     )

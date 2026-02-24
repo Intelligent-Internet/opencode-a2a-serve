@@ -7,7 +7,7 @@ import os
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import Enum
@@ -20,6 +20,7 @@ from a2a.server.events.event_queue import EventQueue
 from a2a.types import (
     Artifact,
     Message,
+    Part,
     Role,
     Task,
     TaskArtifactUpdateEvent,
@@ -268,7 +269,7 @@ class _TTLCache:
         *,
         ttl_seconds: int,
         maxsize: int,
-        now: callable[[], float] = time.monotonic,
+        now: Callable[[], float] = time.monotonic,
         refresh_on_get: bool = False,
     ) -> None:
         self._ttl_seconds = int(ttl_seconds)
@@ -350,7 +351,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         self._running_stop_events: dict[tuple[str, str], asyncio.Event] = {}
         self._running_identities: dict[tuple[str, str], str] = {}
         self._running_session_ids: dict[tuple[str, str], str] = {}
-        self._running_directories: dict[tuple[str, str], str] = {}
+        self._running_directories: dict[tuple[str, str], str | None] = {}
 
     @staticmethod
     def _emit_metric(
@@ -557,14 +558,19 @@ class OpencodeAgentExecutor(AgentExecutor):
                     final=False,
                 )
             )
-            send_kwargs: dict[str, str | float | None] = {"directory": directory}
             if streaming_request:
-                send_kwargs["timeout_override"] = self._client.stream_timeout
-            response = await self._client.send_message(
-                session_id,
-                user_text,
-                **send_kwargs,
-            )
+                response = await self._client.send_message(
+                    session_id,
+                    user_text,
+                    directory=directory,
+                    timeout_override=self._client.stream_timeout,
+                )
+            else:
+                response = await self._client.send_message(
+                    session_id,
+                    user_text,
+                    directory=directory,
+                )
 
             if pending_preferred_claim:
                 await self._finalize_preferred_session_binding(
@@ -638,7 +644,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                 artifact = Artifact(
                     artifact_id=str(uuid.uuid4()),
                     name="response",
-                    parts=[TextPart(text=response_text)],
+                    parts=[Part(root=TextPart(text=response_text))],
                 )
                 history = _build_history(context)
                 task = Task(
@@ -969,7 +975,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         error_message = Message(
             message_id=str(uuid.uuid4()),
             role=Role.agent,
-            parts=[TextPart(text=message)],
+            parts=[Part(root=TextPart(text=message))],
             task_id=task_id,
             context_id=context_id,
         )
@@ -1327,14 +1333,14 @@ class OpencodeAgentExecutor(AgentExecutor):
                                 continue
                             if state.role in {"user", "system"}:
                                 continue
-                            chunks = _delta_chunks(
+                            delta_chunks = _delta_chunks(
                                 state=state,
                                 delta_text=delta,
                                 message_id=message_id,
                                 source="delta_event",
                             )
-                            if chunks:
-                                await _emit_chunks(chunks)
+                            if delta_chunks:
+                                await _emit_chunks(delta_chunks)
                             continue
 
                         role = _extract_stream_role(part, props)
@@ -1418,7 +1424,7 @@ def _build_assistant_message(
     return Message(
         message_id=message_id or str(uuid.uuid4()),
         role=Role.agent,
-        parts=[TextPart(text=text)],
+        parts=[Part(root=TextPart(text=text))],
         task_id=task_id,
         context_id=context_id,
     )
@@ -1439,7 +1445,7 @@ async def _enqueue_artifact_update(
     normalized_last_chunk = True if last_chunk is True else None
     artifact = Artifact(
         artifact_id=artifact_id,
-        parts=[TextPart(text=text)],
+        parts=[Part(root=TextPart(text=text))],
         metadata=dict(artifact_metadata) if artifact_metadata else None,
     )
     await event_queue.enqueue_event(

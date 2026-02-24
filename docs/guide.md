@@ -346,4 +346,8 @@ If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscr
 
 ```bash
 uv run pre-commit install
+uv run mypy src/opencode_a2a_serve
+uv run pytest
 ```
+
+`uv run pytest` includes coverage reporting and enforces `--cov-fail-under=80`.

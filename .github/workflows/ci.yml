@@ -37,6 +37,9 @@ jobs:
       - name: Run pre-commit
         run: bash ./scripts/lint.sh
 
+      - name: Run mypy
+        run: uv run mypy src/opencode_a2a_serve
+
       - name: Run pytest
         run: uv run pytest
 

@@ -16,10 +16,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "mypy>=1.19.1",
     "pip-audit>=2.9",
     "pre-commit>=3.7",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=7.0.0",
     "ruff>=0.5",
 ]
 
@@ -38,3 +40,15 @@ quote-style = "double"
 
 [tool.uv]
 package = true
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/opencode_a2a_serve"]
+ignore_missing_imports = true
+show_error_codes = true
+pretty = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+addopts = "--cov=src/opencode_a2a_serve --cov-report=term-missing --cov-fail-under=80"
