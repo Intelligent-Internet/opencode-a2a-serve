@@ -3,7 +3,12 @@ import asyncio
 import pytest
 from a2a.types import Task, TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 
-from opencode_a2a_serve.agent import OpencodeAgentExecutor
+from opencode_a2a_serve.agent import (
+    BlockType,
+    OpencodeAgentExecutor,
+    _extract_tool_part_payload,
+    _StreamOutputState,
+)
 from opencode_a2a_serve.opencode_client import OpencodeMessage
 from tests.helpers import DummyEventQueue, make_request_context, make_settings
 
@@ -220,6 +225,11 @@ def _part_text(event: TaskArtifactUpdateEvent) -> str:
     return getattr(part, "text", None) or getattr(part.root, "text", "")
 
 
+def _part_data(event: TaskArtifactUpdateEvent) -> dict:
+    part = event.artifact.parts[0]
+    return getattr(part, "data", None) or getattr(part.root, "data", {})
+
+
 def _artifact_stream_meta(event: TaskArtifactUpdateEvent) -> dict:
     return event.artifact.metadata["shared"]["stream"]
 
@@ -230,6 +240,59 @@ def _status_shared_meta(event: TaskStatusUpdateEvent) -> dict:
 
 def _interrupt_meta(event: TaskStatusUpdateEvent) -> dict:
     return _status_shared_meta(event)["interrupt"]
+
+
+def test_stream_output_state_deduplicates_non_accumulating_tool_chunks() -> None:
+    state = _StreamOutputState(
+        user_text="",
+        stable_message_id="msg-stable",
+        event_id_namespace="task:ctx:stream",
+    )
+
+    assert state.register_chunk(
+        block_type=BlockType.TOOL_CALL,
+        content_key='{"status":"pending"}',
+        append=False,
+        accumulate_content=False,
+    ) == (True, False)
+    assert state.register_chunk(
+        block_type=BlockType.TOOL_CALL,
+        content_key='{"status":"pending"}',
+        append=True,
+        accumulate_content=False,
+    ) == (False, False)
+    assert state.register_chunk(
+        block_type=BlockType.TOOL_CALL,
+        content_key='{"status":"running"}',
+        append=True,
+        accumulate_content=False,
+    ) == (True, True)
+
+
+def test_extract_tool_part_payload_normalizes_structured_state() -> None:
+    assert _extract_tool_part_payload(
+        {
+            "callID": " call-1 ",
+            "tool": " bash ",
+            "state": {
+                "status": " running ",
+                "title": "Execute command",
+                "subtitle": "phase 1",
+                "input": {"cmd": "pwd"},
+                "output": {"stdout": "/workspace"},
+                "error": None,
+            },
+        }
+    ) == {
+        "call_id": "call-1",
+        "tool": "bash",
+        "status": "running",
+        "title": "Execute command",
+        "subtitle": "phase 1",
+        "input": {"cmd": "pwd"},
+        "output": {"stdout": "/workspace"},
+    }
+    assert _extract_tool_part_payload({"callID": " ", "tool": None, "state": {}}) is None
 
 
 @pytest.mark.asyncio
@@ -724,10 +787,11 @@ async def test_streaming_emits_structured_tool_part_updates() -> None:
     updates = _artifact_updates(queue)
     tool_updates = [ev for ev in updates if _artifact_stream_meta(ev)["block_type"] == "tool_call"]
     assert len(tool_updates) == 3
-    merged = "".join(_part_text(ev) for ev in tool_updates)
-    assert '"status":"pending"' in merged
-    assert '"status":"running"' in merged
-    assert '"status":"completed"' in merged
+    payloads = [_part_data(ev) for ev in tool_updates]
+    assert [payload["status"] for payload in payloads] == ["pending", "running", "completed"]
+    assert all(payload["call_id"] == "call-1" for payload in payloads)
+    assert all(payload["tool"] == "bash" for payload in payloads)
+    assert all(getattr(ev.artifact.parts[0].root, "kind", None) == "data" for ev in tool_updates)
 
 
 @pytest.mark.asyncio

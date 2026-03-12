@@ -64,7 +64,8 @@ Key variables to understand protocol behavior:
   `message.part.delta` and `message.part.updated` are merged per `part_id`;
   out-of-order deltas are buffered and replayed when the corresponding
   `part.updated` arrives. Structured `tool` parts are emitted as `tool_call`
-  blocks with normalized state payload. Final status event metadata may include
+  blocks backed by `DataPart(data={...})`, while `text` and `reasoning`
+  continue to use `TextPart`. Final status event metadata may include
   normalized token usage at `metadata.shared.usage` with fields like
   `input_tokens`, `output_tokens`, `total_tokens`, and optional `cost`.
   Interrupt events (`permission.asked` / `question.asked`) are mapped to
