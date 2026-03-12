@@ -50,8 +50,10 @@ Key variables to understand protocol behavior:
   `artifact.metadata.opencode.block_type` with values
   `text` / `reasoning` / `tool_call`. All chunks share one stream
   artifact ID and preserve original timeline via
-  `artifact.metadata.opencode.event_id`. Events without
-  `message_id` are dropped. A final snapshot is only emitted when stream
+  `artifact.metadata.opencode.event_id`. `artifact.metadata.opencode.message_id`
+  remains best-effort metadata: when upstream omits `message_id`, service
+  falls back to a stable request-scoped message identity. A final snapshot is
+  only emitted when stream
   chunks did not already produce the same final text.
   Stream routing is schema-first: the service classifies chunks primarily by
   OpenCode `part.type` (plus `part_id` state) rather than inline text markers.
