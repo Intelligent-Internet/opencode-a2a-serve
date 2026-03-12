@@ -82,10 +82,6 @@ class _StreamOutputState:
     emitted_stream_chunk: bool = False
     sequence: int = 0
 
-    def matches_expected_message(self, message_id: str | None) -> bool:
-        del message_id
-        return True
-
     def should_drop_initial_user_echo(
         self,
         text: str,
@@ -1049,8 +1045,6 @@ class OpencodeAgentExecutor(AgentExecutor):
 
         async def _emit_chunks(chunks: list[_NormalizedStreamChunk]) -> None:
             for chunk in chunks:
-                if not stream_state.matches_expected_message(chunk.message_id):
-                    continue
                 resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
                 if stream_state.should_drop_initial_user_echo(
                     chunk.text,
