@@ -245,7 +245,7 @@ is_opencode_running() {
 is_a2a_running() {
   local pid
   pid="$(a2a_pid 2>/dev/null || true)"
-  pid_matches_tokens "$pid" "opencode-a2a-serve"
+  pid_matches_tokens "$pid" "opencode-a2a-server"
 }
 
 cleanup_stale_pidfiles() {
@@ -302,53 +302,35 @@ resolve_opencode_bin() {
   die "opencode binary not found in PATH: $OPENCODE_BIN"
 }
 
+run_python_http_check_with() {
+  local url="$1"
+  shift
+  "$@" - "$url" <<'PY'
+import json
+import sys
+import urllib.request
+
+url = sys.argv[1]
+with urllib.request.urlopen(url, timeout=1.5) as response:
+    if response.status != 200:
+        raise SystemExit(1)
+    body = response.read().decode("utf-8")
+    if body:
+        json.loads(body)
+PY
+}
+
 run_python_http_check() {
   local url="$1"
   if command -v python3 >/dev/null 2>&1; then
-    python3 - "$url" <<'PY'
-import json
-import sys
-import urllib.request
-
-url = sys.argv[1]
-with urllib.request.urlopen(url, timeout=1.5) as response:
-    if response.status != 200:
-        raise SystemExit(1)
-    body = response.read().decode("utf-8")
-    if body:
-        json.loads(body)
-PY
-    return 0
+    run_python_http_check_with "$url" python3
+    return
   fi
   if command -v python >/dev/null 2>&1; then
-    python - "$url" <<'PY'
-import json
-import sys
-import urllib.request
-
-url = sys.argv[1]
-with urllib.request.urlopen(url, timeout=1.5) as response:
-    if response.status != 200:
-        raise SystemExit(1)
-    body = response.read().decode("utf-8")
-    if body:
-        json.loads(body)
-PY
-    return 0
+    run_python_http_check_with "$url" python
+    return
   fi
-  uv run python - "$url" <<'PY'
-import json
-import sys
-import urllib.request
-
-url = sys.argv[1]
-with urllib.request.urlopen(url, timeout=1.5) as response:
-    if response.status != 200:
-        raise SystemExit(1)
-    body = response.read().decode("utf-8")
-    if body:
-        json.loads(body)
-PY
+  run_python_http_check_with "$url" uv run python
 }
 
 wait_for_http_ready() {
@@ -477,7 +459,7 @@ start_a2a() {
     if [[ -n "$OPENCODE_TIMEOUT_STREAM" ]]; then
       export OPENCODE_TIMEOUT_STREAM
     fi
-    exec uv run opencode-a2a-serve
+    exec uv run opencode-a2a-server
   ) >>"$A2A_LOG_FILE" 2>&1 &
   echo "$!" >"$A2A_PID_FILE"
 }
@@ -505,7 +487,7 @@ stop_instance() {
   fi
 
   if [[ -n "$a2a_current_pid" ]]; then
-    terminate_pid "$a2a_current_pid" "opencode-a2a-serve"
+    terminate_pid "$a2a_current_pid" "opencode-a2a-server"
   fi
   if [[ -n "$opencode_current_pid" ]]; then
     terminate_pid "$opencode_current_pid" "opencode serve"

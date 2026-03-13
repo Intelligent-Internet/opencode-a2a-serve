@@ -18,7 +18,7 @@ and JSON-RPC extension details (README stays at overview level).
 
 This section keeps only the protocol-relevant variables.
 For the full runtime variable catalog and defaults, see
-[`../src/opencode_a2a_serve/config.py`](../src/opencode_a2a_serve/config.py).
+[`../src/opencode_a2a_server/config.py`](../src/opencode_a2a_server/config.py).
 For deploy-time inputs and systemd-oriented parameters, see
 [`../scripts/deploy_readme.md`](../scripts/deploy_readme.md).
 
@@ -32,6 +32,8 @@ Key variables to understand protocol behavior:
   `opencode.sessions.shell`.
 - `A2A_LOG_PAYLOADS` / `A2A_LOG_BODY_LIMIT`: payload logging behavior and
   truncation.
+- `A2A_MAX_REQUEST_BODY_BYTES`: runtime request-body limit. Oversized requests
+  return HTTP `413`.
 - `A2A_SESSION_CACHE_TTL_SECONDS` / `A2A_SESSION_CACHE_MAXSIZE`: session cache
   behavior for `(identity, contextId) -> session_id`.
 - `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: best-effort timeout for upstream
@@ -84,7 +86,9 @@ Key variables to understand protocol behavior:
   `Task.metadata.shared.usage` with the same field schema.
 - Requests require `Authorization: Bearer <token>`; otherwise `401` is
   returned. Agent Card endpoints are public.
-- Within one `opencode-a2a-serve` instance, all consumers share the same
+- Requests above `A2A_MAX_REQUEST_BODY_BYTES` are rejected with HTTP `413`
+  before transport handling.
+- Within one `opencode-a2a-server` instance, all consumers share the same
   underlying OpenCode workspace/environment. This deployment model is not
   tenant-isolated by default.
 - Error handling:
@@ -104,9 +108,29 @@ Key variables to understand protocol behavior:
 - Agent Card declares OAuth2 only when both
   `A2A_OAUTH_AUTHORIZATION_URL` and `A2A_OAUTH_TOKEN_URL` are set.
 
-## Session Continuation Contract
+## Extension Capability Overview
 
-To continue a historical OpenCode session, include this metadata key in each invoke request:
+For a quick capability showcase, see the README overview:
+
+- [`README.md#extension-capability-overview`](../README.md#extension-capability-overview)
+
+This guide focuses on how to consume the declared capabilities.
+
+Important distinction:
+
+- Agent Card extension declarations answer "what capability is available?"
+- Runtime payload metadata answers "what happened on this request/stream?"
+- Clients should not treat runtime metadata alone as a substitute for
+  capability discovery when an extension URI is already declared.
+
+## Shared Session Binding Contract
+
+Agent Card capability:
+
+- URI: `urn:a2a:session-binding/v1`
+
+To continue a historical OpenCode session, include this metadata key in each
+invoke request:
 
 - `metadata.shared.session.id`: target upstream session ID
 
@@ -115,6 +139,20 @@ Server behavior:
 - If provided, the request is sent to that exact OpenCode session.
 - If omitted, a new session is created and cached by
   `(identity, contextId) -> session_id`.
+- `contextId` remains the A2A conversation context key for task continuity; it
+  is not a replacement for the upstream session identifier.
+- OpenCode-private context such as `metadata.opencode.directory` may be
+  supplied alongside `metadata.shared.session.id`, but it does not change the
+  shared session-binding key.
+
+Consumer guidance:
+
+- Use this extension declaration to decide whether the server explicitly
+  supports shared session rebinding.
+- On the request path, write the upstream session identity to
+  `metadata.shared.session.id`.
+- On the response/query path, treat `metadata.shared.session` as runtime
+  metadata and not as a separate capability declaration.
 
 Minimal example:
 
@@ -139,6 +177,10 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 ```
 
 ## Shared Model Selection Contract
+
+Agent Card capability:
+
+- URI: `urn:a2a:model-selection/v1`
 
 To override the default upstream model for one main-chat request, include:
 
@@ -177,6 +219,56 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
     }
   }'
 ```
+
+## Shared Stream Hints Contract
+
+Agent Card capability:
+
+- URI: `urn:a2a:stream-hints/v1`
+
+This extension declares that streaming and final task payloads use canonical
+shared metadata for block, usage, interrupt, and session hints.
+
+Declaration versus runtime:
+
+- The URI `urn:a2a:stream-hints/v1` is the capability declaration.
+- The actual request/stream payloads carry the runtime hints under shared
+  metadata fields.
+
+Shared runtime fields:
+
+- `metadata.shared.stream`
+  - block-level stream metadata such as `block_type`, `source`, `message_id`,
+    `event_id`, `sequence`, and `role`
+- `metadata.shared.usage`
+  - normalized usage data such as `input_tokens`, `output_tokens`,
+    `total_tokens`, and optional `cost`
+- `metadata.shared.interrupt`
+  - normalized interrupt request or resolution metadata including `request_id`,
+    `type`, `phase`, and callback-safe details
+- `metadata.shared.session`
+  - session-level metadata such as the bound upstream session ID and session
+    title when available
+
+Consumer guidance:
+
+- Use the extension declaration to know the server emits canonical shared
+  stream hints.
+- Use runtime metadata to render block timelines, token usage, and interactive
+  interruptions.
+- Do not infer capability support only from seeing one runtime field on one
+  response; rely on Agent Card discovery first when possible.
+- Treat `metadata.shared.interrupt` as observation data. Callback operations
+  are a separate shared capability declared by
+  `urn:a2a:interactive-interrupt/v1`.
+
+Minimal stream semantics summary:
+
+- `text`, `reasoning`, and `tool_call` are emitted as canonical block types
+- `message_id` and `event_id` preserve stable timeline identity where possible
+- `sequence` is the per-request canonical stream sequence
+- final task/status metadata may repeat normalized usage and interrupt context
+  even after the streaming phase ends
 
 ## OpenCode Session Query & Provider Discovery (A2A Extensions)
 
@@ -503,7 +595,7 @@ If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscr
 - Upstream interruption is best-effort: if upstream returns 404, network errors, or other HTTP errors, A2A cancellation still completes with `TaskState.canceled`.
 - Idempotency contract: repeated `tasks/cancel` on an already `canceled` task returns the current terminal task state without error.
 - Terminal subscribe contract: calling `subscribe` on a terminal task replays one terminal `Task` snapshot and then closes the stream.
-- The cancel path emits metric log records (`logger=opencode_a2a_serve.agent`):
+- The cancel path emits metric log records (`logger=opencode_a2a_server.agent`):
   - `a2a_cancel_requests_total`
   - `a2a_cancel_abort_attempt_total`
   - `a2a_cancel_abort_success_total`
@@ -516,7 +608,7 @@ If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscr
 When changing extension methods/errors or extension metadata, validate the
 single-source contract and generated surfaces together:
 
-1. Update `src/opencode_a2a_serve/extension_contracts.py` first (SSOT).
+1. Update `src/opencode_a2a_server/extension_contracts.py` first (SSOT).
 2. Run focused contract checks:
 
 ```bash
@@ -527,7 +619,7 @@ uv run pytest tests/test_extension_contract_consistency.py
 
 ```bash
 uv run pre-commit run --all-files
-uv run mypy src/opencode_a2a_serve
+uv run mypy src/opencode_a2a_server
 uv run pytest
 ```
 
@@ -541,7 +633,7 @@ The contract check fails when any of these drift:
 
 ```bash
 uv run pre-commit install
-uv run mypy src/opencode_a2a_serve
+uv run mypy src/opencode_a2a_server
 uv run pytest
 ```
 

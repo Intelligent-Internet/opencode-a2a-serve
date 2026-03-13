@@ -63,7 +63,9 @@ if [[ "$DATA_ROOT" =~ [[:space:]] ]]; then
 fi
 
 UNIT_OPENCODE="opencode@${PROJECT_NAME}.service"
-UNIT_A2A="opencode-a2a@${PROJECT_NAME}.service"
+UNIT_A2A="opencode-a2a-server@${PROJECT_NAME}.service"
+OPENCODE_OVERRIDE_DIR="/etc/systemd/system/opencode@${PROJECT_NAME}.service.d"
+A2A_OVERRIDE_DIR="/etc/systemd/system/opencode-a2a-server@${PROJECT_NAME}.service.d"
 
 APPLY="false"
 if [[ "$CONFIRM_INPUT" == "UNINSTALL" ]]; then
@@ -268,6 +270,8 @@ fi
 if command -v systemctl >/dev/null 2>&1; then
   run_ignore sudo systemctl disable --now "${UNIT_A2A}" "${UNIT_OPENCODE}"
   run_reset_failed sudo systemctl reset-failed "${UNIT_A2A}" "${UNIT_OPENCODE}"
+  run_ignore sudo rm -rf -- "${A2A_OVERRIDE_DIR}" "${OPENCODE_OVERRIDE_DIR}"
+  run_ignore sudo systemctl daemon-reload
 else
   echo "systemctl not found; skipping systemd unit disable/stop." >&2
 fi

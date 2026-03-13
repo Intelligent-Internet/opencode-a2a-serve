@@ -6,6 +6,10 @@ Executable scripts live in this directory. This file is the entry index for scri
 
 - Product/API behavior (transport, protocol contracts, extension semantics):
   - [`../docs/guide.md`](../docs/guide.md)
+- Operator-facing deploy SOP:
+  - [`../docs/agent_deploy_sop.md`](../docs/agent_deploy_sop.md)
+- Security boundary and disclosure guidance:
+  - [`../SECURITY.md`](../SECURITY.md)
 - Script operational details (how to run and operate each script):
   - kept in this `scripts/` directory as `*_readme.md`
 

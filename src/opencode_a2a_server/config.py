@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     a2a_log_level: str = Field(default="WARNING", alias="A2A_LOG_LEVEL")
     a2a_log_payloads: bool = Field(default=False, alias="A2A_LOG_PAYLOADS")
     a2a_log_body_limit: int = Field(default=0, alias="A2A_LOG_BODY_LIMIT")
+    a2a_max_request_body_bytes: int = Field(
+        default=1_048_576,
+        ge=0,
+        alias="A2A_MAX_REQUEST_BODY_BYTES",
+    )
     a2a_documentation_url: str | None = Field(default=None, alias="A2A_DOCUMENTATION_URL")
     a2a_allow_directory_override: bool = Field(default=True, alias="A2A_ALLOW_DIRECTORY_OVERRIDE")
     a2a_enable_session_shell: bool = Field(default=False, alias="A2A_ENABLE_SESSION_SHELL")

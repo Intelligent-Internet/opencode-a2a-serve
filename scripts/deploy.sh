@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Docs: scripts/deploy_readme.md
 # Deploy one isolated OpenCode + A2A systemd instance.
+# Secret env vars are only required when persisting them during deploy or when
+# setup actions need them.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,8 +11,6 @@ source "${SCRIPT_DIR}/deploy/provider_secret_env_keys.sh"
 PROVIDER_SECRET_ENV_LIST="$(join_provider_secret_env_keys " | ")"
 
 PROJECT_NAME=""
-GH_TOKEN="${GH_TOKEN:-}"
-A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN:-}"
 A2A_PORT_INPUT=""
 A2A_HOST_INPUT=""
 A2A_PUBLIC_URL_INPUT=""
@@ -19,8 +19,14 @@ A2A_LOG_LEVEL_INPUT=""
 A2A_OTEL_INSTRUMENTATION_ENABLED_INPUT=""
 A2A_LOG_PAYLOADS_INPUT=""
 A2A_LOG_BODY_LIMIT_INPUT=""
+A2A_MAX_REQUEST_BODY_BYTES_INPUT=""
 A2A_CANCEL_ABORT_TIMEOUT_SECONDS_INPUT=""
 A2A_ENABLE_SESSION_SHELL_INPUT=""
+A2A_STRICT_ISOLATION_INPUT=""
+A2A_SYSTEMD_TASKS_MAX_INPUT=""
+A2A_SYSTEMD_LIMIT_NOFILE_INPUT=""
+A2A_SYSTEMD_MEMORY_MAX_INPUT=""
+A2A_SYSTEMD_CPU_QUOTA_INPUT=""
 DATA_ROOT_INPUT=""
 OPENCODE_PROVIDER_ID_INPUT=""
 OPENCODE_MODEL_ID_INPUT=""
@@ -32,6 +38,7 @@ OPENCODE_TIMEOUT_INPUT=""
 OPENCODE_TIMEOUT_STREAM_INPUT=""
 GIT_IDENTITY_NAME_INPUT=""
 GIT_IDENTITY_EMAIL_INPUT=""
+ENABLE_SECRET_PERSISTENCE_INPUT=""
 UPDATE_A2A_INPUT=""
 FORCE_RESTART_INPUT=""
 
@@ -83,11 +90,29 @@ for arg in "$@"; do
     a2a_log_body_limit)
       A2A_LOG_BODY_LIMIT_INPUT="$value"
       ;;
+    a2a_max_request_body_bytes)
+      A2A_MAX_REQUEST_BODY_BYTES_INPUT="$value"
+      ;;
     a2a_cancel_abort_timeout_seconds)
       A2A_CANCEL_ABORT_TIMEOUT_SECONDS_INPUT="$value"
       ;;
     a2a_enable_session_shell)
       A2A_ENABLE_SESSION_SHELL_INPUT="$value"
+      ;;
+    a2a_strict_isolation)
+      A2A_STRICT_ISOLATION_INPUT="$value"
+      ;;
+    a2a_systemd_tasks_max)
+      A2A_SYSTEMD_TASKS_MAX_INPUT="$value"
+      ;;
+    a2a_systemd_limit_nofile)
+      A2A_SYSTEMD_LIMIT_NOFILE_INPUT="$value"
+      ;;
+    a2a_systemd_memory_max)
+      A2A_SYSTEMD_MEMORY_MAX_INPUT="$value"
+      ;;
+    a2a_systemd_cpu_quota)
+      A2A_SYSTEMD_CPU_QUOTA_INPUT="$value"
       ;;
     opencode_provider_id)
       OPENCODE_PROVIDER_ID_INPUT="$value"
@@ -119,6 +144,9 @@ for arg in "$@"; do
     git_identity_email)
       GIT_IDENTITY_EMAIL_INPUT="$value"
       ;;
+    enable_secret_persistence)
+      ENABLE_SECRET_PERSISTENCE_INPUT="$value"
+      ;;
     update_a2a)
       UPDATE_A2A_INPUT="$value"
       ;;
@@ -136,17 +164,19 @@ for arg in "$@"; do
   esac
 done
 
-if [[ -z "$PROJECT_NAME" || -z "$GH_TOKEN" || -z "$A2A_BEARER_TOKEN" ]]; then
+if [[ -z "$PROJECT_NAME" ]]; then
   cat >&2 <<USAGE
 Usage:
-  GH_TOKEN=<token> A2A_BEARER_TOKEN=<token> [<PROVIDER_SECRET_ENV>=<key>] \
+  [GH_TOKEN=<token>] [A2A_BEARER_TOKEN=<token>] [<PROVIDER_SECRET_ENV>=<key>] \
   ./scripts/deploy.sh project=<name> [data_root=<path>] [a2a_port=<port>] [a2a_host=<host>] [a2a_public_url=<url>] \
   [a2a_streaming=<bool>] [a2a_log_level=<level>] [a2a_otel_instrumentation_enabled=<bool>] \
-  [a2a_log_payloads=<bool>] [a2a_log_body_limit=<int>] [a2a_cancel_abort_timeout_seconds=<seconds>] \
-  [a2a_enable_session_shell=<bool>] \
+  [a2a_log_payloads=<bool>] [a2a_log_body_limit=<int>] [a2a_max_request_body_bytes=<int>] \
+  [a2a_cancel_abort_timeout_seconds=<seconds>] [a2a_enable_session_shell=<bool>] \
+  [a2a_strict_isolation=<bool>] [a2a_systemd_tasks_max=<int>] [a2a_systemd_limit_nofile=<int>] \
+  [a2a_systemd_memory_max=<value>] [a2a_systemd_cpu_quota=<value>] \
   [opencode_provider_id=<id>] [opencode_model_id=<id>] [opencode_lsp=<bool>] [opencode_log_level=<level>] \
   [repo_url=<url>] [repo_branch=<branch>] \
-  [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] \
+  [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [enable_secret_persistence=<bool>] \
   [git_identity_email=<email>] [update_a2a=true] [force_restart=true]
 
 Provider secret env vars:
@@ -155,7 +185,7 @@ USAGE
   exit 1
 fi
 
-export OPENCODE_A2A_DIR="${OPENCODE_A2A_DIR:-/opt/opencode-a2a/opencode-a2a-serve}"
+export OPENCODE_A2A_DIR="${OPENCODE_A2A_DIR:-/opt/opencode-a2a/opencode-a2a-server}"
 export OPENCODE_CORE_DIR="${OPENCODE_CORE_DIR:-/opt/.opencode}"
 export UV_PYTHON_DIR="${UV_PYTHON_DIR:-/opt/uv-python}"
 export UV_PYTHON_DIR_GROUP="${UV_PYTHON_DIR_GROUP-opencode}"
@@ -185,6 +215,7 @@ export OPENCODE_BIND_HOST="${OPENCODE_BIND_HOST:-127.0.0.1}"
 export OPENCODE_LOG_LEVEL="${OPENCODE_LOG_LEVEL:-WARNING}"
 export OPENCODE_EXTRA_ARGS="${OPENCODE_EXTRA_ARGS:-}"
 export OPENCODE_LSP="${OPENCODE_LSP:-false}"
+export ENABLE_SECRET_PERSISTENCE="${ENABLE_SECRET_PERSISTENCE:-false}"
 
 if [[ -n "$A2A_HOST_INPUT" ]]; then
   export A2A_HOST="$A2A_HOST_INPUT"
@@ -215,15 +246,26 @@ export A2A_STREAMING="${A2A_STREAMING:-true}"
 export A2A_OTEL_INSTRUMENTATION_ENABLED="${A2A_OTEL_INSTRUMENTATION_ENABLED:-false}"
 export A2A_LOG_PAYLOADS="${A2A_LOG_PAYLOADS:-false}"
 export A2A_LOG_BODY_LIMIT="${A2A_LOG_BODY_LIMIT:-0}"
+export A2A_MAX_REQUEST_BODY_BYTES="${A2A_MAX_REQUEST_BODY_BYTES:-1048576}"
 export A2A_CANCEL_ABORT_TIMEOUT_SECONDS="${A2A_CANCEL_ABORT_TIMEOUT_SECONDS:-2.0}"
 export A2A_ENABLE_SESSION_SHELL="${A2A_ENABLE_SESSION_SHELL:-false}"
+export A2A_STRICT_ISOLATION="${A2A_STRICT_ISOLATION:-false}"
+export A2A_SYSTEMD_TASKS_MAX="${A2A_SYSTEMD_TASKS_MAX:-512}"
+export A2A_SYSTEMD_LIMIT_NOFILE="${A2A_SYSTEMD_LIMIT_NOFILE:-65536}"
 export_if_present "A2A_LOG_LEVEL" "$A2A_LOG_LEVEL_INPUT"
 export_if_present "A2A_STREAMING" "$A2A_STREAMING_INPUT"
 export_if_present "A2A_OTEL_INSTRUMENTATION_ENABLED" "$A2A_OTEL_INSTRUMENTATION_ENABLED_INPUT"
 export_if_present "A2A_LOG_PAYLOADS" "$A2A_LOG_PAYLOADS_INPUT"
 export_if_present "A2A_LOG_BODY_LIMIT" "$A2A_LOG_BODY_LIMIT_INPUT"
+export_if_present "A2A_MAX_REQUEST_BODY_BYTES" "$A2A_MAX_REQUEST_BODY_BYTES_INPUT"
 export_if_present "A2A_CANCEL_ABORT_TIMEOUT_SECONDS" "$A2A_CANCEL_ABORT_TIMEOUT_SECONDS_INPUT"
 export_if_present "A2A_ENABLE_SESSION_SHELL" "$A2A_ENABLE_SESSION_SHELL_INPUT"
+export_if_present "A2A_STRICT_ISOLATION" "$A2A_STRICT_ISOLATION_INPUT"
+export_if_present "A2A_SYSTEMD_TASKS_MAX" "$A2A_SYSTEMD_TASKS_MAX_INPUT"
+export_if_present "A2A_SYSTEMD_LIMIT_NOFILE" "$A2A_SYSTEMD_LIMIT_NOFILE_INPUT"
+export_if_present "A2A_SYSTEMD_MEMORY_MAX" "$A2A_SYSTEMD_MEMORY_MAX_INPUT"
+export_if_present "A2A_SYSTEMD_CPU_QUOTA" "$A2A_SYSTEMD_CPU_QUOTA_INPUT"
+export_if_present "ENABLE_SECRET_PERSISTENCE" "$ENABLE_SECRET_PERSISTENCE_INPUT"
 
 is_truthy() {
   case "${1,,}" in
@@ -239,6 +281,13 @@ if [[ -n "$UPDATE_A2A_INPUT" ]] && is_truthy "$UPDATE_A2A_INPUT"; then
 fi
 if [[ -n "$FORCE_RESTART_INPUT" ]] && is_truthy "$FORCE_RESTART_INPUT"; then
   FORCE_RESTART="true"
+fi
+
+if is_truthy "$A2A_ENABLE_SESSION_SHELL"; then
+  echo "WARNING: A2A_ENABLE_SESSION_SHELL=true enables high-risk opencode.sessions.shell." >&2
+  if ! is_truthy "$A2A_STRICT_ISOLATION"; then
+    echo "WARNING: Recommend setting a2a_strict_isolation=true for shell-enabled systemd instances." >&2
+  fi
 fi
 
 if [[ "$UPDATE_A2A" == "true" ]]; then

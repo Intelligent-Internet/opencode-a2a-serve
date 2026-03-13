@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-SHARED_METADATA_NAMESPACE = "shared"
 SHARED_SESSION_BINDING_FIELD = "metadata.shared.session.id"
 SHARED_SESSION_METADATA_FIELD = "metadata.shared.session"
 SHARED_MODEL_SELECTION_FIELD = "metadata.shared.model"
