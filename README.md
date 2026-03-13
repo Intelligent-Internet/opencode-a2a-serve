@@ -28,6 +28,29 @@ need a stable service layer around it. This repository provides that layer by:
 - OpenCode session query/control extensions and provider/model discovery
 - systemd multi-instance deployment and lightweight current-user deployment
 
+## Extension Capability Overview
+
+The Agent Card declares six extension URIs. Shared contracts are intended for
+any compatible consumer; OpenCode-specific contracts stay provider-scoped even
+though they are exposed through A2A JSON-RPC.
+
+| Extension URI | Scope | Primary use |
+| --- | --- | --- |
+| `urn:a2a:session-binding/v1` | Shared | Bind a main chat request to an existing upstream session via `metadata.shared.session.id` |
+| `urn:a2a:model-selection/v1` | Shared | Override the default upstream model for one main chat request |
+| `urn:a2a:stream-hints/v1` | Shared | Advertise canonical stream metadata for blocks, usage, interrupts, and session hints |
+| `urn:opencode-a2a:session-query/v1` | OpenCode-specific | Query external sessions and invoke OpenCode session control methods |
+| `urn:opencode-a2a:provider-discovery/v1` | OpenCode-specific | Discover normalized OpenCode provider/model summaries |
+| `urn:a2a:interactive-interrupt/v1` | Shared | Reply to interrupt callbacks observed from stream metadata |
+
+Detailed consumption guidance:
+
+- Shared session binding: [`docs/guide.md#shared-session-binding-contract`](docs/guide.md#shared-session-binding-contract)
+- Shared model selection: [`docs/guide.md#shared-model-selection-contract`](docs/guide.md#shared-model-selection-contract)
+- Shared stream hints: [`docs/guide.md#shared-stream-hints-contract`](docs/guide.md#shared-stream-hints-contract)
+- OpenCode session query and provider discovery: [`docs/guide.md#opencode-session-query--provider-discovery-a2a-extensions`](docs/guide.md#opencode-session-query--provider-discovery-a2a-extensions)
+- Shared interrupt callback: [`docs/guide.md#shared-interrupt-callback-a2a-extension`](docs/guide.md#shared-interrupt-callback-a2a-extension)
+
 ## Design Principle
 
 One `OpenCode + opencode-a2a-server` instance pair is treated as a
@@ -116,8 +139,8 @@ uv run pytest
 ## Documentation Map
 
 - [docs/guide.md](docs/guide.md)
-  Product behavior, API contracts, extension capability overview, and
-  streaming/session/interrupt details.
+  Product behavior, API contracts, and detailed streaming/session/interrupt
+  consumption guidance.
 - [scripts/README.md](scripts/README.md)
   Entry points for init, deploy, lightweight deploy, local start, and
   uninstall scripts.

@@ -106,26 +106,18 @@ Key variables to understand protocol behavior:
 
 ## Extension Capability Overview
 
-The Agent Card declares six extension URIs. Some are shared contracts that any
-consumer may rely on; others stay OpenCode-specific even though they are
-transported through A2A JSON-RPC.
+For a quick capability showcase, see the README overview:
+
+- [`README.md#extension-capability-overview`](../README.md#extension-capability-overview)
+
+This guide focuses on how to consume the declared capabilities.
 
 Important distinction:
 
 - Agent Card extension declarations answer "what capability is available?"
 - Runtime payload metadata answers "what happened on this request/stream?"
-
-Clients should not treat runtime metadata alone as a substitute for capability
-discovery when an extension URI is already declared.
-
-| Extension URI | Scope | Trigger / Call Path | Runtime fields or methods | Consumer expectation |
-| --- | --- | --- | --- | --- |
-| `urn:a2a:session-binding/v1` | Shared | Main chat `message/send`, `message:stream` | `metadata.shared.session.id` | Bind a request to an existing upstream session when present; otherwise let the server create/cache a new one |
-| `urn:a2a:model-selection/v1` | Shared | Main chat `message/send`, `message:stream` | `metadata.shared.model.providerID`, `metadata.shared.model.modelID` | Override the default upstream model for one request only |
-| `urn:a2a:stream-hints/v1` | Shared | Streaming responses | `metadata.shared.stream`, `metadata.shared.usage`, `metadata.shared.interrupt`, `metadata.shared.session` | Render blocks/usage/interrupts from canonical stream metadata and understand which shared hints may appear |
-| `urn:opencode-a2a:session-query/v1` | OpenCode-specific | JSON-RPC `POST /` | `opencode.sessions.*` methods | Discover/query external sessions and call OpenCode session control methods |
-| `urn:opencode-a2a:provider-discovery/v1` | OpenCode-specific | JSON-RPC `POST /` | `opencode.providers.*`, `opencode.models.*` methods | Fetch normalized OpenCode provider/model summaries |
-| `urn:a2a:interactive-interrupt/v1` | Shared | JSON-RPC `POST /` | `a2a.interrupt.*` methods | Reply to shared interrupt callbacks observed from stream metadata |
+- Clients should not treat runtime metadata alone as a substitute for
+  capability discovery when an extension URI is already declared.
 
 ## Shared Session Binding Contract
 
