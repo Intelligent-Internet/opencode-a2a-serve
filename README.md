@@ -62,6 +62,7 @@ For deployment and operations scripts, see [`scripts/README.md`](scripts/README.
 - Script entry and operations:
   - [`scripts/README.md`](scripts/README.md)
   - [`scripts/deploy_readme.md`](scripts/deploy_readme.md)
+  - [`scripts/deploy_light_readme.md`](scripts/deploy_light_readme.md)
   - [`scripts/init_system_readme.md`](scripts/init_system_readme.md)
   - [`scripts/start_services_readme.md`](scripts/start_services_readme.md)
   - [`scripts/uninstall_readme.md`](scripts/uninstall_readme.md)
