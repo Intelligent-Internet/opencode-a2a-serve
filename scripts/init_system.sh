@@ -18,6 +18,16 @@ OPENCODE_INSTALLER_URL="https://opencode.ai/install"
 OPENCODE_INSTALLER_VERSION="1.2.5"
 OPENCODE_INSTALLER_SHA256="fc3c1b2123f49b6df545a7622e5127d21cd794b15134fc3b66e1ca49f7fb297e"
 OPENCODE_INSTALL_CMD="--version ${OPENCODE_INSTALLER_VERSION}"
+UV_VERSION="0.10.7"
+UV_RELEASE_BASE_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}"
+UV_TARBALL_X86_64_GNU="uv-x86_64-unknown-linux-gnu.tar.gz"
+UV_TARBALL_X86_64_GNU_SHA256="9ac6cee4e379a5abfca06e78a777b26b7ba1f81cb7935b97054d80d85ac00774" # pragma: allowlist secret
+UV_TARBALL_X86_64_MUSL="uv-x86_64-unknown-linux-musl.tar.gz"
+UV_TARBALL_X86_64_MUSL_SHA256="992529add6024e67135b1c80617abd2eca7be2cf0b99b3911f923de815bd8dc1" # pragma: allowlist secret
+UV_TARBALL_AARCH64_GNU="uv-aarch64-unknown-linux-gnu.tar.gz"
+UV_TARBALL_AARCH64_GNU_SHA256="20efc27d946860093650bcf26096a016b10fdaf03b13c33b75fbde02962beea9" # pragma: allowlist secret
+UV_TARBALL_AARCH64_MUSL="uv-aarch64-unknown-linux-musl.tar.gz"
+UV_TARBALL_AARCH64_MUSL_SHA256="115291f9943531a3b63db3a2eabda8b74b8da4831551679382cb309c9debd9f7" # pragma: allowlist secret
 
 # Feature toggles.
 INSTALL_PACKAGES="true"
@@ -165,22 +175,13 @@ install_packages() {
   log_done "Package installation completed."
 }
 
-download_script() {
+download_file() {
   local url="$1"
   local dest="$2"
-  if ! curl -fL "$url" -o "$dest"; then
+  if ! curl -fsSL "$url" -o "$dest"; then
     return 1
   fi
   if [[ ! -s "$dest" ]]; then
-    return 1
-  fi
-  return 0
-}
-
-validate_script_contains() {
-  local path="$1"
-  local pattern="$2"
-  if ! grep -Eqi "$pattern" "$path"; then
     return 1
   fi
   return 0
@@ -205,6 +206,151 @@ verify_file_checksum() {
     warn "  actual:   $actual"
     return 1
   fi
+  return 0
+}
+
+detect_linux_libc() {
+  local output=""
+  if command -v ldd >/dev/null 2>&1; then
+    output="$(ldd --version 2>&1 || true)"
+  fi
+  if printf '%s' "$output" | grep -qi "musl"; then
+    printf 'musl\n'
+    return 0
+  fi
+  if getconf GNU_LIBC_VERSION >/dev/null 2>&1; then
+    printf 'gnu\n'
+    return 0
+  fi
+  if printf '%s' "$output" | grep -Eqi "glibc|gnu libc"; then
+    printf 'gnu\n'
+    return 0
+  fi
+  return 1
+}
+
+resolve_uv_release_artifact() {
+  local arch="$1"
+  local libc="$2"
+
+  case "${arch}:${libc}" in
+    x86_64:gnu)
+      printf '%s|%s\n' "$UV_TARBALL_X86_64_GNU" "$UV_TARBALL_X86_64_GNU_SHA256"
+      ;;
+    x86_64:musl)
+      printf '%s|%s\n' "$UV_TARBALL_X86_64_MUSL" "$UV_TARBALL_X86_64_MUSL_SHA256"
+      ;;
+    aarch64:gnu)
+      printf '%s|%s\n' "$UV_TARBALL_AARCH64_GNU" "$UV_TARBALL_AARCH64_GNU_SHA256"
+      ;;
+    aarch64:musl)
+      printf '%s|%s\n' "$UV_TARBALL_AARCH64_MUSL" "$UV_TARBALL_AARCH64_MUSL_SHA256"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+node_manual_install_hint() {
+  warn "Install Node.js >= ${NODE_MAJOR} manually from a trusted distro repository or internal mirror, then rerun init_system.sh with INSTALL_NODE=false."
+}
+
+ensure_node_from_package_manager() {
+  case "$PKG_MANAGER" in
+    apt)
+      $SUDO apt-get update
+      if ! $SUDO apt-get install -y nodejs npm; then
+        return 1
+      fi
+      ;;
+    dnf)
+      if ! $SUDO dnf install -y nodejs npm && ! $SUDO dnf install -y nodejs; then
+        return 1
+      fi
+      ;;
+    yum)
+      if ! $SUDO yum install -y nodejs npm && ! $SUDO yum install -y nodejs; then
+        return 1
+      fi
+      ;;
+    pacman)
+      if ! $SUDO pacman -Syu --noconfirm nodejs npm; then
+        return 1
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+install_uv_from_release() {
+  local os_name
+  local arch
+  local libc
+  local resolved
+  local asset
+  local checksum
+  local tmpdir
+  local archive
+  local extract_dir
+
+  os_name="$(uname -s)"
+  if [[ "$os_name" != "Linux" ]]; then
+    warn "Unsupported OS for pinned uv bootstrap: $os_name"
+    return 1
+  fi
+
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) arch="x86_64" ;;
+    aarch64|arm64) arch="aarch64" ;;
+    *)
+      warn "Unsupported architecture for pinned uv bootstrap: $arch"
+      return 1
+      ;;
+  esac
+
+  if ! libc="$(detect_linux_libc)"; then
+    warn "Unable to detect Linux libc for uv bootstrap."
+    return 1
+  fi
+
+  if ! resolved="$(resolve_uv_release_artifact "$arch" "$libc")"; then
+    warn "No pinned uv release artifact configured for ${arch}/${libc}."
+    return 1
+  fi
+
+  IFS='|' read -r asset checksum <<< "$resolved"
+  tmpdir="$(mktemp -d)"
+  archive="${tmpdir}/${asset}"
+  extract_dir="${tmpdir}/${asset%.tar.gz}"
+
+  if ! download_file "${UV_RELEASE_BASE_URL}/${asset}" "$archive"; then
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  if ! verify_file_checksum "$archive" "$checksum"; then
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  if ! tar -xzf "$archive" -C "$tmpdir"; then
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  if [[ ! -x "${extract_dir}/uv" ]]; then
+    warn "Pinned uv archive is missing the uv binary: ${extract_dir}/uv"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+
+  $SUDO install -d -m 755 /usr/local/bin
+  $SUDO install -m 755 "${extract_dir}/uv" /usr/local/bin/uv
+  if [[ -x "${extract_dir}/uvx" ]]; then
+    $SUDO install -m 755 "${extract_dir}/uvx" /usr/local/bin/uvx
+  fi
+  rm -rf "$tmpdir"
   return 0
 }
 
@@ -335,81 +481,28 @@ if is_truthy "$INSTALL_NODE"; then
   if [[ -n "$node_major" && "$node_major" -ge "$NODE_MAJOR" ]]; then
     log_done "Node.js already installed: ${node_version}"
   else
-    log_start "Installing Node.js ${NODE_MAJOR}.x..."
-    case "$PKG_MANAGER" in
-      apt)
-        nodesource_script="$(mktemp)"
-        log_start "Downloading NodeSource setup script..."
-        if ! download_script "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" "$nodesource_script"; then
-          warn "Failed to download NodeSource setup script."
-          INCOMPLETE=1
-        else
-          log_done "NodeSource setup script downloaded."
-          log_start "Validating NodeSource setup script..."
-          if ! validate_script_contains "$nodesource_script" "nodesource|NodeSource"; then
-            warn "NodeSource setup script validation failed."
-            INCOMPLETE=1
-          else
-            log_done "NodeSource setup script validated."
-            $SUDO -E bash "$nodesource_script"
-          fi
-        fi
-        rm -f "$nodesource_script"
-        $SUDO apt-get install -y nodejs
-        ;;
-      dnf)
-        nodesource_script="$(mktemp)"
-        log_start "Downloading NodeSource setup script..."
-        if ! download_script "https://rpm.nodesource.com/setup_${NODE_MAJOR}.x" "$nodesource_script"; then
-          warn "Failed to download NodeSource setup script."
-          INCOMPLETE=1
-        else
-          log_done "NodeSource setup script downloaded."
-          log_start "Validating NodeSource setup script..."
-          if ! validate_script_contains "$nodesource_script" "nodesource|NodeSource"; then
-            warn "NodeSource setup script validation failed."
-            INCOMPLETE=1
-          else
-            log_done "NodeSource setup script validated."
-            $SUDO -E bash "$nodesource_script"
-          fi
-        fi
-        rm -f "$nodesource_script"
-        $SUDO dnf install -y nodejs
-        ;;
-      yum)
-        nodesource_script="$(mktemp)"
-        log_start "Downloading NodeSource setup script..."
-        if ! download_script "https://rpm.nodesource.com/setup_${NODE_MAJOR}.x" "$nodesource_script"; then
-          warn "Failed to download NodeSource setup script."
-          INCOMPLETE=1
-        else
-          log_done "NodeSource setup script downloaded."
-          log_start "Validating NodeSource setup script..."
-          if ! validate_script_contains "$nodesource_script" "nodesource|NodeSource"; then
-            warn "NodeSource setup script validation failed."
-            INCOMPLETE=1
-          else
-            log_done "NodeSource setup script validated."
-            $SUDO -E bash "$nodesource_script"
-          fi
-        fi
-        rm -f "$nodesource_script"
-        $SUDO yum install -y nodejs
-        ;;
-      pacman)
-        $SUDO pacman -Syu --noconfirm nodejs npm
-        ;;
-      *)
-        warn "Unsupported package manager for Node.js install: $PKG_MANAGER"
-        INCOMPLETE=1
-        ;;
-    esac
+    log_start "Installing Node.js from trusted package manager repositories..."
+    if ! ensure_node_from_package_manager; then
+      warn "Node.js install via package manager failed."
+      node_manual_install_hint
+      INCOMPLETE=1
+    fi
     if command -v node >/dev/null 2>&1; then
       node_version="$(node -v 2>/dev/null || true)"
-      log_done "Node.js installed: ${node_version}"
+      node_major=""
+      if [[ "$node_version" =~ ^v([0-9]+) ]]; then
+        node_major="${BASH_REMATCH[1]}"
+      fi
+      if [[ -n "$node_major" && "$node_major" -ge "$NODE_MAJOR" ]]; then
+        log_done "Node.js installed: ${node_version}"
+      else
+        warn "Installed Node.js version does not satisfy NODE_MAJOR=${NODE_MAJOR}: ${node_version:-unknown}"
+        node_manual_install_hint
+        INCOMPLETE=1
+      fi
     else
       warn "Node.js installation failed."
+      node_manual_install_hint
       INCOMPLETE=1
     fi
   fi
@@ -465,23 +558,12 @@ if is_truthy "$INSTALL_UV"; then
       INCOMPLETE=1
     else
       log_start "Installing uv..."
-      uv_script="$(mktemp)"
-      log_start "Downloading uv install script..."
-      if ! download_script "https://astral.sh/uv/install.sh" "$uv_script"; then
-        warn "Failed to download uv install script."
+      log_start "Downloading pinned uv release tarball..."
+      if ! install_uv_from_release; then
+        warn "Pinned uv release installation failed."
+        warn "Install uv ${UV_VERSION} manually from a trusted release artifact, then rerun init_system.sh with INSTALL_UV=false."
         INCOMPLETE=1
-      else
-        log_done "uv install script downloaded."
-        log_start "Validating uv install script..."
-        if ! validate_script_contains "$uv_script" "astral|uv"; then
-          warn "uv install script validation failed."
-          INCOMPLETE=1
-        else
-          log_done "uv install script validated."
-          UV_PYTHON_INSTALL_DIR="$UV_PYTHON_INSTALL_DIR" sh "$uv_script"
-        fi
       fi
-      rm -f "$uv_script"
       if ! command -v uv >/dev/null 2>&1; then
         if [[ -x "$HOME/.local/bin/uv" ]]; then
           log_start "Moving uv into /usr/local/bin."
@@ -618,7 +700,7 @@ else
   if [[ -n "$OPENCODE_INSTALL_CMD" ]]; then
     opencode_install_script="$(mktemp)"
     log_start "Downloading OpenCode installer..."
-    if ! download_script "$OPENCODE_INSTALLER_URL" "$opencode_install_script"; then
+    if ! download_file "$OPENCODE_INSTALLER_URL" "$opencode_install_script"; then
       warn "Failed to download OpenCode installer."
       INCOMPLETE=1
     elif ! verify_file_checksum "$opencode_install_script" "$OPENCODE_INSTALLER_SHA256"; then

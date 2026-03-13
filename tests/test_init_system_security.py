@@ -26,11 +26,37 @@ def test_opencode_install_flow_is_pinned_and_verified() -> None:
     assert "bash -" not in install_cmd
     assert "--version" in install_cmd
     assert "curl -fsSL https://opencode.ai/install | bash" not in INIT_SYSTEM_TEXT
-    assert 'download_script "$OPENCODE_INSTALLER_URL"' in INIT_SYSTEM_TEXT
+    assert 'download_file "$OPENCODE_INSTALLER_URL"' in INIT_SYSTEM_TEXT
     assert (
         'verify_file_checksum "$opencode_install_script" "$OPENCODE_INSTALLER_SHA256"'
         in INIT_SYSTEM_TEXT
     )
+
+
+def test_uv_install_flow_is_pinned_to_release_tarballs() -> None:
+    version = _extract_var("UV_VERSION")
+    base_url = _extract_var("UV_RELEASE_BASE_URL")
+
+    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+    assert base_url == "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}"
+    assert "astral.sh/uv/install.sh" not in INIT_SYSTEM_TEXT
+    assert "install_uv_from_release" in INIT_SYSTEM_TEXT
+    assert "resolve_uv_release_artifact" in INIT_SYSTEM_TEXT
+    for checksum_var in (
+        "UV_TARBALL_X86_64_GNU_SHA256",
+        "UV_TARBALL_X86_64_MUSL_SHA256",
+        "UV_TARBALL_AARCH64_GNU_SHA256",
+        "UV_TARBALL_AARCH64_MUSL_SHA256",
+    ):
+        assert re.fullmatch(r"[0-9a-f]{64}", _extract_var(checksum_var))
+
+
+def test_node_install_flow_avoids_remote_setup_scripts() -> None:
+    assert "deb.nodesource.com/setup_" not in INIT_SYSTEM_TEXT
+    assert "rpm.nodesource.com/setup_" not in INIT_SYSTEM_TEXT
+    assert "NodeSource setup script" not in INIT_SYSTEM_TEXT
+    assert "Installing Node.js from trusted package manager repositories" in INIT_SYSTEM_TEXT
+    assert "Install Node.js >= ${NODE_MAJOR} manually" in INIT_SYSTEM_TEXT
 
 
 def _parse_octal_mode(mode: str) -> int:
