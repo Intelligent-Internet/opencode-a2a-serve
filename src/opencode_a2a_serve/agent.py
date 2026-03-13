@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 _INTERRUPT_ASKED_EVENT_TYPES = {"permission.asked", "question.asked"}
 _INTERRUPT_RESOLVED_EVENT_TYPES = {"permission.replied", "question.replied", "question.rejected"}
+_USAGE_PART_TYPES = {"step-finish"}
 
 
 class BlockType(str, Enum):
@@ -1632,7 +1633,10 @@ def _extract_token_usage(payload: Any) -> dict[str, Any] | None:
         if isinstance(props_info, Mapping):
             candidates.append(props_info)
         part = props.get("part")
-        if isinstance(part, Mapping):
+        if (
+            isinstance(part, Mapping)
+            and _extract_stream_part_type(part, props) in _USAGE_PART_TYPES
+        ):
             candidates.append(part)
 
     for candidate in candidates:
@@ -1739,6 +1743,53 @@ def _extract_string_list(value: Any) -> list[str]:
     return result
 
 
+def _extract_optional_string(source: Mapping[str, Any], key: str) -> str | None:
+    value = source.get(key)
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
+def _normalize_interrupt_question_options(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    options: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        normalized_option: dict[str, str] = {}
+        for key in ("label", "value", "description"):
+            normalized = _extract_optional_string(item, key)
+            if normalized is not None:
+                normalized_option[key] = normalized
+        if normalized_option:
+            options.append(normalized_option)
+    return options
+
+
+def _normalize_interrupt_questions(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    questions: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        normalized_question: dict[str, Any] = {}
+        for key in ("header", "question"):
+            normalized = _extract_optional_string(item, key)
+            if normalized is not None:
+                normalized_question[key] = normalized
+        options = _normalize_interrupt_question_options(item.get("options"))
+        if options:
+            normalized_question["options"] = options
+        if normalized_question:
+            questions.append(normalized_question)
+    return questions
+
+
 def _extract_interrupt_asked_request_id(props: Mapping[str, Any]) -> str | None:
     return _extract_first_nonempty_string(
         props,
@@ -1765,7 +1816,7 @@ def _extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] |
         return None
     if event_type == "permission.asked":
         details: dict[str, Any] = {
-            "permission": props.get("permission"),
+            "permission": _extract_optional_string(props, "permission"),
             "patterns": _extract_string_list(props.get("patterns")),
         }
         return {
@@ -1773,8 +1824,7 @@ def _extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] |
             "interrupt_type": "permission",
             "details": details,
         }
-    questions = props.get("questions")
-    details = {"questions": questions if isinstance(questions, list) else []}
+    details = {"questions": _normalize_interrupt_questions(props.get("questions"))}
     return {
         "request_id": request_id,
         "interrupt_type": "question",

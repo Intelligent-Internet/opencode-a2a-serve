@@ -68,10 +68,13 @@ Key variables to understand protocol behavior:
   continue to use `TextPart`. Final status event metadata may include
   normalized token usage at `metadata.shared.usage` with fields like
   `input_tokens`, `output_tokens`, `total_tokens`, and optional `cost`.
+  Usage is extracted from documented info payloads and supported usage parts
+  such as `step-finish`; non-usage parts with similar fields are ignored.
   Interrupt events (`permission.asked` / `question.asked`) are mapped to
   `TaskStatusUpdateEvent(final=false, state=input-required)` with details at
   `metadata.shared.interrupt` (including `request_id`, interrupt `type`, and
-  minimal callback payload).
+  normalized minimal callback payload). Resolved interrupt events only clear
+  internal pending state; they do not emit a separate outward status event.
   Non-streaming requests return a `Task` directly.
 - Non-streaming `message:send` responses may include normalized token usage at
   `Task.metadata.shared.usage` with the same field schema.
