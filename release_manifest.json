@@ -1,0 +1,36 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-03-15T03:23:01Z",
+  "assets": {
+    "uv": {
+      "version": "0.10.7",
+      "variants": {
+        "x86_64-unknown-linux-gnu": {
+          "name": "uv-x86_64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.10.7/uv-x86_64-unknown-linux-gnu.tar.gz",
+          "sha256": "9ac6cee4e379a5abfca06e78a777b26b7ba1f81cb7935b97054d80d85ac00774"
+        },
+        "x86_64-unknown-linux-musl": {
+          "name": "uv-x86_64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.10.7/uv-x86_64-unknown-linux-musl.tar.gz",
+          "sha256": "992529add6024e67135b1c80617abd2eca7be2cf0b99b3911f923de815bd8dc1"
+        },
+        "aarch64-unknown-linux-gnu": {
+          "name": "uv-aarch64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.10.7/uv-aarch64-unknown-linux-gnu.tar.gz",
+          "sha256": "20efc27d946860093650bcf26096a016b10fdaf03b13c33b75fbde02962beea9"
+        },
+        "aarch64-unknown-linux-musl": {
+          "name": "uv-aarch64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/astral-sh/uv/releases/download/0.10.7/uv-aarch64-unknown-linux-musl.tar.gz",
+          "sha256": "115291f9943531a3b63db3a2eabda8b74b8da4831551679382cb309c9debd9f7"
+        }
+      }
+    },
+    "opencode": {
+      "version": "1.2.5",
+      "url": "https://opencode.ai/install",
+      "sha256": "fc3c1b2123f49b6df545a7622e5127d21cd794b15134fc3b66e1ca49f7fb297e"
+    }
+  }
+}
