@@ -26,6 +26,19 @@ For the overall threat model, see [`../SECURITY.md`](../SECURITY.md).
 
 For one-time host bootstrap, see [`init_system_readme.md`](./init_system_readme.md).
 
+## Automation & Orchestration Contract
+
+To support parameterized self-deployment (see #145), `deploy.sh` provides a
+stable contract for automation:
+
+- **Non-interactive Pre-checks:** Supports `sudo -n` style pre-validation.
+- **Readiness Detection:** The script waits for both OpenCode and the A2A Agent
+  Card to be healthy before returning success.
+- **Machine-Readable Returns:** Standard exit codes and log patterns are used to
+  indicate failure categories (e.g., secret missing, port conflict, timeout).
+- **Idempotency:** Re-running the script with the same parameters updates the
+  existing instance safely.
+
 ## Directory Layout
 
 Each project instance gets an isolated directory under `DATA_ROOT`

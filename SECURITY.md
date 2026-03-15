@@ -11,12 +11,17 @@ not fully isolate upstream model credentials from OpenCode runtime behavior.
 
 - `A2A_BEARER_TOKEN` protects access to the A2A surface, but it is not a
   tenant-isolation boundary inside one deployed instance.
-- One `OpenCode + opencode-a2a-server` instance pair is treated as a
-  single-tenant trust boundary by design.
+- **Parameterized Self-Deployment:** One `OpenCode + opencode-a2a-server`
+  instance pair is treated as a single-tenant trust boundary by design.
+  Consumers are expected to deploy isolated instance pairs (different Linux
+  users, ports, and workspace roots) to achieve tenant isolation.
 - Within one instance, consumers share the same underlying OpenCode
   workspace/environment by default.
 - LLM provider keys are consumed by the `opencode` process. Prompt injection or
   indirect exfiltration attempts may still expose sensitive values.
+- **Identity & Governance:** While the service supports parameterized startup,
+  operators remain responsible for the lifecycle and secret governance of each
+  instantiated unit.
 - Payload logging is opt-in. When `A2A_LOG_PAYLOADS=true`, operators should
   treat logs as potentially sensitive operational data.
 - In systemd deployment mode, secret persistence is opt-in. The deploy scripts

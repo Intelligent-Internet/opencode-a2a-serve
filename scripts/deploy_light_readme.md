@@ -1,18 +1,21 @@
-# Lightweight Local Deploy Guide (`deploy_light.sh`)
+# Lightweight Local Launcher (`deploy_light.sh`)
 
-This document describes `scripts/deploy_light.sh`, a lightweight background supervisor for one local OpenCode + A2A instance.
+This document describes `scripts/deploy_light.sh`, a lightweight entry point for
+starting one local OpenCode + A2A instance in the foreground.
 
-It is intended for trusted local/self-host scenarios where the operator wants to reuse the current Linux user, an existing workspace directory, and the current repository checkout.
+## Convergence Notice (#181)
 
-This script does **not** replace the systemd deployment flow:
+`deploy_light.sh` is converging into a foreground-only launcher. It no longer
+manages background process lifecycles (nohup/stop/restart). It is designed to be
+consumed by external process managers like `pm2`, `systemd`, or higher-level
+orchestrators for **parameterized self-deployment** (#145).
 
-- It keeps the current two-process runtime model:
-  - `opencode serve`
-  - `opencode-a2a-server`
-- It does not create system users, isolated data roots, or systemd units.
-- It is best suited for single-user or small-team environments that already trust the current host user and workspace.
+Scope:
 
-For production-oriented multi-instance deployment, continue using [`deploy.sh`](./deploy_readme.md).
+- stays in foreground (stdout/stderr direct output)
+- supports the same machine-readable contract as `deploy.sh`
+- does **not** create system users or isolated data roots
+- best suited for local development or ephemeral agent-managed instances
 
 ## Usage
 
@@ -22,31 +25,16 @@ Required environment:
 export A2A_BEARER_TOKEN='<a2a-token>'
 ```
 
-Start one instance:
+Start one instance (foreground):
 
 ```bash
 ./scripts/deploy_light.sh start workdir=/abs/path/to/workspace
 ```
 
-Common lifecycle commands:
+Recommended consumption with `pm2`:
 
 ```bash
-./scripts/deploy_light.sh status
-./scripts/deploy_light.sh stop
-./scripts/deploy_light.sh restart workdir=/abs/path/to/workspace
-```
-
-Example with explicit ports and instance name:
-
-```bash
-./scripts/deploy_light.sh start \
-  instance=demo \
-  workdir=/srv/workspaces/demo \
-  a2a_host=127.0.0.1 \
-  a2a_port=8010 \
-  a2a_public_url=http://127.0.0.1:8010 \
-  opencode_bind_host=127.0.0.1 \
-  opencode_bind_port=4106
+pm2 start ./scripts/deploy_light.sh --name "a2a-alpha" -- start workdir=/data/alpha a2a_port=8010
 ```
 
 ## Key Inputs

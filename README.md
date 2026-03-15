@@ -51,20 +51,23 @@ Detailed consumption guidance:
 - OpenCode session query and provider discovery: [`docs/guide.md#opencode-session-query--provider-discovery-a2a-extensions`](docs/guide.md#opencode-session-query--provider-discovery-a2a-extensions)
 - Shared interrupt callback: [`docs/guide.md#shared-interrupt-callback-a2a-extension`](docs/guide.md#shared-interrupt-callback-a2a-extension)
 
-## Design Principle
+## Design Principle: Single-Tenant Self-Deployment
 
 One `OpenCode + opencode-a2a-server` instance pair is treated as a
-single-tenant trust boundary.
+single-tenant trust boundary. This project supports **parameterized
+self-deployment**, allowing consumers to spin up their own isolated instance
+pairs programmatically.
 
-- OpenCode may manage multiple projects/directories, but one deployed instance
-  is not a secure multi-tenant runtime.
-- Shared-instance identity/session checks are best-effort coordination, not
-  hard tenant isolation.
-- For mutually untrusted tenants, deploy separate instance pairs with isolated
-  Linux users or containers, isolated workspace roots, and isolated
-  credentials.
+- **Unified Deployment Contract:** Both `deploy.sh` and `deploy_light.sh` follow
+  a machine-readable contract for input validation, readiness checking, and
+  status reporting.
+- **Isolation by Instance:** OpenCode may manage multiple projects, but one
+  deployed instance is not a secure multi-tenant runtime.
+- **Consumption Strategy:** For mutually untrusted tenants, consumers should
+  trigger separate deployment cycles with unique ports, isolated Linux users (via
+  `deploy.sh`), or isolated workspace roots.
 
-## Logical Components
+Logical Components:
 
 ```mermaid
 flowchart TD
