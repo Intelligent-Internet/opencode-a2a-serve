@@ -1,11 +1,11 @@
-# Deploy Script Guide (`deploy.sh`)
+# Source Deploy Guide (`deploy.sh`)
 
-This document explains `scripts/deploy.sh` and helper scripts under
+This document explains the source-based `scripts/deploy.sh` path and helper scripts under
 `scripts/deploy/`.
 
 Scope:
 
-- systemd multi-instance deployment flow
+- source-based systemd multi-instance deployment flow
 - deploy inputs, precedence, generated runtime files
 - runtime secret strategy and operational caveats
 
@@ -20,11 +20,12 @@ For the overall threat model, see [`../SECURITY.md`](../SECURITY.md).
 
 - `systemd` and `sudo` available
 - OpenCode core path prepared (default `/opt/.opencode`)
-- repo path prepared (default `/opt/opencode-a2a/opencode-a2a-server`)
-- A2A venv prepared (default `${OPENCODE_A2A_DIR}/.venv/bin/opencode-a2a-server`)
+- source repo path prepared (default `/opt/opencode-a2a/opencode-a2a-server`)
+- source A2A venv prepared (default `${OPENCODE_A2A_DIR}/.venv/bin/opencode-a2a-server`)
 - uv python pool prepared (default `/opt/uv-python`)
 
-For one-time host bootstrap, see [`init_system_readme.md`](./init_system_readme.md).
+For release-based formal deployments, prefer [`deploy_release_readme.md`](./deploy_release_readme.md).
+For one-time source bootstrap, see [`init_system_readme.md`](./init_system_readme.md).
 
 ## Parameterized Self-Deployment Contract
 

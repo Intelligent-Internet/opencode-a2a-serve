@@ -34,6 +34,8 @@ OPENCODE_LSP_INPUT=""
 OPENCODE_LOG_LEVEL_INPUT=""
 REPO_URL_INPUT=""
 REPO_BRANCH_INPUT=""
+A2A_INSTALL_MODE_INPUT=""
+A2A_RELEASE_VERSION_INPUT=""
 OPENCODE_TIMEOUT_INPUT=""
 OPENCODE_TIMEOUT_STREAM_INPUT=""
 GIT_IDENTITY_NAME_INPUT=""
@@ -132,6 +134,12 @@ for arg in "$@"; do
     repo_branch)
       REPO_BRANCH_INPUT="$value"
       ;;
+    a2a_install_mode|install_mode)
+      A2A_INSTALL_MODE_INPUT="$value"
+      ;;
+    a2a_release_version|release_version)
+      A2A_RELEASE_VERSION_INPUT="$value"
+      ;;
     opencode_timeout)
       OPENCODE_TIMEOUT_INPUT="$value"
       ;;
@@ -174,6 +182,7 @@ Usage:
   [a2a_cancel_abort_timeout_seconds=<seconds>] [a2a_enable_session_shell=<bool>] \
   [a2a_strict_isolation=<bool>] [a2a_systemd_tasks_max=<int>] [a2a_systemd_limit_nofile=<int>] \
   [a2a_systemd_memory_max=<value>] [a2a_systemd_cpu_quota=<value>] \
+  [install_mode=<source|release>] [release_version=<version>] \
   [opencode_provider_id=<id>] [opencode_model_id=<id>] [opencode_lsp=<bool>] [opencode_log_level=<level>] \
   [repo_url=<url>] [repo_branch=<branch>] \
   [opencode_timeout=<seconds>] [opencode_timeout_stream=<seconds>] [git_identity_name=<name>] [enable_secret_persistence=<bool>] \
@@ -190,6 +199,13 @@ export OPENCODE_CORE_DIR="${OPENCODE_CORE_DIR:-/opt/.opencode}"
 export UV_PYTHON_DIR="${UV_PYTHON_DIR:-/opt/uv-python}"
 export UV_PYTHON_DIR_GROUP="${UV_PYTHON_DIR_GROUP-opencode}"
 export DATA_ROOT="${DATA_ROOT:-/data/opencode-a2a}"
+export A2A_INSTALL_MODE="${A2A_INSTALL_MODE:-source}"
+export A2A_RELEASE_VERSION="${A2A_RELEASE_VERSION:-}"
+export A2A_RELEASE_ROOT="${A2A_RELEASE_ROOT:-/opt/opencode-a2a-release}"
+export A2A_TOOL_DIR="${A2A_TOOL_DIR:-${A2A_RELEASE_ROOT}/tool}"
+export A2A_TOOL_BIN_DIR="${A2A_TOOL_BIN_DIR:-${A2A_RELEASE_ROOT}/bin}"
+export DEPLOY_HELPER_DIR="${DEPLOY_HELPER_DIR:-}"
+export A2A_BIN="${A2A_BIN:-}"
 
 export_if_present() {
   local target="$1"
@@ -204,6 +220,8 @@ export_if_present "OPENCODE_MODEL_ID" "$OPENCODE_MODEL_ID_INPUT"
 export_if_present "OPENCODE_LSP" "$OPENCODE_LSP_INPUT"
 export_if_present "REPO_URL" "$REPO_URL_INPUT"
 export_if_present "REPO_BRANCH" "$REPO_BRANCH_INPUT"
+export_if_present "A2A_INSTALL_MODE" "$A2A_INSTALL_MODE_INPUT"
+export_if_present "A2A_RELEASE_VERSION" "$A2A_RELEASE_VERSION_INPUT"
 export_if_present "OPENCODE_TIMEOUT" "$OPENCODE_TIMEOUT_INPUT"
 export_if_present "OPENCODE_TIMEOUT_STREAM" "$OPENCODE_TIMEOUT_STREAM_INPUT"
 export_if_present "GIT_IDENTITY_NAME" "$GIT_IDENTITY_NAME_INPUT"
@@ -274,6 +292,24 @@ is_truthy() {
   esac
 }
 
+case "${A2A_INSTALL_MODE,,}" in
+  source|release)
+    A2A_INSTALL_MODE="${A2A_INSTALL_MODE,,}"
+    ;;
+  *)
+    echo "A2A_INSTALL_MODE must be source or release; got: ${A2A_INSTALL_MODE}" >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$A2A_INSTALL_MODE" == "release" ]]; then
+  export DEPLOY_HELPER_DIR="${DEPLOY_HELPER_DIR:-${A2A_RELEASE_ROOT}/runtime}"
+  export A2A_BIN="${A2A_BIN:-${A2A_TOOL_BIN_DIR}/opencode-a2a-server}"
+  export OPENCODE_A2A_DIR="${DEPLOY_HELPER_DIR}"
+else
+  export DEPLOY_HELPER_DIR="${DEPLOY_HELPER_DIR:-${OPENCODE_A2A_DIR}/scripts/deploy}"
+fi
+
 UPDATE_A2A="false"
 FORCE_RESTART="false"
 if [[ -n "$UPDATE_A2A_INPUT" ]] && is_truthy "$UPDATE_A2A_INPUT"; then
@@ -291,7 +327,13 @@ if is_truthy "$A2A_ENABLE_SESSION_SHELL"; then
 fi
 
 if [[ "$UPDATE_A2A" == "true" ]]; then
-  "${SCRIPT_DIR}/deploy/update_a2a.sh"
+  if [[ "$A2A_INSTALL_MODE" == "release" ]]; then
+    "${SCRIPT_DIR}/deploy/update_a2a_release.sh"
+  else
+    "${SCRIPT_DIR}/deploy/update_a2a.sh"
+  fi
+elif [[ "$A2A_INSTALL_MODE" == "release" ]]; then
+  "${SCRIPT_DIR}/deploy/install_release_runtime.sh"
 fi
 
 "${SCRIPT_DIR}/deploy/install_units.sh"

@@ -12,7 +12,7 @@ This script does **not** replace the systemd deployment flow:
 - It does not create system users, isolated data roots, or systemd units.
 - It is best suited for single-user or small-team environments that already trust the current host user and workspace.
 
-For production-oriented multi-instance deployment, continue using [`deploy.sh`](./deploy_readme.md).
+For production-oriented multi-instance deployment, prefer [`deploy_release.sh`](./deploy_release_readme.md). Use [`deploy.sh`](./deploy_readme.md) only for source-based debugging workflows.
 
 ## Usage
 

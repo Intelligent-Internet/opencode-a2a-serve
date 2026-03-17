@@ -109,27 +109,63 @@ Read before deployment:
 - [SECURITY.md](SECURITY.md)
 - [scripts/deploy_readme.md](scripts/deploy_readme.md)
 
-## Quick Start & Development
+## Install Released CLI
 
-1. Start OpenCode:
+Released versions are published to PyPI and mapped to Git tags / GitHub
+Releases. This is the recommended entry point for users.
+
+Install the latest release:
+
+```bash
+uv tool install opencode-a2a-server
+```
+
+Upgrade an existing installation:
+
+```bash
+uv tool upgrade opencode-a2a-server
+```
+
+Install an exact release:
+
+```bash
+uv tool install "opencode-a2a-server==<version>"
+```
+
+Start the released CLI:
 
 ```bash
 opencode serve
+A2A_BEARER_TOKEN=prod-token opencode-a2a-server
 ```
 
-2. Install dependencies:
+Default address: `http://127.0.0.1:8000`
+
+For long-running systemd deployments, prefer the release-based scripts:
+
+- [scripts/init_release_system.sh](scripts/init_release_system.sh)
+- [scripts/deploy_release.sh](scripts/deploy_release.sh)
+
+The older source-based deployment scripts remain available for contributors and
+debugging workflows that intentionally track a repository checkout.
+
+## Development From Source
+
+Use the repository checkout directly only for development, local debugging, or
+validation against unreleased changes on `main`.
+
+1. Install dependencies:
 
 ```bash
 uv sync --all-extras
 ```
 
-3. Start this service:
+2. Start this service from the source tree:
 
 ```bash
+opencode serve
 A2A_BEARER_TOKEN=dev-token uv run opencode-a2a-server
 ```
-
-Default address: `http://127.0.0.1:8000`
 
 Baseline validation:
 
@@ -145,12 +181,18 @@ uv run pytest
   consumption guidance.
 - [docs/agent_deploy_sop.md](docs/agent_deploy_sop.md)
   Operator-facing SOP for choosing, starting, verifying, and releasing
-  `deploy.sh` vs `deploy_light.sh`.
+  `deploy_release.sh`, `deploy.sh`, and `deploy_light.sh`.
+- [docs/release_deploy_smoke_test.md](docs/release_deploy_smoke_test.md)
+  Real-host smoke test checklist for release-based systemd deployment.
 - [scripts/README.md](scripts/README.md)
   Entry points for init, deploy, lightweight deploy, local start, and
   uninstall scripts.
+- [scripts/deploy_release_readme.md](scripts/deploy_release_readme.md)
+  Release-based systemd deployment guide for published package versions.
+- [scripts/init_release_system_readme.md](scripts/init_release_system_readme.md)
+  Release-based host bootstrap guide that avoids source checkout.
 - [scripts/deploy_readme.md](scripts/deploy_readme.md)
-  systemd deployment, runtime secret strategy, and operations guidance.
+  Source-based systemd deployment, runtime secret strategy, and operations guidance.
 - [scripts/deploy_light_readme.md](scripts/deploy_light_readme.md)
   current-user lightweight deployment without systemd.
 - [SECURITY.md](SECURITY.md)
