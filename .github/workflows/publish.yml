@@ -52,9 +52,7 @@ jobs:
           PY
 
       - name: Smoke test wheel install
-        run: |
-          uv tool install --from dist/*.whl --python 3.13 opencode-a2a-server
-          uv tool list
+        run: bash ./scripts/smoke_test_built_cli.sh
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
