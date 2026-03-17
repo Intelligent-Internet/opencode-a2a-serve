@@ -48,29 +48,6 @@ die() {
   exit 1
 }
 
-unsupported_action() {
-  local action="$1"
-  echo "deploy_light.sh no longer supports action verbs like ${action}." >&2
-  echo "Run it directly with key=value arguments, and use your process manager to manage lifecycle." >&2
-  exit 1
-}
-
-ACTION="${1:-}"
-case "${ACTION,,}" in
-  "")
-    ;;
-  start|stop|status|restart)
-    unsupported_action "${ACTION,,}"
-    ;;
-  *=*)
-    ;;
-  *)
-    echo "Unknown action: ${ACTION}" >&2
-    usage
-    exit 1
-    ;;
-esac
-
 for arg in "$@"; do
   if [[ "$arg" != *=* ]]; then
     die "Unknown argument format: $arg (expected key=value)"
