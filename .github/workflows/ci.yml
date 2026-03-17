@@ -45,3 +45,6 @@ jobs:
 
       - name: Run dependency vulnerability audit
         run: uv run pip-audit
+
+      - name: Build package artifacts
+        run: uv build --no-sources
