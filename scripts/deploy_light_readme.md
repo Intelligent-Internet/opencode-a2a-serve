@@ -25,15 +25,13 @@ export A2A_BEARER_TOKEN='<a2a-token>'
 Start one instance:
 
 ```bash
-./scripts/deploy_light.sh start workdir=/abs/path/to/workspace
+./scripts/deploy_light.sh workdir=/abs/path/to/workspace
 ```
-
-`deploy_light.sh` no longer supports `status`, `stop`, or `restart`. Use `nohup`, `pm2`, `systemd`, or another external supervisor when detached execution, restart policy, or log capture is required.
 
 Example with explicit ports and instance name:
 
 ```bash
-./scripts/deploy_light.sh start \
+./scripts/deploy_light.sh \
   instance=demo \
   workdir=/srv/workspaces/demo \
   a2a_host=127.0.0.1 \
@@ -46,7 +44,7 @@ Example with explicit ports and instance name:
 ## Key Inputs
 
 - `workdir`:
-  required for `start`; becomes the default `OPENCODE_DIRECTORY`
+  required; becomes the default `OPENCODE_DIRECTORY`
   exposed to the A2A layer
 - `instance`:
   accepted for backward-compatible parsing only; no longer used to isolate pid/log directories
@@ -65,7 +63,7 @@ Example with explicit ports and instance name:
 
 ## Readiness Behavior
 
-On `start`, the script:
+On launch, the script:
 
 1. validates required inputs and local commands
 2. starts `opencode serve`
