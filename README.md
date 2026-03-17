@@ -182,6 +182,8 @@ uv run pytest
 - [docs/agent_deploy_sop.md](docs/agent_deploy_sop.md)
   Operator-facing SOP for choosing, starting, verifying, and releasing
   `deploy_release.sh`, `deploy.sh`, and `deploy_light.sh`.
+- [docs/release_deploy_smoke_test.md](docs/release_deploy_smoke_test.md)
+  Real-host smoke test checklist for release-based systemd deployment.
 - [scripts/README.md](scripts/README.md)
   Entry points for init, deploy, lightweight deploy, local start, and
   uninstall scripts.

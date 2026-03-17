@@ -69,3 +69,4 @@ Update to an exact published release:
   published package; later plain deploy reruns reuse the installed runtime
 - use [`deploy.sh`](./deploy_readme.md) only when you intentionally want a
   source-based systemd deploy for development or debugging
+- for real-host acceptance steps, see [`../docs/release_deploy_smoke_test.md`](../docs/release_deploy_smoke_test.md)
