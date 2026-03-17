@@ -7,9 +7,27 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 ACTION="${1:-}"
-if [[ "$ACTION" == "start" ]]; then
-  shift
-fi
+case "${ACTION,,}" in
+  "")
+    ACTION="start"
+    ;;
+  start)
+    ACTION="start"
+    shift
+    ;;
+  stop|status|restart)
+    ACTION="${ACTION,,}"
+    shift
+    ;;
+  *=*)
+    ACTION="start"
+    ;;
+  *)
+    echo "Unknown action: ${ACTION}" >&2
+    usage
+    exit 1
+    ;;
+esac
 
 WORKDIR=""
 A2A_HOST="127.0.0.1"
@@ -34,6 +52,8 @@ OPENCODE_LSP="false"
 OPENCODE_EXTRA_ARGS=""
 OPENCODE_TIMEOUT=""
 OPENCODE_TIMEOUT_STREAM=""
+A2A_SERVER_BIN=""
+A2A_SERVER_MODE=""
 
 START_TIMEOUT_SECONDS="20"
 
@@ -48,6 +68,13 @@ USAGE
 
 die() {
   echo "$*" >&2
+  exit 1
+}
+
+unsupported_action() {
+  local action="$1"
+  echo "deploy_light.sh is a foreground launcher and no longer supports ${action}." >&2
+  echo "Use your process manager to manage the launched process lifecycle." >&2
   exit 1
 }
 
@@ -136,6 +163,10 @@ for arg in "$@"; do
   esac
 done
 
+if [[ "$ACTION" != "start" ]]; then
+  unsupported_action "$ACTION"
+fi
+
 if [[ -z "$WORKDIR" ]]; then
   usage
   exit 1
@@ -215,6 +246,30 @@ resolve_opencode_bin() {
   die "opencode binary not found in PATH: $OPENCODE_BIN"
 }
 
+resolve_a2a_server_bin() {
+  local local_bin="${ROOT_DIR}/.venv/bin/opencode-a2a-server"
+  if [[ -x "$local_bin" ]]; then
+    A2A_SERVER_BIN="$local_bin"
+    A2A_SERVER_MODE="direct"
+    return 0
+  fi
+
+  if command -v opencode-a2a-server >/dev/null 2>&1; then
+    A2A_SERVER_BIN="$(command -v opencode-a2a-server)"
+    A2A_SERVER_MODE="direct"
+    return 0
+  fi
+
+  if command -v uv >/dev/null 2>&1; then
+    if uv run --no-sync opencode-a2a-server --help >/dev/null 2>&1; then
+      A2A_SERVER_MODE="uv"
+      return 0
+    fi
+  fi
+
+  die "opencode-a2a-server entrypoint not found. Expected ${local_bin}, opencode-a2a-server in PATH, or a working 'uv run --no-sync opencode-a2a-server'."
+}
+
 run_python_http_check_with() {
   local url="$1"
   shift
@@ -269,7 +324,6 @@ require_start_prerequisites() {
   [[ -n "${A2A_BEARER_TOKEN:-}" ]] || die "A2A_BEARER_TOKEN is required."
   [[ -n "$WORKDIR" ]] || die "workdir is required."
   [[ -d "$WORKDIR" ]] || die "workdir does not exist: $WORKDIR"
-  command -v uv >/dev/null 2>&1 || die "uv not found in PATH."
 
   validate_port "a2a_port" "$A2A_PORT"
   validate_port "opencode_bind_port" "$OPENCODE_BIND_PORT"
@@ -284,13 +338,26 @@ require_start_prerequisites() {
 
   OPENCODE_BIN_RESOLVED="$(resolve_opencode_bin)"
   export OPENCODE_BIN_RESOLVED
+  resolve_a2a_server_bin
 }
 
 OPENCODE_PID=""
 A2A_PID=""
 
-cleanup() {
-  echo "Stopping services..."
+cleanup_children() {
+  local stopping=false
+
+  if [[ -n "$A2A_PID" ]] && kill -0 "$A2A_PID" >/dev/null 2>&1; then
+    stopping=true
+  fi
+  if [[ -n "$OPENCODE_PID" ]] && kill -0 "$OPENCODE_PID" >/dev/null 2>&1; then
+    stopping=true
+  fi
+
+  if [[ "$stopping" == true ]]; then
+    echo "Stopping services..." >&2
+  fi
+
   if [[ -n "$A2A_PID" ]]; then
     kill "$A2A_PID" >/dev/null 2>&1 || true
     wait "$A2A_PID" >/dev/null 2>&1 || true
@@ -299,10 +366,30 @@ cleanup() {
     kill "$OPENCODE_PID" >/dev/null 2>&1 || true
     wait "$OPENCODE_PID" >/dev/null 2>&1 || true
   fi
-  exit 0
 }
 
-trap cleanup SIGINT SIGTERM EXIT
+on_exit() {
+  local status="$1"
+  trap - EXIT INT TERM
+  cleanup_children
+  exit "$status"
+}
+
+on_signal() {
+  local signal="$1"
+  local status=143
+  if [[ "$signal" == "INT" ]]; then
+    status=130
+  fi
+  echo "Received ${signal}; shutting down." >&2
+  trap - EXIT INT TERM
+  cleanup_children
+  exit "$status"
+}
+
+trap 'on_exit $?' EXIT
+trap 'on_signal INT' INT
+trap 'on_signal TERM' TERM
 
 start_instance() {
   require_start_prerequisites
@@ -349,7 +436,10 @@ start_instance() {
     [[ -n "$OPENCODE_MODEL_ID" ]] && export OPENCODE_MODEL_ID
     [[ -n "$OPENCODE_TIMEOUT" ]] && export OPENCODE_TIMEOUT
     [[ -n "$OPENCODE_TIMEOUT_STREAM" ]] && export OPENCODE_TIMEOUT_STREAM
-    exec uv run opencode-a2a-server
+    if [[ "$A2A_SERVER_MODE" == "direct" ]]; then
+      exec "$A2A_SERVER_BIN"
+    fi
+    exec uv run --no-sync opencode-a2a-server
   ) &
   A2A_PID=$!
 
@@ -364,8 +454,13 @@ Agent Card: ${A2A_PUBLIC_URL}/.well-known/agent-card.json
 REST endpoint: ${A2A_PUBLIC_URL}/v1/message:send
 INFO
 
+  local child_status=0
+  set +e
   wait -n "$OPENCODE_PID" "$A2A_PID"
-  echo "One service exited. Shutting down."
+  child_status=$?
+  set -e
+  echo "One service exited. Shutting down." >&2
+  return "$child_status"
 }
 
 start_instance
