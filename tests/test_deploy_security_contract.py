@@ -6,6 +6,9 @@ INSTALL_UNITS_TEXT = Path("scripts/deploy/install_units.sh").read_text()
 README_TEXT = Path("README.md").read_text()
 SECURITY_TEXT = Path("SECURITY.md").read_text()
 DEPLOY_README_TEXT = Path("scripts/deploy_readme.md").read_text()
+DEPLOY_RELEASE_README_TEXT = Path("scripts/deploy_release_readme.md").read_text()
+SCRIPTS_INDEX_TEXT = Path("scripts/README.md").read_text()
+AGENT_DEPLOY_SOP_TEXT = Path("docs/agent_deploy_sop.md").read_text()
 
 
 def test_deploy_defaults_to_operator_provisioned_runtime_secrets() -> None:
@@ -50,6 +53,17 @@ def test_setup_instance_generates_examples_and_requires_runtime_secret_files() -
     assert request_limit_line in SETUP_INSTANCE_TEXT
 
 
+def test_deploy_supports_release_and_source_install_modes() -> None:
+    assert 'export A2A_INSTALL_MODE="${A2A_INSTALL_MODE:-source}"' in DEPLOY_SH_TEXT
+    assert "A2A_INSTALL_MODE must be source or release" in DEPLOY_SH_TEXT
+    assert 'if [[ "$A2A_INSTALL_MODE" == "release" ]]; then' in DEPLOY_SH_TEXT
+    assert '"${SCRIPT_DIR}/deploy/install_release_runtime.sh"' in DEPLOY_SH_TEXT
+    assert '"${SCRIPT_DIR}/deploy/update_a2a_release.sh"' in DEPLOY_SH_TEXT
+    assert "Environment=A2A_BIN=${A2A_BIN}" in INSTALL_UNITS_TEXT
+    assert "ExecStart=${DEPLOY_HELPER_DIR}/run_a2a.sh" in INSTALL_UNITS_TEXT
+    assert "ExecStart=${DEPLOY_HELPER_DIR}/run_opencode.sh" in INSTALL_UNITS_TEXT
+
+
 def test_security_docs_emphasize_single_tenant_boundary_and_secret_strategy() -> None:
     assert "single-tenant trust boundary" in README_TEXT
     assert "a2a-client-hub" in README_TEXT
@@ -57,11 +71,15 @@ def test_security_docs_emphasize_single_tenant_boundary_and_secret_strategy() ->
     assert "[SECURITY.md](SECURITY.md)" in README_TEXT
     assert "uv tool install opencode-a2a-server" in README_TEXT
     assert "Install Released CLI" in README_TEXT
+    assert "scripts/deploy_release.sh" in README_TEXT
     assert "secret persistence is opt-in" in SECURITY_TEXT
     assert "single-tenant trust boundary" in SECURITY_TEXT
     assert "ENABLE_SECRET_PERSISTENCE=false" in DEPLOY_README_TEXT
     assert "opencode.auth.env" in DEPLOY_README_TEXT
     assert "a2a.secret.env" in DEPLOY_README_TEXT
+    assert "release-based systemd deployment" in DEPLOY_RELEASE_README_TEXT
+    assert "source-based multi-instance systemd deployment" in SCRIPTS_INDEX_TEXT
+    assert "release-based, systemd-managed, recommended" in AGENT_DEPLOY_SOP_TEXT
 
 
 def test_uninstall_removes_instance_systemd_overrides() -> None:

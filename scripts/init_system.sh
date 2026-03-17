@@ -17,7 +17,7 @@ UV_PYTHON_DIR_GROUP="opencode"
 UV_PYTHON_INSTALL_DIR="$UV_PYTHON_DIR"
 DATA_ROOT="/data/opencode-a2a"
 OPENCODE_A2A_REPO="https://github.com/Intelligent-Internet/opencode-a2a-server.git"
-OPENCODE_A2A_REF="release"
+OPENCODE_A2A_REF="main"
 OPENCODE_INSTALLER_URL="https://opencode.ai/install"
 OPENCODE_INSTALLER_VERSION="1.2.5"
 OPENCODE_INSTALLER_SHA256="fc3c1b2123f49b6df545a7622e5127d21cd794b15134fc3b66e1ca49f7fb297e"
@@ -28,6 +28,7 @@ INSTALL_PACKAGES="true"
 INSTALL_UV="true"
 INSTALL_GH="true"
 INSTALL_NODE="true"
+INSTALL_A2A_SOURCE="true"
 
 # Node.js configuration.
 NODE_MAJOR="20"
@@ -699,41 +700,45 @@ fi
 log_done "uv Python version check completed."
 
 log_start "Checking repository state..."
-if [[ -d "$OPENCODE_A2A_DIR/.git" ]]; then
-  log_done "Repo exists; skip clone: $OPENCODE_A2A_DIR"
-  OPENCODE_A2A_REPO_READY=1
+if ! is_truthy "$INSTALL_A2A_SOURCE"; then
+  log_done "Source bootstrap disabled; skip repo clone and source venv setup."
 else
-  if [[ -d "$OPENCODE_A2A_DIR" && -n "$(ls -A "$OPENCODE_A2A_DIR" 2>/dev/null)" ]]; then
-    warn "Directory not empty and not a git repo; skip clone: $OPENCODE_A2A_DIR"
-    INCOMPLETE=1
+  if [[ -d "$OPENCODE_A2A_DIR/.git" ]]; then
+    log_done "Repo exists; skip clone: $OPENCODE_A2A_DIR"
+    OPENCODE_A2A_REPO_READY=1
   else
-    if ! command -v git >/dev/null 2>&1; then
-      warn "git not available; cannot clone repo."
+    if [[ -d "$OPENCODE_A2A_DIR" && -n "$(ls -A "$OPENCODE_A2A_DIR" 2>/dev/null)" ]]; then
+      warn "Directory not empty and not a git repo; skip clone: $OPENCODE_A2A_DIR"
       INCOMPLETE=1
     else
-      log_start "Cloning repo to $OPENCODE_A2A_DIR"
-      if ! $SUDO git clone "$OPENCODE_A2A_REPO" "$OPENCODE_A2A_DIR"; then
-        warn "git clone failed. Ensure SSH key is configured or manually clone into $OPENCODE_A2A_DIR."
+      if ! command -v git >/dev/null 2>&1; then
+        warn "git not available; cannot clone repo."
         INCOMPLETE=1
       else
-        resolved_opencode_a2a_ref=""
-        if ! resolved_opencode_a2a_ref="$(resolve_opencode_a2a_ref "$OPENCODE_A2A_REPO" "$OPENCODE_A2A_REF")"; then
-          warn "Failed to resolve opencode-a2a-server ref from $OPENCODE_A2A_REF."
-          warn "Set OPENCODE_A2A_REF to an exact release tag, branch, or commit and retry."
+        log_start "Cloning repo to $OPENCODE_A2A_DIR"
+        if ! $SUDO git clone "$OPENCODE_A2A_REPO" "$OPENCODE_A2A_DIR"; then
+          warn "git clone failed. Ensure SSH key is configured or manually clone into $OPENCODE_A2A_DIR."
           INCOMPLETE=1
-        elif [[ -n "$resolved_opencode_a2a_ref" ]]; then
-          log_start "Checking out opencode-a2a-server ref: $resolved_opencode_a2a_ref"
-          if ! $SUDO git -C "$OPENCODE_A2A_DIR" checkout "$resolved_opencode_a2a_ref"; then
-            warn "git checkout failed for ref $resolved_opencode_a2a_ref."
+        else
+          resolved_opencode_a2a_ref=""
+          if ! resolved_opencode_a2a_ref="$(resolve_opencode_a2a_ref "$OPENCODE_A2A_REPO" "$OPENCODE_A2A_REF")"; then
+            warn "Failed to resolve opencode-a2a-server ref from $OPENCODE_A2A_REF."
+            warn "Set OPENCODE_A2A_REF to an exact release tag, branch, or commit and retry."
             INCOMPLETE=1
+          elif [[ -n "$resolved_opencode_a2a_ref" ]]; then
+            log_start "Checking out opencode-a2a-server ref: $resolved_opencode_a2a_ref"
+            if ! $SUDO git -C "$OPENCODE_A2A_DIR" checkout "$resolved_opencode_a2a_ref"; then
+              warn "git checkout failed for ref $resolved_opencode_a2a_ref."
+              INCOMPLETE=1
+            else
+              OPENCODE_A2A_REPO_READY=1
+              log_done "Checked out opencode-a2a-server ref: $resolved_opencode_a2a_ref"
+            fi
           else
             OPENCODE_A2A_REPO_READY=1
-            log_done "Checked out opencode-a2a-server ref: $resolved_opencode_a2a_ref"
           fi
-        else
-          OPENCODE_A2A_REPO_READY=1
+          log_done "Repo cloned to $OPENCODE_A2A_DIR"
         fi
-        log_done "Repo cloned to $OPENCODE_A2A_DIR"
       fi
     fi
   fi
@@ -741,27 +746,31 @@ fi
 log_done "Repository check completed."
 
 log_start "Checking A2A virtual environment..."
-if [[ -x "${OPENCODE_A2A_DIR}/.venv/bin/opencode-a2a-server" ]]; then
-  log_done "A2A venv already initialized; skip."
-elif [[ "$OPENCODE_A2A_REPO_READY" -ne 1 ]]; then
-  warn "Repository ref is not ready; skipping A2A venv creation."
-  INCOMPLETE=1
+if ! is_truthy "$INSTALL_A2A_SOURCE"; then
+  log_done "Source bootstrap disabled; skip A2A source venv creation."
 else
-  if ! command -v uv >/dev/null 2>&1; then
-    warn "uv not available; cannot create A2A venv."
-    INCOMPLETE=1
-  elif [[ ! -f "${OPENCODE_A2A_DIR}/pyproject.toml" ]]; then
-    warn "pyproject.toml not found in ${OPENCODE_A2A_DIR}; cannot create venv."
+  if [[ -x "${OPENCODE_A2A_DIR}/.venv/bin/opencode-a2a-server" ]]; then
+    log_done "A2A venv already initialized; skip."
+  elif [[ "$OPENCODE_A2A_REPO_READY" -ne 1 ]]; then
+    warn "Repository ref is not ready; skipping A2A venv creation."
     INCOMPLETE=1
   else
-    log_start "Creating A2A venv with uv sync..."
-    (
-      cd "$OPENCODE_A2A_DIR"
-      UV_PYTHON_DIR="$UV_PYTHON_DIR" \
-        UV_PYTHON_INSTALL_DIR="$UV_PYTHON_INSTALL_DIR" \
-        uv sync --all-extras
-    )
-    log_done "A2A venv created."
+    if ! command -v uv >/dev/null 2>&1; then
+      warn "uv not available; cannot create A2A venv."
+      INCOMPLETE=1
+    elif [[ ! -f "${OPENCODE_A2A_DIR}/pyproject.toml" ]]; then
+      warn "pyproject.toml not found in ${OPENCODE_A2A_DIR}; cannot create venv."
+      INCOMPLETE=1
+    else
+      log_start "Creating A2A venv with uv sync..."
+      (
+        cd "$OPENCODE_A2A_DIR"
+        UV_PYTHON_DIR="$UV_PYTHON_DIR" \
+          UV_PYTHON_INSTALL_DIR="$UV_PYTHON_INSTALL_DIR" \
+          uv sync --all-extras
+      )
+      log_done "A2A venv created."
+    fi
   fi
 fi
 log_done "A2A virtual environment check completed."

@@ -63,13 +63,28 @@ def test_node_install_flow_avoids_remote_setup_scripts() -> None:
 
 
 def test_repo_bootstrap_defaults_to_release_ref() -> None:
-    assert _extract_var(INIT_SYSTEM_TEXT, "OPENCODE_A2A_REF") == "release"
+    assert _extract_var(INIT_SYSTEM_TEXT, "OPENCODE_A2A_REF") == "main"
+    assert _extract_var(INIT_SYSTEM_TEXT, "INSTALL_A2A_SOURCE") == "true"
     assert "OPENCODE_A2A_REPO_READY=0" in INIT_SYSTEM_TEXT
     assert 'if [[ "$OPENCODE_A2A_REPO_READY" -ne 1 ]]; then' in INIT_SYSTEM_TEXT
     assert "Repository ref is not ready; skipping A2A venv creation." in INIT_SYSTEM_TEXT
     assert "resolve_opencode_a2a_ref" in INIT_SYSTEM_TEXT
     assert "fetch_github_latest_release_tag" in INIT_SYSTEM_TEXT
-    assert "latest GitHub Release tag" in Path("scripts/init_system_readme.md").read_text()
+    assert (
+        "source-based OpenCode + A2A deployment"
+        in Path("scripts/init_system_readme.md").read_text()
+    )
+    assert "init_release_system.sh" in Path("scripts/init_system_readme.md").read_text()
+
+
+def test_release_bootstrap_wrapper_disables_source_checkout() -> None:
+    release_init_text = Path("scripts/init_release_system.sh").read_text()
+    release_init_readme_text = Path("scripts/init_release_system_readme.md").read_text()
+
+    assert 'export INSTALL_A2A_SOURCE="false"' in release_init_text
+    assert '"${SCRIPT_DIR}/deploy/install_release_runtime.sh"' in release_init_text
+    assert "does not clone the" in release_init_readme_text
+    assert "/opt/opencode-a2a-release" in release_init_readme_text
 
 
 def _parse_octal_mode(mode: str) -> int:
