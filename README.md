@@ -75,7 +75,7 @@ flowchart TD
     Mapping --> Runtime["OpenCode HTTP runtime"]
 
     Api --> Auth["Bearer auth + request logging controls"]
-    Api --> Deploy["systemd and lightweight deployment scripts"]
+    Api --> Deploy["release-based deployment tooling"]
     Runtime --> Workspace["Shared workspace / environment boundary"]
 ```
 
@@ -212,8 +212,6 @@ uv run pytest
   Preview-first uninstall flow for deployed instances.
 - [scripts/README.md](scripts/README.md)
   Full script index, including contributor/internal paths.
-- [scripts/deploy_light_readme.md](scripts/deploy_light_readme.md)
-  Current-user self-host helper script details when a user still wants a wrapper.
 
 ### Contributor / Internal Docs
 

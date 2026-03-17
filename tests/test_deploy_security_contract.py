@@ -3,7 +3,6 @@ from pathlib import Path
 DEPLOY_SH_TEXT = Path("scripts/deploy.sh").read_text()
 SETUP_INSTANCE_TEXT = Path("scripts/deploy/setup_instance.sh").read_text()
 INSTALL_UNITS_TEXT = Path("scripts/deploy/install_units.sh").read_text()
-DEPLOY_LIGHT_TEXT = Path("scripts/deploy_light.sh").read_text()
 README_TEXT = Path("README.md").read_text()
 SECURITY_TEXT = Path("SECURITY.md").read_text()
 DEPLOY_README_TEXT = Path("scripts/deploy_readme.md").read_text()
@@ -80,10 +79,10 @@ def test_security_docs_emphasize_single_tenant_boundary_and_secret_strategy() ->
     assert "a2a.secret.env" in DEPLOY_README_TEXT
     assert "release-based systemd deployment" in DEPLOY_RELEASE_README_TEXT
     assert "source-based multi-instance systemd deployment" in SCRIPTS_INDEX_TEXT
-    assert "lightweight local foreground launcher" in SCRIPTS_INDEX_TEXT
     assert "release-based, systemd-managed, recommended" in AGENT_DEPLOY_SOP_TEXT
-    assert "deploy_light.sh start" not in AGENT_DEPLOY_SOP_TEXT
-    assert "start|stop|status|restart" not in DEPLOY_LIGHT_TEXT
+    assert "deploy_light.sh" not in README_TEXT
+    assert "deploy_light.sh" not in SCRIPTS_INDEX_TEXT
+    assert "deploy_light.sh" not in AGENT_DEPLOY_SOP_TEXT
 
 
 def test_uninstall_removes_instance_systemd_overrides() -> None:

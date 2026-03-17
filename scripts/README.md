@@ -19,7 +19,6 @@ Executable scripts live in this directory. This file is the entry index for scri
 - [`init_system_readme.md`](./init_system_readme.md): source-based host bootstrap for contributor/internal debugging (script: [`init_system.sh`](./init_system.sh))
 - [`deploy_release_readme.md`](./deploy_release_readme.md): release-based multi-instance systemd deployment (script: [`deploy_release.sh`](./deploy_release.sh))
 - [`deploy_readme.md`](./deploy_readme.md): source-based multi-instance systemd deployment for contributor/internal debugging (script: [`deploy.sh`](./deploy.sh))
-- [`deploy_light_readme.md`](./deploy_light_readme.md): lightweight local foreground launcher for one current-user instance (script: [`deploy_light.sh`](./deploy_light.sh))
 - [`uninstall_readme.md`](./uninstall_readme.md): preview-first instance removal (script: [`uninstall.sh`](./uninstall.sh))
 
 ## Other Scripts
