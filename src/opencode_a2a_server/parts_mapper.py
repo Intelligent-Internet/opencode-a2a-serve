@@ -85,7 +85,7 @@ def map_a2a_parts_to_opencode_parts(parts: Any) -> list[OpencodeInputPart]:
 
         if kind == "data":
             raise UnsupportedA2AInputError(
-                f"request.parts[{index}] DataPart is not supported yet; use TextPart or FilePart."
+                f"request.parts[{index}] DataPart input is not supported; use TextPart or FilePart."
             )
 
         raise UnsupportedA2AInputError(
