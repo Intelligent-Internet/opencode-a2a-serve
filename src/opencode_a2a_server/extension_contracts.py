@@ -160,6 +160,7 @@ SESSION_QUERY_ERROR_BUSINESS_CODES: dict[str, int] = {
     "SESSION_NOT_FOUND": -32001,
     "SESSION_FORBIDDEN": -32006,
     "METHOD_DISABLED": -32007,
+    "METHOD_NOT_SUPPORTED": -32601,
     "UPSTREAM_UNREACHABLE": -32002,
     "UPSTREAM_HTTP_ERROR": -32003,
     "UPSTREAM_PAYLOAD_ERROR": -32005,
@@ -170,6 +171,8 @@ SESSION_QUERY_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "session_id",
     "upstream_status",
     "detail",
+    "supported_methods",
+    "protocol_version",
 )
 SESSION_QUERY_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "type",
@@ -587,4 +590,74 @@ def build_provider_discovery_extension_params(
                 "downstream callers do not need to parse raw OpenCode payloads."
             ),
         ],
+    }
+
+
+def build_compatibility_profile_params(
+    *,
+    protocol_version: str,
+) -> dict[str, Any]:
+    return {
+        "profile_id": "opencode-a2a-baseline-v1",
+        "protocol_version": protocol_version,
+        "core_jsonrpc_methods": [
+            "message/send",
+            "message/stream",
+            "tasks/get",
+            "tasks/cancel",
+            "tasks/resubscribe",
+        ],
+        "core_http_endpoints": [
+            "POST /v1/message:send",
+            "POST /v1/message:stream",
+            "GET /v1/tasks/{id}",
+            "POST /v1/tasks/{id}:cancel",
+            "GET /v1/tasks/{id}:subscribe",
+        ],
+        "extension_retention": "stable",
+        "method_retention": "deployment-conditional",
+        "consumer_guidance": "discovery-first",
+    }
+
+
+def build_wire_contract_params(
+    *,
+    protocol_version: str,
+    deployment_context: dict[str, str | bool],
+) -> dict[str, Any]:
+    supported_methods = [
+        "message/send",
+        "message/stream",
+        "tasks/get",
+        "tasks/cancel",
+        "tasks/resubscribe",
+        *SESSION_QUERY_METHODS.values(),
+        *PROVIDER_DISCOVERY_METHODS.values(),
+        *INTERRUPT_CALLBACK_METHODS.values(),
+    ]
+    conditionally_available_methods = []
+    if not deployment_context.get("session_shell_enabled"):
+        conditionally_available_methods.append(SESSION_QUERY_METHODS["shell"])
+
+    return {
+        "protocol_version": protocol_version,
+        "supported_methods": sorted(supported_methods),
+        "conditionally_available_methods": sorted(conditionally_available_methods),
+        "core_http_endpoints": [
+            "POST /v1/message:send",
+            "POST /v1/message:stream",
+            "GET /v1/tasks/{id}",
+            "POST /v1/tasks/{id}:cancel",
+            "GET /v1/tasks/{id}:subscribe",
+        ],
+        "unsupported_method_error_contract": {
+            "code": -32601,
+            "data_type": "METHOD_NOT_SUPPORTED",
+            "data_fields": [
+                "type",
+                "method",
+                "supported_methods",
+                "protocol_version",
+            ],
+        },
     }

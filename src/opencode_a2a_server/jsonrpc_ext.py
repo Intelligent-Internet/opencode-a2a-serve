@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 ERR_SESSION_NOT_FOUND = SESSION_QUERY_ERROR_BUSINESS_CODES["SESSION_NOT_FOUND"]
 ERR_SESSION_FORBIDDEN = SESSION_QUERY_ERROR_BUSINESS_CODES["SESSION_FORBIDDEN"]
 ERR_METHOD_DISABLED = SESSION_QUERY_ERROR_BUSINESS_CODES["METHOD_DISABLED"]
+ERR_METHOD_NOT_SUPPORTED = SESSION_QUERY_ERROR_BUSINESS_CODES["METHOD_NOT_SUPPORTED"]
 ERR_UPSTREAM_UNREACHABLE = SESSION_QUERY_ERROR_BUSINESS_CODES["UPSTREAM_UNREACHABLE"]
 ERR_UPSTREAM_HTTP_ERROR = SESSION_QUERY_ERROR_BUSINESS_CODES["UPSTREAM_HTTP_ERROR"]
 ERR_INTERRUPT_NOT_FOUND = INTERRUPT_ERROR_BUSINESS_CODES["INTERRUPT_REQUEST_NOT_FOUND"]
@@ -639,6 +640,18 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._session_claim = cast(Callable[..., Awaitable[bool]], session_claim)
         self._session_claim_finalize = cast(Callable[..., Awaitable[None]], session_claim_finalize)
         self._session_claim_release = cast(Callable[..., Awaitable[None]], session_claim_release)
+        self._all_supported_methods = {
+            "message/send",
+            "message/stream",
+            "tasks/get",
+            "tasks/cancel",
+            "tasks/resubscribe",
+            *methods.values(),
+        }
+        card = kwargs.get("agent_card")
+        if card is None and args:
+            card = args[0]
+        self._protocol_version = getattr(card, "protocol_version", "1.0.0") if card else "1.0.0"
 
     def _session_forbidden_response(
         self,
@@ -793,7 +806,32 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             | session_control_methods
             | interrupt_callback_methods
         ):
-            return await super()._handle_requests(request)
+            core_methods = {
+                "message/send",
+                "message/stream",
+                "tasks/get",
+                "tasks/cancel",
+                "tasks/resubscribe",
+            }
+            if base_request.method in core_methods:
+                return await super()._handle_requests(request)
+
+            if base_request.id is None:
+                return Response(status_code=204)
+
+            return self._generate_error_response(
+                base_request.id,
+                JSONRPCError(
+                    code=ERR_METHOD_NOT_SUPPORTED,
+                    message=f"Unsupported method: {base_request.method}",
+                    data={
+                        "type": "METHOD_NOT_SUPPORTED",
+                        "method": base_request.method,
+                        "supported_methods": sorted(list(self._all_supported_methods)),
+                        "protocol_version": self._protocol_version,
+                    },
+                ),
+            )
 
         params = base_request.params or {}
         if not isinstance(params, dict):

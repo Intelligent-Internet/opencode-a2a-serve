@@ -114,6 +114,36 @@ Key variables to understand protocol behavior:
 - Agent Card declares OAuth2 only when both
   `A2A_OAUTH_AUTHORIZATION_URL` and `A2A_OAUTH_TOKEN_URL` are set.
 
+## Compatibility Profile & Wire Contract (A2A Extensions)
+
+To help generic A2A clients and developers understand the interoperability baseline and runtime method boundaries of this deployment, the service exposes two metadata extensions:
+
+- **Compatibility Profile** (`urn:a2a:compatibility-profile/v1`)
+  - Defines the core baseline (JSON-RPC methods and HTTP endpoints).
+  - Specifies extension retention policy (e.g., `stable`).
+  - Highlights deployment-conditional method behavior.
+- **Wire Contract** (`urn:a2a:wire-contract/v1`)
+  - Declares the exact set of supported JSON-RPC methods and HTTP endpoints.
+  - Flags conditionally available methods (e.g., `opencode.sessions.shell` if disabled by config).
+  - Defines the unified error contract for unsupported methods.
+
+### Discovery Guidance
+
+Clients should prioritize Agent Card discovery to determine which profile and wire-level capabilities are active. Both extensions are also injected into the OpenAPI definition under `x-a2a-extension-contracts` at the `POST /` path.
+
+### Unified Unsupported Method Error
+
+When a client calls a JSON-RPC method that is not supported by the current deployment, the service returns a unified `-32601` error with discovery hints:
+
+- `code`: `-32601`
+- `message`: `Unsupported method: <method>`
+- `data.type`: `METHOD_NOT_SUPPORTED`
+- `data.method`: the requested method name
+- `data.supported_methods`: list of all currently supported JSON-RPC methods
+- `data.protocol_version`: the service's protocol version
+
+This allows clients to dynamically adjust their behavior or provide better diagnostic messages when a method is missing from the runtime boundary.
+
 ## Multipart Input Example
 
 Minimal JSON-RPC example with text + file input:

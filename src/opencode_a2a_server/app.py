@@ -48,12 +48,14 @@ from .extension_contracts import (
     PROVIDER_DISCOVERY_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
+    build_compatibility_profile_params,
     build_interrupt_callback_extension_params,
     build_model_selection_extension_params,
     build_provider_discovery_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
+    build_wire_contract_params,
 )
 from .jsonrpc_ext import (
     SESSION_CONTEXT_PREFIX,
@@ -77,6 +79,8 @@ STREAMING_EXTENSION_URI = "urn:a2a:stream-hints/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:opencode-a2a:session-query/v1"
 PROVIDER_DISCOVERY_EXTENSION_URI = "urn:opencode-a2a:provider-discovery/v1"
 INTERRUPT_CALLBACK_EXTENSION_URI = "urn:a2a:interactive-interrupt/v1"
+COMPATIBILITY_PROFILE_EXTENSION_URI = "urn:a2a:compatibility-profile/v1"
+WIRE_CONTRACT_EXTENSION_URI = "urn:a2a:wire-contract/v1"
 
 
 class OpencodeRequestHandler(DefaultRequestHandler):
@@ -545,6 +549,7 @@ def _build_rest_message_openapi_examples() -> dict[str, Any]:
 
 def _patch_jsonrpc_openapi_contract(
     app: FastAPI,
+    settings: Settings,
     *,
     deployment_context: dict[str, str | bool],
 ) -> None:
@@ -564,6 +569,13 @@ def _patch_jsonrpc_openapi_contract(
         deployment_context=deployment_context,
     )
     interrupt_callback = build_interrupt_callback_extension_params(
+        deployment_context=deployment_context,
+    )
+    compatibility_profile = build_compatibility_profile_params(
+        protocol_version=settings.a2a_protocol_version,
+    )
+    wire_contract = build_wire_contract_params(
+        protocol_version=settings.a2a_protocol_version,
         deployment_context=deployment_context,
     )
     original_openapi = app.openapi
@@ -588,6 +600,8 @@ def _patch_jsonrpc_openapi_contract(
                         "session_query": session_query,
                         "provider_discovery": provider_discovery,
                         "interrupt_callback": interrupt_callback,
+                        "compatibility_profile": compatibility_profile,
+                        "wire_contract": wire_contract,
                     }
 
                     request_body = post.setdefault("requestBody", {})
@@ -695,6 +709,13 @@ def build_agent_card(settings: Settings) -> AgentCard:
     interrupt_callback_extension_params = build_interrupt_callback_extension_params(
         deployment_context=deployment_context,
     )
+    compatibility_profile_params = build_compatibility_profile_params(
+        protocol_version=settings.a2a_protocol_version,
+    )
+    wire_contract_params = build_wire_contract_params(
+        protocol_version=settings.a2a_protocol_version,
+        deployment_context=deployment_context,
+    )
 
     return AgentCard(
         name=settings.a2a_title,
@@ -766,6 +787,24 @@ def build_agent_card(settings: Settings) -> AgentCard:
                         "streaming through shared JSON-RPC methods."
                     ),
                     params=interrupt_callback_extension_params,
+                ),
+                AgentExtension(
+                    uri=COMPATIBILITY_PROFILE_EXTENSION_URI,
+                    required=False,
+                    description=(
+                        "Expose the A2A compatibility profile defining core baselines, "
+                        "extension retention policies, and deployment-conditional methods."
+                    ),
+                    params=compatibility_profile_params,
+                ),
+                AgentExtension(
+                    uri=WIRE_CONTRACT_EXTENSION_URI,
+                    required=False,
+                    description=(
+                        "Expose the wire-level contract declaring supported JSON-RPC methods, "
+                        "HTTP endpoints, and unified error contracts."
+                    ),
+                    params=wire_contract_params,
                 ),
             ],
         ),
@@ -905,7 +944,7 @@ def create_app(settings: Settings) -> FastAPI:
     ).build(title=settings.a2a_title, version=settings.a2a_version, lifespan=lifespan)
     app.state.opencode_agent_executor = executor
     deployment_context = _build_deployment_context(settings)
-    _patch_jsonrpc_openapi_contract(app, deployment_context=deployment_context)
+    _patch_jsonrpc_openapi_contract(app, settings, deployment_context=deployment_context)
 
     rest_adapter = RESTAdapter(
         agent_card=agent_card,
