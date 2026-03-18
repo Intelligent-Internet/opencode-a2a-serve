@@ -213,6 +213,9 @@ __marimo__/
 # GitHub CLI temporary body files (should not be committed)
 issue_*.md
 
+# Local session temp files
+temp_*.*
+
 # Local OpenCode OpenAPI snapshots (high-churn, local reference only)
 docs/operations/opencode/
 .swival/
