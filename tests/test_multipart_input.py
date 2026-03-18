@@ -167,4 +167,4 @@ async def test_execute_rejects_data_parts() -> None:
     assert client.sent_calls == []
     task = queue.events[-1]
     assert task.status.state.name == "failed"
-    assert "DataPart is not supported yet" in task.status.message.parts[0].root.text
+    assert "DataPart input is not supported" in task.status.message.parts[0].root.text

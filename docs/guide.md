@@ -151,7 +151,7 @@ curl -sS http://127.0.0.1:8000/ \
 Current compatibility note:
 
 - `TextPart` and `FilePart` are supported.
-- `DataPart` is rejected with an explicit error until a stable mapping policy is defined.
+- `DataPart` input is not supported and is rejected with an explicit error.
 
 ## Extension Capability Overview
 
