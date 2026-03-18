@@ -101,6 +101,39 @@ require_positive_integer() {
   fi
 }
 
+runtime_secret_key_available() {
+  local key="$1"
+  if [[ -n "${!key:-}" ]]; then
+    return 0
+  fi
+  if sudo test -f "$OPENCODE_SECRET_ENV_FILE"; then
+    sudo grep -q "^${key}=.\+" "$OPENCODE_SECRET_ENV_FILE"
+    return $?
+  fi
+  return 1
+}
+
+validate_provider_secret_contract() {
+  local provider="${OPENCODE_PROVIDER_ID:-}"
+  local model="${OPENCODE_MODEL_ID:-}"
+  local required_key=""
+  if [[ -n "$provider" && -z "$model" ]]; then
+    echo "OPENCODE_MODEL_ID is required when OPENCODE_PROVIDER_ID is set." >&2
+    exit 1
+  fi
+  if [[ -n "$model" && -z "$provider" ]]; then
+    echo "OPENCODE_PROVIDER_ID is required when OPENCODE_MODEL_ID is set." >&2
+    exit 1
+  fi
+  if required_key="$(required_provider_secret_env_key "$provider" 2>/dev/null)"; then
+    if ! runtime_secret_key_available "$required_key"; then
+      echo "${required_key} is required when OPENCODE_PROVIDER_ID=${provider}." >&2
+      echo "Provide it via environment variable or ${OPENCODE_SECRET_ENV_FILE} before starting services." >&2
+      exit 1
+    fi
+  fi
+}
+
 data_root_supports_protect_home() {
   local root="${1%/}"
   case "$root" in
@@ -405,6 +438,7 @@ read_runtime_secret_value() {
 
 require_runtime_secret_file "$OPENCODE_AUTH_ENV_FILE" "GH_TOKEN" "$CONFIG_DIR/opencode.auth.env.example"
 require_runtime_secret_file "$A2A_SECRET_ENV_FILE" "A2A_BEARER_TOKEN" "$CONFIG_DIR/a2a.secret.env.example"
+validate_provider_secret_contract
 
 GH_TOKEN_FOR_SETUP="${GH_TOKEN:-}"
 if [[ -z "$GH_TOKEN_FOR_SETUP" ]]; then
