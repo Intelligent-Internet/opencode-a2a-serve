@@ -137,7 +137,11 @@ uv tool install "opencode-a2a-server==<version>"
 Run it against an existing project/workspace:
 
 ```bash
+GOOGLE_GENERATIVE_AI_API_KEY=<your-key> \
+OPENCODE_PROVIDER_ID=google \
+OPENCODE_MODEL_ID=gemini-3.1-pro-preview \
 opencode serve
+
 A2A_BEARER_TOKEN=prod-token \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 OPENCODE_DIRECTORY=/abs/path/to/workspace \
@@ -145,6 +149,16 @@ opencode-a2a-server
 ```
 
 Default address: `http://127.0.0.1:8000`
+
+If you omit `OPENCODE_PROVIDER_ID` / `OPENCODE_MODEL_ID`, `opencode serve`
+uses your local OpenCode defaults (for example `~/.config/opencode/opencode.json`).
+
+For provider-specific auth, model IDs, and config details, use the OpenCode
+official docs and CLI:
+
+- Providers: <https://opencode.ai/docs/providers/>
+- Models: <https://opencode.ai/docs/models/>
+- Local checks: `opencode auth list`, `opencode models`, `opencode models <provider>`
 
 This path is for users who already manage their own shell, workspace, and
 process lifecycle. No host bootstrap script is required.
@@ -182,8 +196,15 @@ Quick source run:
 
 ```bash
 uv sync --all-extras
+
+GOOGLE_GENERATIVE_AI_API_KEY=<your-key> \
+OPENCODE_PROVIDER_ID=google \
+OPENCODE_MODEL_ID=gemini-3.1-pro-preview \
 opencode serve
-A2A_BEARER_TOKEN=dev-token OPENCODE_DIRECTORY=/abs/path/to/workspace uv run opencode-a2a-server
+
+A2A_BEARER_TOKEN=dev-token \
+OPENCODE_DIRECTORY=/abs/path/to/workspace \
+uv run opencode-a2a-server
 ```
 
 Baseline validation:
