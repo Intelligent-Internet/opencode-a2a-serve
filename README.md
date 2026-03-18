@@ -7,8 +7,6 @@ the operational pieces that raw agent runtimes usually do not provide by
 default: authentication, session continuity, streaming contracts, interrupt
 handling, deployment tooling, and explicit security guidance.
 
-Contribution workflow and repository expectations live in [CONTRIBUTING.md](CONTRIBUTING.md).
-
 ## Why This Project Exists
 
 OpenCode is useful as an interactive runtime, but applications and gateways
@@ -217,10 +215,6 @@ Baseline validation:
 uv run pre-commit run --all-files
 uv run pytest
 ```
-
-Contributor workflow details:
-
-- [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Documentation Map
 
