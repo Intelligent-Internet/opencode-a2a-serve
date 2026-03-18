@@ -1,5 +1,6 @@
 import httpx
 import pytest
+
 from opencode_a2a_server.app import create_app
 from tests.helpers import make_settings
 
@@ -52,3 +53,33 @@ async def test_unsupported_method_notification_returns_204() -> None:
     # Note: OpencodeSessionQueryJSONRPCApplication._handle_requests returns 204 for notifications
     # if it catches the method. For unsupported methods, it now also returns 204 if id is None.
     assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_disabled_shell_reports_current_supported_methods() -> None:
+    settings = make_settings(a2a_bearer_token="test-token", a2a_enable_session_shell=False)
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 124,
+                "method": "opencode.sessions.shell",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"agent": "code-reviewer", "command": "pwd"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    error = body["error"]
+    assert error["code"] == -32601
+    assert error["data"]["type"] == "METHOD_NOT_SUPPORTED"
+    assert error["data"]["method"] == "opencode.sessions.shell"
+    assert "opencode.sessions.shell" not in error["data"]["supported_methods"]

@@ -114,35 +114,81 @@ Key variables to understand protocol behavior:
 - Agent Card declares OAuth2 only when both
   `A2A_OAUTH_AUTHORIZATION_URL` and `A2A_OAUTH_TOKEN_URL` are set.
 
-## Compatibility Profile & Wire Contract (A2A Extensions)
+## Wire Contract
 
-To help generic A2A clients and developers understand the interoperability baseline and runtime method boundaries of this deployment, the service exposes two metadata extensions:
+The service publishes a machine-readable wire contract through Agent Card and
+OpenAPI metadata to describe the current runtime method boundary.
 
-- **Compatibility Profile** (`urn:a2a:compatibility-profile/v1`)
-  - Defines the core baseline (JSON-RPC methods and HTTP endpoints).
-  - Specifies extension retention policy (e.g., `stable`).
-  - Highlights deployment-conditional method behavior.
-- **Wire Contract** (`urn:a2a:wire-contract/v1`)
-  - Declares the exact set of supported JSON-RPC methods and HTTP endpoints.
-  - Flags conditionally available methods (e.g., `opencode.sessions.shell` if disabled by config).
-  - Defines the unified error contract for unsupported methods.
+Use it to answer:
 
-### Discovery Guidance
+- which JSON-RPC methods are part of the current A2A core baseline
+- which JSON-RPC methods are custom extensions
+- which methods are deployment-conditional rather than currently active
+- what error shape is returned for unsupported JSON-RPC methods
 
-Clients should prioritize Agent Card discovery to determine which profile and wire-level capabilities are active. Both extensions are also injected into the OpenAPI definition under `x-a2a-extension-contracts` at the `POST /` path.
+Current behavior:
 
-### Unified Unsupported Method Error
+- Core JSON-RPC methods are declared under `core.jsonrpc_methods`.
+- Core HTTP endpoints are declared under `core.http_endpoints`.
+- Extension JSON-RPC methods are declared under `extensions.jsonrpc_methods`.
+- Deployment-conditional methods are declared under
+  `extensions.conditionally_available_methods`.
+- Shared metadata extension URIs such as session binding, model selection, and
+  streaming are listed under `extensions.extension_uris`.
+- `all_jsonrpc_methods` is the runtime truth for the current deployment.
 
-When a client calls a JSON-RPC method that is not supported by the current deployment, the service returns a unified `-32601` error with discovery hints:
+When `A2A_ENABLE_SESSION_SHELL=false`, `opencode.sessions.shell` is omitted from
+`all_jsonrpc_methods` and exposed only through
+`extensions.conditionally_available_methods`.
 
-- `code`: `-32601`
-- `message`: `Unsupported method: <method>`
-- `data.type`: `METHOD_NOT_SUPPORTED`
-- `data.method`: the requested method name
-- `data.supported_methods`: list of all currently supported JSON-RPC methods
-- `data.protocol_version`: the service's protocol version
+Unsupported method contract:
 
-This allows clients to dynamically adjust their behavior or provide better diagnostic messages when a method is missing from the runtime boundary.
+- JSON-RPC error code: `-32601`
+- Error message: `Unsupported method: <method>`
+- Error data fields:
+  - `type=METHOD_NOT_SUPPORTED`
+  - `method`
+  - `supported_methods`
+  - `protocol_version`
+
+Consumer guidance:
+
+- Discover custom JSON-RPC methods from Agent Card / OpenAPI before calling
+  them.
+- Treat `supported_methods` in `error.data` as the runtime truth for the
+  current deployment, especially when a deployment-conditional method is
+  disabled.
+
+## Compatibility Profile
+
+The service also publishes a machine-readable compatibility profile through
+Agent Card and OpenAPI metadata.
+
+Its purpose is to declare:
+
+- the stable A2A core interoperability baseline
+- which custom JSON-RPC methods are deployment extensions
+- which extension surfaces are required runtime metadata contracts
+- which methods are deployment-conditional rather than always available
+
+Current profile shape:
+
+- `profile_id=opencode-a2a-baseline-v1`
+- Core methods and endpoints are declared under `core`.
+- Extension retention policy is declared under `extension_retention`.
+- Per-method retention and availability are declared under `method_retention`.
+
+Retention guidance:
+
+- Treat core A2A methods as the generic client interoperability baseline.
+- Treat session binding and streaming metadata contracts as required for the
+  current deployment model.
+- Treat shared model selection metadata as a stable runtime metadata contract
+  for the main chat path.
+- Treat `opencode.*` and `a2a.interrupt.*` JSON-RPC methods as declared custom
+  extensions that remain stable within the current major line.
+- Treat `opencode.sessions.shell` as deployment-conditional and discover it
+  from the declared profile and current wire contract before calling it.
 
 ## Multipart Input Example
 

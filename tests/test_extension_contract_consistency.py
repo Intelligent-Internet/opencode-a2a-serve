@@ -15,8 +15,6 @@ from opencode_a2a_server.app import (
 )
 from opencode_a2a_server.extension_contracts import (
     INTERRUPT_CALLBACK_METHODS,
-    PROVIDER_DISCOVERY_METHODS,
-    SESSION_QUERY_METHODS,
     build_compatibility_profile_params,
     build_interrupt_callback_extension_params,
     build_model_selection_extension_params,
@@ -66,6 +64,7 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     )
     expected_compatibility_profile = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
+        deployment_context=deployment_context,
     )
     expected_wire_contract = build_wire_contract_params(
         protocol_version=settings.a2a_protocol_version,
@@ -138,6 +137,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     )
     expected_compatibility_profile = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
+        deployment_context=deployment_context,
     )
     expected_wire_contract = build_wire_contract_params(
         protocol_version=settings.a2a_protocol_version,
@@ -187,8 +187,8 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         value.get("value", {}).get("method") for value in example_values if isinstance(value, dict)
     }
     expected_methods = (
-        set(SESSION_QUERY_METHODS.values())
-        | set(PROVIDER_DISCOVERY_METHODS.values())
+        set(session_query["methods"].values())
+        | set(provider_discovery["methods"].values())
         | set(INTERRUPT_CALLBACK_METHODS.values())
     )
     missing_methods = sorted(method for method in expected_methods if method not in example_methods)
