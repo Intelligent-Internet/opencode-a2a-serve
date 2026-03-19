@@ -159,8 +159,17 @@ def test_agent_card_injects_deployment_context_into_extensions() -> None:
         "list_providers": "opencode.providers.list",
         "list_models": "opencode.models.list",
     }
+    assert "result_envelope" not in provider_discovery.params
+    assert provider_discovery.params["method_contracts"]["opencode.providers.list"]["result"] == {
+        "fields": ["items", "default_by_provider", "connected"],
+        "items_type": "ProviderSummary[]",
+    }
     assert provider_discovery.params["method_contracts"]["opencode.models.list"]["params"] == {
         "optional": ["provider_id"]
+    }
+    assert provider_discovery.params["method_contracts"]["opencode.models.list"]["result"] == {
+        "fields": ["items", "default_by_provider", "connected"],
+        "items_type": "ModelSummary[]",
     }
     assert provider_discovery.params["errors"]["business_codes"] == {
         "UPSTREAM_UNREACHABLE": -32002,

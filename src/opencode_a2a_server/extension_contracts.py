@@ -559,7 +559,6 @@ def build_provider_discovery_extension_params(
     deployment_context: dict[str, str | bool],
 ) -> dict[str, Any]:
     method_contracts: dict[str, Any] = {}
-    result_envelope_by_method: dict[str, Any] = {}
 
     for method_contract in PROVIDER_DISCOVERY_METHOD_CONTRACTS.values():
         params_contract = _build_method_contract_params(
@@ -581,17 +580,9 @@ def build_provider_discovery_extension_params(
             )
         method_contracts[method_contract.method] = contract_doc
 
-        envelope_doc: dict[str, Any] = {"fields": list(method_contract.result_fields)}
-        if method_contract.items_field:
-            envelope_doc["items_field"] = method_contract.items_field
-        result_envelope_by_method[method_contract.method] = envelope_doc
-
     return {
         "methods": dict(PROVIDER_DISCOVERY_METHODS),
         "method_contracts": method_contracts,
-        "result_envelope": {
-            "by_method": result_envelope_by_method,
-        },
         "supported_metadata": ["opencode.directory"],
         "provider_private_metadata": ["opencode.directory"],
         "context_fields": {
