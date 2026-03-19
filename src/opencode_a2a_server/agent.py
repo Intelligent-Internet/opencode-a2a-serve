@@ -773,43 +773,44 @@ class OpencodeAgentExecutor(AgentExecutor):
                         upstream_status=terminal_signal.upstream_status,
                         streaming_request=True,
                     )
-                elif stream_state.should_emit_final_snapshot(response_text):
-                    sequence = stream_state.next_sequence()
-                    await _enqueue_artifact_update(
-                        event_queue=event_queue,
-                        task_id=task_id,
-                        context_id=context_id,
-                        artifact_id=stream_artifact_id,
-                        part=Part(root=TextPart(text=response_text)),
-                        append=stream_state.emitted_stream_chunk,
-                        last_chunk=True,
-                        artifact_metadata=_build_stream_artifact_metadata(
-                            block_type=BlockType.TEXT,
-                            source="final_snapshot",
-                            message_id=resolved_message_id,
-                            event_id=stream_state.build_event_id(sequence),
-                            sequence=sequence,
+                else:
+                    if stream_state.should_emit_final_snapshot(response_text):
+                        sequence = stream_state.next_sequence()
+                        await _enqueue_artifact_update(
+                            event_queue=event_queue,
+                            task_id=task_id,
+                            context_id=context_id,
+                            artifact_id=stream_artifact_id,
+                            part=Part(root=TextPart(text=response_text)),
+                            append=stream_state.emitted_stream_chunk,
+                            last_chunk=True,
+                            artifact_metadata=_build_stream_artifact_metadata(
+                                block_type=BlockType.TEXT,
+                                source="final_snapshot",
+                                message_id=resolved_message_id,
+                                event_id=stream_state.build_event_id(sequence),
+                                sequence=sequence,
+                            ),
+                        )
+                    await event_queue.enqueue_event(
+                        TaskStatusUpdateEvent(
+                            task_id=task_id,
+                            context_id=context_id,
+                            status=TaskStatus(
+                                state=TaskState.completed,
+                            ),
+                            final=True,
+                            metadata=_build_output_metadata(
+                                session_id=response.session_id,
+                                usage=resolved_token_usage,
+                                stream={
+                                    "message_id": resolved_message_id,
+                                    "event_id": f"{stream_state.event_id_namespace}:status",
+                                    "source": "status",
+                                },
+                            ),
                         ),
                     )
-                await event_queue.enqueue_event(
-                    TaskStatusUpdateEvent(
-                        task_id=task_id,
-                        context_id=context_id,
-                        status=TaskStatus(
-                            state=TaskState.completed,
-                        ),
-                        final=True,
-                        metadata=_build_output_metadata(
-                            session_id=response.session_id,
-                            usage=resolved_token_usage,
-                            stream={
-                                "message_id": resolved_message_id,
-                                "event_id": f"{stream_state.event_id_namespace}:status",
-                                "source": "status",
-                            },
-                        ),
-                    ),
-                )
             else:
                 resolved_token_usage = _merge_token_usage(
                     _extract_token_usage(response.raw),

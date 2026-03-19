@@ -489,6 +489,48 @@ async def test_streaming_fails_when_event_stream_ends_before_terminal_signal() -
 
 
 @pytest.mark.asyncio
+async def test_streaming_emits_only_failed_terminal_status_for_session_error() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            {
+                "type": "session.error",
+                "properties": {
+                    "sessionID": "ses-1",
+                    "error": {
+                        "name": "ProviderAuthError",
+                        "data": {
+                            "statusCode": 401,
+                            "message": "bad key",
+                        },
+                    },
+                },
+            }
+        ],
+        response_text="",
+        send_delay=0,
+    )
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(
+            task_id="task-session-error", context_id="ctx-session-error", text="hi"
+        ),
+        queue,
+    )
+
+    final_statuses = [
+        event for event in queue.events if isinstance(event, TaskStatusUpdateEvent) and event.final
+    ]
+    assert len(final_statuses) == 1
+    assert final_statuses[0].status.state == TaskState.auth_required
+    assert final_statuses[0].metadata is not None
+    assert final_statuses[0].metadata["opencode"]["error"]["type"] == "UPSTREAM_UNAUTHORIZED"
+    assert not any(event.status.state == TaskState.completed for event in final_statuses)
+
+
+@pytest.mark.asyncio
 async def test_streaming_does_not_send_duplicate_final_snapshot_when_chunks_exist() -> None:
     client = DummyStreamingClient(
         stream_events_payload=[
