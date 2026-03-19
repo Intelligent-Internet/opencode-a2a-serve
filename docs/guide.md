@@ -144,9 +144,6 @@ opencode-a2a-server serve
   returned. Agent Card endpoints are public.
 - Requests above `A2A_MAX_REQUEST_BODY_BYTES` are rejected with HTTP `413`
   before transport handling.
-- Within one `opencode-a2a-server` instance, all consumers share the same
-  underlying OpenCode workspace/environment. This deployment model is not
-  tenant-isolated by default.
 - Error handling:
   - For validation failures, missing context (`task_id`/`context_id`), or
     internal errors, the service attempts to return standard A2A failure events
@@ -279,11 +276,8 @@ Current compatibility note:
 
 ## Extension Capability Overview
 
-For a quick capability showcase, see the README overview:
-
-- [`README.md#extension-capability-overview`](../README.md#extension-capability-overview)
-
-This guide focuses on how to consume the declared capabilities.
+The README provides product positioning and quick start guidance. This guide
+focuses on how to consume the declared capabilities.
 
 Important distinction:
 
@@ -791,39 +785,3 @@ If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscr
   - `a2a_cancel_abort_timeout_total`
   - `a2a_cancel_abort_error_total`
   - `a2a_cancel_duration_ms` (with `abort_outcome` label)
-
-## Extension Contract Change Checklist
-
-When changing extension methods/errors or extension metadata, validate the
-single-source contract and generated surfaces together:
-
-1. Update `src/opencode_a2a_server/extension_contracts.py` first (SSOT).
-2. Run focused contract checks:
-
-```bash
-uv run pytest tests/test_extension_contract_consistency.py
-```
-
-3. Run baseline quality gates before commit:
-
-```bash
-uv run pre-commit run --all-files
-uv run mypy src/opencode_a2a_server
-uv run pytest
-```
-
-The contract check fails when any of these drift:
-- SSOT (`extension_contracts.py`)
-- Agent Card extension params
-- OpenAPI `POST /` extension metadata (`x-a2a-extension-contracts`) or examples
-- Notification behavior (`204 No Content`) for extension methods
-
-## Development Setup
-
-```bash
-uv run pre-commit install
-uv run mypy src/opencode_a2a_server
-uv run pytest
-```
-
-`uv run pytest` includes coverage reporting and enforces `--cov-fail-under=80`.

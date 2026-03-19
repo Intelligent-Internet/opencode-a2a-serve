@@ -26,12 +26,19 @@ Install dependencies:
 uv sync --all-extras
 ```
 
-Run the local development server:
+Start OpenCode in one terminal:
+
+```bash
+opencode serve --hostname 127.0.0.1 --port 4096
+```
+
+Then start the A2A server in another terminal:
 
 ```bash
 A2A_BEARER_TOKEN=dev-token \
-OPENCODE_DIRECTORY=/abs/path/to/workspace \
-uv run opencode-a2a-server
+OPENCODE_BASE_URL=http://127.0.0.1:4096 \
+OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
+uv run opencode-a2a-server serve
 ```
 
 ## Validation
@@ -43,11 +50,20 @@ uv run pre-commit run --all-files
 uv run pytest
 ```
 
-If you change shell or deployment scripts, also run:
+If you change shell scripts, also run `bash -n` on each modified script, for
+example:
 
 ```bash
-bash -n scripts/deploy.sh
-bash -n scripts/deploy/setup_instance.sh
+bash -n scripts/doctor.sh
+bash -n scripts/lint.sh
+```
+
+If you change extension methods, extension metadata, or Agent Card/OpenAPI
+contract surfaces, also run:
+
+```bash
+uv run pytest tests/test_extension_contract_consistency.py
+uv run mypy src/opencode_a2a_server
 ```
 
 ## Change Expectations
@@ -77,3 +93,11 @@ Update docs together with code whenever you change:
 
 Keep compatibility guidance centralized in [docs/guide.md](docs/guide.md) unless a
 new standalone document is clearly necessary.
+
+When changing extension contracts, update
+[`src/opencode_a2a_server/extension_contracts.py`](src/opencode_a2a_server/extension_contracts.py)
+first and keep these generated/documented surfaces aligned:
+
+- Agent Card extension params
+- OpenAPI `POST /` extension metadata and examples
+- JSON-RPC notification behavior (`204 No Content`)
