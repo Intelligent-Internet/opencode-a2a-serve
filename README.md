@@ -14,6 +14,18 @@ handling, and an explicit deployment boundary.
 - Not a multi-tenant isolation layer. One `OpenCode + opencode-a2a-server`
   pair should be treated as one trust boundary.
 
+## Logical Components
+
+```mermaid
+flowchart LR
+    Client["a2a-client-hub / any A2A client"]
+    Adapter["opencode-a2a-server\nA2A adapter service"]
+    Runtime["opencode serve\nOpenCode runtime"]
+
+    Client <--> Adapter
+    Adapter <--> Runtime
+```
+
 ## Quick Start
 
 Install the released CLI with `uv tool`:
