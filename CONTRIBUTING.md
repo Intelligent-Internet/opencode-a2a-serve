@@ -2,9 +2,9 @@
 
 Thanks for contributing to `opencode-a2a-server`.
 
-This repository maintains a stateful A2A service boundary around OpenCode.
-Changes should keep runtime behavior, Agent Card declarations, OpenAPI
-examples, and machine-readable extension contracts aligned.
+This repository maintains an A2A adapter service around OpenCode. Changes
+should keep runtime behavior, Agent Card declarations, OpenAPI examples, and
+machine-readable extension contracts aligned.
 
 ## Before You Start
 

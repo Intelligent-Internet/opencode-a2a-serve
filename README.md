@@ -1,14 +1,14 @@
 # opencode-a2a-server
 
-> Turn OpenCode into a stateful A2A service with a clear runtime boundary.
+> Turn OpenCode into an A2A adapter service with a clear runtime boundary.
 
-`opencode-a2a-server` wraps OpenCode with a stateful A2A service boundary:
+`opencode-a2a-server` wraps OpenCode as an A2A adapter service:
 A2A transports, bearer auth, streaming, session continuity, interrupt
 handling, and an explicit deployment boundary.
 
 ## What This Is
 
-- An A2A server in front of OpenCode.
+- An A2A adapter service in front of OpenCode.
 - A good fit when you already use OpenCode and need a stable network service
   for apps, gateways, or A2A clients.
 - Not a multi-tenant isolation layer. One `OpenCode + opencode-a2a-server`
