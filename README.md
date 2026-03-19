@@ -1,11 +1,11 @@
 # opencode-a2a-server
 
-> Turn OpenCode into a stateful A2A service with a clear runtime boundary and production-friendly deployment workflow.
+> Turn OpenCode into a stateful A2A service with a clear runtime boundary.
 
 `opencode-a2a-server` exposes OpenCode through standard A2A interfaces and adds
-the operational pieces that raw agent runtimes usually do not provide by
-default: authentication, session continuity, streaming contracts, interrupt
-handling, deployment tooling, and explicit security guidance.
+the runtime pieces that raw agent runtimes usually do not provide by default:
+authentication, session continuity, streaming contracts, interrupt handling,
+and explicit security guidance.
 
 ## Why This Project Exists
 
@@ -14,7 +14,8 @@ need a stable service layer around it. This repository provides that layer by:
 
 - bridging A2A transport contracts to OpenCode session/message/event APIs
 - making session and interrupt behavior explicit and auditable
-- packaging release-first deployment scripts and operational guidance for long-running use
+- keeping the server/runtime contract explicit while leaving deployment
+  supervision to the operator
 
 ## What It Already Provides
 
@@ -26,7 +27,7 @@ need a stable service layer around it. This repository provides that layer by:
 - session continuation via `metadata.shared.session.id`
 - request-scoped model selection via `metadata.shared.model`
 - OpenCode session query/control extensions and provider/model discovery
-- released CLI install/upgrade flow and release-based systemd deployment
+- released CLI install/upgrade flow and a foreground runtime entrypoint
 
 ## Extension Capability Overview
 
@@ -58,7 +59,9 @@ Detailed consumption guidance:
 One `OpenCode + opencode-a2a-server` instance pair is treated as a
 single-tenant trust boundary.
 
-This repository's intended scaling model is parameterized self-deployment: consumers should launch their own isolated instance pairs through the provided deployment scripts instead of sharing one runtime across mutually untrusted tenants.
+This repository's intended scaling model is parameterized self-deployment:
+consumers should launch their own isolated instance pairs instead of sharing
+one runtime across mutually untrusted tenants.
 
 - OpenCode may manage multiple projects/directories, but one deployed instance
   is not a secure multi-tenant runtime.
@@ -77,7 +80,6 @@ flowchart TD
     Mapping --> Runtime["OpenCode HTTP runtime"]
 
     Api --> Auth["Bearer auth + request logging controls"]
-    Api --> Deploy["release-based deployment tooling"]
     Runtime --> Workspace["Shared workspace / environment boundary"]
 ```
 
@@ -103,13 +105,14 @@ hard multi-tenant isolation layer.
   isolation boundary inside one deployed instance.
 - LLM provider keys are consumed by the OpenCode process. Prompt injection or
   indirect exfiltration attempts may still expose sensitive values.
-- systemd deploy defaults use operator-provisioned root-only secret files
-  unless `ENABLE_SECRET_PERSISTENCE=true` is explicitly enabled.
+- Deployment supervision is intentionally BYO. If you wrap this runtime with
+  `systemd`, Docker, Kubernetes, or another supervisor, you own the service
+  user, secret storage, restart policy, and hardening choices.
 
 Read before deployment:
 
 - [SECURITY.md](SECURITY.md)
-- [scripts/deploy_release_readme.md](scripts/deploy_release_readme.md)
+- [docs/guide.md](docs/guide.md)
 
 ## User Paths
 
@@ -163,46 +166,22 @@ official docs and CLI:
 - Local checks: `opencode auth list`, `opencode models`, `opencode models <provider>`
 
 This path is for users who already manage their own shell, workspace, and
-process lifecycle. No host bootstrap script is required.
+process lifecycle.
 
-### Path 2: Formal systemd Deploy From a Released Version
+Use any supervisor you prefer for long-running operation:
 
-For long-running systemd deployments, use the packaged release CLI against a
-runtime and service account that have already been prepared by the operator:
+- `systemd`
+- Docker / container runtimes
+- Kubernetes
+- `supervisord`, `pm2`, or similar process managers
 
-```bash
-opencode-a2a-server deploy-release \
-  --project alpha \
-  --service-user svc-alpha \
-  --service-group opencode \
-  --a2a-port 8010 \
-  --a2a-host 127.0.0.1
-```
-
-This path is for users who want:
-
-- pre-provisioned Linux service accounts and shared runtime
-- isolated per-project directories under a chosen `DATA_ROOT`
-- systemd-managed restart behavior
-- root-only secret files
-- a lightweight instance-level deploy boundary
-
-Primary operator docs:
-
-- [scripts/init_release_system.sh](scripts/init_release_system.sh)
-- [scripts/deploy_release.sh](scripts/deploy_release.sh)
-- [scripts/deploy_release_readme.md](scripts/deploy_release_readme.md)
-- [docs/release_deploy_smoke_test.md](docs/release_deploy_smoke_test.md)
-
-`opencode-a2a-server init-release-system` remains available as an optional
-admin-only bootstrap helper. Repository `scripts/*.sh` release entrypoints
-remain available as compatibility wrappers.
+The project no longer ships built-in host bootstrap or process-manager
+wrappers. The official product surface is the runtime entrypoint itself.
 
 ## Contributor Paths
 
 Use the repository checkout directly only for development, local debugging, or
-validation against unreleased changes. Source-based deploy/bootstrap docs are
-kept for contributors and internal debugging, not as the recommended user path.
+validation against unreleased changes.
 
 Quick source run:
 
@@ -228,34 +207,17 @@ uv run pytest
 
 ## Documentation Map
 
-### User / Operator Docs
+### User Docs
 
 - [docs/guide.md](docs/guide.md)
   Product behavior, API contracts, and detailed streaming/session/interrupt
   consumption guidance.
+- [SECURITY.md](SECURITY.md)
+  Threat model, deployment caveats, and vulnerability disclosure guidance.
 - [CONTRIBUTING.md](CONTRIBUTING.md)
   Contributor workflow, validation baseline, and documentation expectations.
-- [docs/agent_deploy_sop.md](docs/agent_deploy_sop.md)
-  Operator-facing SOP for release-based deployment, verification, and uninstall.
-- [docs/release_deploy_smoke_test.md](docs/release_deploy_smoke_test.md)
-  Real-host smoke test checklist for release-based systemd deployment.
-- [scripts/deploy_release_readme.md](scripts/deploy_release_readme.md)
-  Release-based systemd deployment guide for published package versions.
-- [scripts/init_release_system_readme.md](scripts/init_release_system_readme.md)
-  Release-based host bootstrap guide that avoids source checkout.
-- [scripts/uninstall_readme.md](scripts/uninstall_readme.md)
-  Preview-first uninstall flow for deployed instances.
 - [scripts/README.md](scripts/README.md)
-  Full script index, including contributor/internal paths.
-
-### Contributor / Internal Docs
-
-- [scripts/deploy_readme.md](scripts/deploy_readme.md)
-  Source-based systemd deployment for development/debugging only.
-- [scripts/init_system_readme.md](scripts/init_system_readme.md)
-  Source-based host bootstrap for contributor/internal workflows.
-- [SECURITY.md](SECURITY.md)
-  threat model, deployment caveats, and vulnerability disclosure guidance.
+  Contributor helper script index.
 
 ## License
 

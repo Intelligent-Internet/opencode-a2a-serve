@@ -19,8 +19,8 @@ and JSON-RPC extension details (README stays at overview level).
 This section keeps only the protocol-relevant variables.
 For the full runtime variable catalog and defaults, see
 [`../src/opencode_a2a_server/config.py`](../src/opencode_a2a_server/config.py).
-For deploy-time inputs and systemd-oriented parameters, see
-[`../scripts/deploy_readme.md`](../scripts/deploy_readme.md).
+Deployment supervision is intentionally out of scope for this project; use your
+own process manager, container runtime, or host orchestration.
 
 Key variables to understand protocol behavior:
 
