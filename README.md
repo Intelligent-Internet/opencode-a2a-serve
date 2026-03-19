@@ -1,156 +1,58 @@
 # opencode-a2a-server
 
-> Turn OpenCode into a stateful A2A service with a clear runtime boundary.
+> Expose OpenCode through A2A.
 
-`opencode-a2a-server` exposes OpenCode through standard A2A interfaces and adds
-the runtime pieces that raw agent runtimes usually do not provide by default:
-authentication, session continuity, streaming contracts, interrupt handling,
-and explicit security guidance.
+`opencode-a2a-server` adds an A2A service layer to `opencode serve`, with
+auth, streaming, session continuity, interrupt handling, and a clear
+deployment boundary.
 
-## Why This Project Exists
+## What This Is
 
-OpenCode is useful as an interactive runtime, but applications and gateways
-need a stable service layer around it. This repository provides that layer by:
-
-- bridging A2A transport contracts to OpenCode session/message/event APIs
-- making session and interrupt behavior explicit and auditable
-- keeping the server/runtime contract explicit while leaving deployment
-  supervision to the operator
-
-## What It Already Provides
-
-- A2A HTTP+JSON endpoints (`/v1/message:send`, `/v1/message:stream`,
-  `GET /v1/tasks/{task_id}:subscribe`)
-- A2A JSON-RPC endpoint (`POST /`) for standard methods and OpenCode-oriented
-  extensions
-- SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
-- session continuation via `metadata.shared.session.id`
-- request-scoped model selection via `metadata.shared.model`
-- OpenCode session query/control and provider/model discovery extensions
-- released CLI install/upgrade flow and a foreground runtime entrypoint
-
-## Extension Capability Overview
-
-The Agent Card declares eight extension URIs. Shared contracts are intended for
-any compatible consumer; OpenCode-specific contracts stay provider-scoped even
-though they are exposed through A2A JSON-RPC.
-
-| Extension URI | Scope | Primary use |
-| --- | --- | --- |
-| `urn:a2a:session-binding/v1` | Shared | Bind a main chat request to an existing upstream session via `metadata.shared.session.id` |
-| `urn:a2a:model-selection/v1` | Shared | Override the upstream model for one main chat request via `metadata.shared.model` |
-| `urn:a2a:stream-hints/v1` | Shared | Advertise canonical stream metadata for blocks, usage, interrupts, and session hints |
-| `urn:opencode-a2a:session-query/v1` | OpenCode-specific | Query external sessions and invoke OpenCode session control methods |
-| `urn:opencode-a2a:provider-discovery/v1` | OpenCode-specific | Discover normalized provider and model summaries from the upstream catalog |
-| `urn:a2a:interactive-interrupt/v1` | Shared | Reply to interrupt callbacks observed from stream metadata |
-| `urn:a2a:compatibility-profile/v1` | Shared | Publish stable capability retention and deployment-conditional method guidance |
-| `urn:a2a:wire-contract/v1` | Shared | Publish the current runtime method and endpoint boundary |
-
-Detailed consumption guidance:
-
-- Shared session binding: [`docs/guide.md#shared-session-binding-contract`](docs/guide.md#shared-session-binding-contract)
-- Shared model selection: [`docs/guide.md#shared-model-selection-contract`](docs/guide.md#shared-model-selection-contract)
-- Shared stream hints: [`docs/guide.md#shared-stream-hints-contract`](docs/guide.md#shared-stream-hints-contract)
-- OpenCode session query and provider discovery:
-  [`docs/guide.md#opencode-session-query-a2a-extension`](docs/guide.md#opencode-session-query-a2a-extension)
-- Shared interrupt callback: [`docs/guide.md#shared-interrupt-callback-a2a-extension`](docs/guide.md#shared-interrupt-callback-a2a-extension)
-- Compatibility profile and retention guidance:
-  [`docs/guide.md#compatibility-profile`](docs/guide.md#compatibility-profile)
-
-## Design Principle
-
-One `OpenCode + opencode-a2a-server` instance pair is treated as a
-single-tenant trust boundary.
-
-This repository's intended scaling model is parameterized self-deployment:
-consumers should launch their own isolated instance pairs instead of sharing
-one runtime across mutually untrusted tenants.
-
-- OpenCode may manage multiple projects/directories, but one deployed instance
-  is not a secure multi-tenant runtime.
-- Shared-instance identity/session checks are best-effort coordination, not
-  hard tenant isolation.
-- For mutually untrusted tenants, deploy separate instance pairs with isolated
-  Linux users or containers, isolated workspace roots, isolated credentials,
-  and distinct runtime ports.
-
-## Logical Components
+- An A2A adapter service for `opencode serve`.
+- Use it when you need a stable A2A endpoint for apps, gateways, or A2A
+  clients.
 
 ```mermaid
 flowchart TD
-    Hub["A2A client / a2a-client-hub / app"] --> Api["opencode-a2a-server transport"]
-    Api --> Mapping["Task / session / interrupt mapping"]
-    Mapping --> Runtime["OpenCode HTTP runtime"]
+    Client["a2a-client-hub / any A2A client"]
 
-    Api --> Auth["Bearer auth + request logging controls"]
-    Runtime --> Workspace["Shared workspace / environment boundary"]
+    subgraph ServerSide["Server-side"]
+        Adapter["opencode-a2a-server\nA2A adapter service"]
+        Runtime["opencode serve\nOpenCode runtime"]
+
+        Adapter <--> Runtime
+    end
+
+    Client <--> Adapter
 ```
 
-This repository wraps OpenCode in a service layer. It does not change OpenCode
-into a hard multi-tenant isolation platform.
+## Quick Start
 
-## Recommended Client Side
-
-If you need a client-side integration layer to consume this service, prefer
-[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
-
-It is a better place for client concerns such as A2A consumption, upstream
-adapter normalization, and application-facing integration, while
-`opencode-a2a-server` stays focused on the server/runtime boundary around
-OpenCode.
-
-## Security Model
-
-This project improves the service boundary around OpenCode, but it is not a
-hard multi-tenant isolation layer.
-
-- `A2A_BEARER_TOKEN` protects the A2A surface, but it is not a tenant
-  isolation boundary inside one deployed instance.
-- LLM provider keys are consumed by the OpenCode process. Prompt injection or
-  indirect exfiltration attempts may still expose sensitive values.
-- Deployment supervision is intentionally BYO. If you wrap this runtime with
-  `systemd`, Docker, Kubernetes, or another supervisor, you own the service
-  user, secret storage, restart policy, and hardening choices.
-
-Read before deployment:
-
-- [SECURITY.md](SECURITY.md)
-- [docs/guide.md](docs/guide.md)
-
-## User Paths
-
-Released versions are published to PyPI and mapped to Git tags / GitHub
-Releases. This is the recommended entry point for users.
-
-### Path 1: Run a Released CLI in an Existing User Environment
-
-Install the latest release:
+Install the released CLI with `uv tool`:
 
 ```bash
 uv tool install opencode-a2a-server
 ```
 
-Upgrade an existing installation:
+Upgrade later with:
 
 ```bash
 uv tool upgrade opencode-a2a-server
 ```
 
-Install an exact release:
-
-```bash
-uv tool install "opencode-a2a-server==<version>"
-```
-
-Run it against an existing project/workspace:
+Make sure provider credentials and a default model are configured on the
+OpenCode side, then start OpenCode:
 
 ```bash
 opencode auth login
 opencode models
-
 opencode serve --hostname 127.0.0.1 --port 4096
+```
 
-A2A_BEARER_TOKEN=prod-token \
+Then start `opencode-a2a-server` against that upstream:
+
+```bash
+A2A_BEARER_TOKEN=dev-token \
 OPENCODE_BASE_URL=http://127.0.0.1:4096 \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
@@ -159,151 +61,72 @@ OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
 opencode-a2a-server serve
 ```
 
-Configure provider auth and default model on the OpenCode side first:
-
-- Add credentials with `opencode auth login` or `/connect`.
-- Set the default model in `opencode.json`, for example:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "google/gemini-3-pro"
-}
-```
-
-If your provider relies on environment variables instead of `opencode auth
-login`, export those variables before starting `opencode serve`.
-
-`OPENCODE_WORKSPACE_ROOT` is the default workspace root that this runtime
-exposes to OpenCode.
-
-Default address: `http://127.0.0.1:8000`
-
-Runtime boundary:
-
-- `opencode serve` owns provider auth, model defaults, and upstream lifecycle.
-- `opencode-a2a-server serve` connects to that upstream through `OPENCODE_BASE_URL`.
-- Request-scoped model selection remains available through `metadata.shared.model`
-  on the main chat path and `request.model` on session-control methods.
-- Provider/model catalog discovery remains available through
-  `opencode.providers.list` and `opencode.models.list`.
-
-Common runtime variables:
-
-| Variable | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `A2A_BEARER_TOKEN` | Yes | None | Bearer token required for authenticated runtime requests. |
-| `OPENCODE_BASE_URL` | Yes in two-process deployments | `http://127.0.0.1:4096` | Upstream OpenCode HTTP endpoint. Set it explicitly when `opencode serve` runs separately. |
-| `OPENCODE_WORKSPACE_ROOT` | No | None | Default workspace root exposed to OpenCode. |
-| `A2A_HOST` | Yes in explicit deployments | `127.0.0.1` | Bind host for the A2A server. |
-| `A2A_PORT` | Yes in explicit deployments | `8000` | Bind port for the A2A server. |
-| `A2A_PUBLIC_URL` | No | `http://127.0.0.1:8000` | Public base URL advertised by the Agent Card. |
-| `A2A_LOG_LEVEL` | No | `WARNING` | Server log level. |
-| `A2A_LOG_PAYLOADS` | No | `false` | Enable request/response payload logging. |
-| `A2A_LOG_BODY_LIMIT` | No | `0` | Payload preview size used when payload logging is enabled. |
-| `A2A_MAX_REQUEST_BODY_BYTES` | No | `1048576` | Maximum accepted request size. |
-| `A2A_ALLOW_DIRECTORY_OVERRIDE` | No | `true` | Allow request-level `metadata.opencode.directory` overrides. |
-| `A2A_ENABLE_SESSION_SHELL` | No | `false` | Enable high-risk `opencode.sessions.shell`. |
-| `OPENCODE_TIMEOUT` | No | `120` | Upstream OpenCode request timeout in seconds. |
-| `OPENCODE_TIMEOUT_STREAM` | No | None | Upstream OpenCode stream timeout override in seconds. |
-
-Provider auth and upstream model defaults belong to `opencode serve`, not to
-`opencode-a2a-server`. Use the OpenCode CLI to authenticate providers and look
-up model IDs before starting the upstream server:
-
-- Providers: <https://opencode.ai/docs/providers/>
-- Models: <https://opencode.ai/docs/models/>
-- Local checks: `opencode auth login`, `opencode auth list`, `opencode models`,
-  `opencode models <provider>`
-
-This path is for users who already manage their own shell, workspace, and
-process lifecycle.
-
-Use any supervisor you prefer for long-running operation:
-
-- `systemd`
-- Docker / container runtimes
-- Kubernetes
-- `supervisord`, `pm2`, or similar process managers
-
-The project no longer ships built-in host bootstrap or process-manager
-wrappers. The official product surface is the runtime entrypoint itself.
-
-Minimal self-managed `systemd` example:
-
-1. Create an env file such as `/etc/opencode-a2a/alpha.env`:
+Verify that the service is up:
 
 ```bash
-A2A_BEARER_TOKEN=replace-me
-OPENCODE_BASE_URL=http://127.0.0.1:4096
-A2A_HOST=127.0.0.1
-A2A_PORT=8000
-A2A_PUBLIC_URL=https://a2a.example.com
-OPENCODE_WORKSPACE_ROOT=/srv/my-workspace
+curl http://127.0.0.1:8000/.well-known/agent-card.json
 ```
 
-2. Create a unit file such as `/etc/systemd/system/opencode-a2a-server.service`:
+Default local address: `http://127.0.0.1:8000`
 
-```ini
-[Unit]
-Description=OpenCode A2A Server
-After=network-online.target
-Wants=network-online.target
+## What You Get
 
-[Service]
-Type=simple
-WorkingDirectory=/srv/my-workspace
-EnvironmentFile=/etc/opencode-a2a/alpha.env
-ExecStart=/home/dev/.local/bin/opencode-a2a-server serve
-Restart=on-failure
-RestartSec=2
+- A2A HTTP+JSON endpoints such as `/v1/message:send` and
+  `/v1/message:stream`
+- A2A JSON-RPC support on `POST /`
+- SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
+- Session continuity through `metadata.shared.session.id`
+- Request-scoped model selection through `metadata.shared.model`
+- OpenCode-oriented JSON-RPC extensions for session and model/provider queries
 
-[Install]
-WantedBy=multi-user.target
-```
+Detailed protocol contracts, examples, and extension docs live in
+[`docs/guide.md`](docs/guide.md).
 
-Replace `ExecStart` with the absolute path returned by `command -v opencode-a2a-server`.
+## When To Use It
 
-## Contributor Paths
+Use this project when:
 
-Use the repository checkout directly only for development, local debugging, or
-validation against unreleased changes.
+- you want to keep OpenCode as the runtime
+- you need A2A transports and Agent Card discovery
+- you want a thin service boundary instead of building your own adapter
 
-Quick source run:
+Look elsewhere if:
 
-```bash
-uv sync --all-extras
+- you need hard multi-tenant isolation inside one shared runtime
+- you want this project to manage your process supervisor or host bootstrap
+- you want a general client integration layer rather than a server wrapper
 
-opencode serve --hostname 127.0.0.1 --port 4096
+For client-side integration, prefer
+[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
 
-A2A_BEARER_TOKEN=dev-token \
-OPENCODE_BASE_URL=http://127.0.0.1:4096 \
-A2A_HOST=127.0.0.1 \
-A2A_PORT=8000 \
-OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
-uv run opencode-a2a-server serve
-```
+## Deployment Boundary
 
-Baseline validation:
+This repository improves the service boundary around OpenCode, but it does not
+turn OpenCode into a hardened multi-tenant platform.
 
-```bash
-uv run pre-commit run --all-files
-uv run pytest
-```
+- `A2A_BEARER_TOKEN` protects the A2A surface.
+- Provider auth and default model configuration remain on the OpenCode side.
+- Deployment supervision is intentionally BYO. Use `systemd`, Docker,
+  Kubernetes, or another supervisor if you need long-running operation.
+- For mutually untrusted tenants, run separate instance pairs with isolated
+  users, containers, workspaces, credentials, and ports.
 
-## Documentation Map
+Read before deployment:
 
-### User Docs
+- [SECURITY.md](SECURITY.md)
+- [docs/guide.md](docs/guide.md)
+
+## Further Reading
 
 - [docs/guide.md](docs/guide.md)
-  Product behavior, API contracts, and detailed streaming/session/interrupt
-  consumption guidance.
+  Usage guide, transport details, streaming behavior, extensions, and examples.
 - [SECURITY.md](SECURITY.md)
   Threat model, deployment caveats, and vulnerability disclosure guidance.
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-  Contributor workflow, validation baseline, and documentation expectations.
-- [scripts/README.md](scripts/README.md)
-  Contributor helper script index.
+
+## Development
+
+For contributor workflow, local validation, and helper scripts, see
+[CONTRIBUTING.md](CONTRIBUTING.md) and [scripts/README.md](scripts/README.md).
 
 ## License
 

@@ -2,10 +2,10 @@
 
 ## Scope
 
-This repository is an adapter layer that exposes OpenCode through A2A
-HTTP+JSON and JSON-RPC interfaces. It adds authentication, task/session
-contracts, streaming, interrupt handling, and runtime guidance, but it does
-not fully isolate upstream model credentials from OpenCode runtime behavior.
+This repository wraps OpenCode as an A2A adapter service. It exposes A2A
+HTTP+JSON and JSON-RPC interfaces, and adds authentication, task/session
+contracts, streaming, interrupt handling, and runtime guidance. It does not
+fully isolate upstream model credentials from OpenCode runtime behavior.
 
 ## Security Boundary
 
@@ -13,7 +13,10 @@ not fully isolate upstream model credentials from OpenCode runtime behavior.
   tenant-isolation boundary inside one deployed instance.
 - One `OpenCode + opencode-a2a-server` instance pair is treated as a
   single-tenant trust boundary by design.
-- Tenant isolation across consumers is expected to come from parameterized self-deployment of separate instance pairs with distinct Linux users, workspace roots, credentials, and runtime ports.
+- Tenant isolation across consumers is expected to come from parameterized
+  self-deployment.
+- For mutually untrusted tenants, use separate instance pairs with distinct
+  Linux users, workspace roots, credentials, and runtime ports.
 - Within one instance, consumers share the same underlying OpenCode
   workspace/environment by default.
 - LLM provider keys are consumed by the `opencode` process. Prompt injection or
