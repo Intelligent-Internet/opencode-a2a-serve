@@ -812,6 +812,26 @@ async def test_session_prompt_async_extension_rejects_invalid_params(monkeypatch
         assert payload["error"]["code"] == -32602
         assert payload["error"]["data"]["field"] == "request"
 
+        bad_model = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 310,
+                "method": "opencode.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "parts": [{"type": "text", "text": "hello"}],
+                        "model": {"providerID": "openai"},
+                    },
+                },
+            },
+        )
+        payload = bad_model.json()
+        assert payload["error"]["code"] == -32602
+        assert payload["error"]["data"]["field"] == "request.model.modelID"
+
 
 @pytest.mark.asyncio
 async def test_session_prompt_async_extension_rejects_owner_mismatch(monkeypatch):
@@ -1219,6 +1239,49 @@ async def test_session_command_extension_success(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_session_command_extension_accepts_request_model(monkeypatch):
+    import opencode_a2a_server.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 3201,
+                "method": "opencode.sessions.command",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "command": "/review",
+                        "arguments": "security",
+                        "model": {
+                            "providerID": "openai",
+                            "modelID": "gpt-5",
+                        },
+                    },
+                },
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json().get("error") is None
+        assert dummy.command_calls[0]["request"]["model"] == {
+            "providerID": "openai",
+            "modelID": "gpt-5",
+        }
+
+
+@pytest.mark.asyncio
 async def test_session_command_extension_rejects_invalid_params(monkeypatch):
     import opencode_a2a_server.app as app_module
 
@@ -1266,6 +1329,27 @@ async def test_session_command_extension_rejects_invalid_params(monkeypatch):
         payload = bad_arguments.json()
         assert payload["error"]["code"] == -32602
         assert payload["error"]["data"]["field"] == "request.arguments"
+
+        bad_model = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 3221,
+                "method": "opencode.sessions.command",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "command": "/review",
+                        "arguments": "security",
+                        "model": {"providerID": "openai"},
+                    },
+                },
+            },
+        )
+        payload = bad_model.json()
+        assert payload["error"]["code"] == -32602
+        assert payload["error"]["data"]["field"] == "request.model.modelID"
 
 
 @pytest.mark.asyncio
@@ -1432,6 +1516,27 @@ async def test_session_shell_extension_rejects_invalid_params(monkeypatch):
         payload = missing_agent.json()
         assert payload["error"]["code"] == -32602
         assert payload["error"]["data"]["field"] == "request.agent"
+
+        bad_model = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 333,
+                "method": "opencode.sessions.shell",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "agent": "code-reviewer",
+                        "command": "git status --short",
+                        "model": {"providerID": "openai"},
+                    },
+                },
+            },
+        )
+        payload = bad_model.json()
+        assert payload["error"]["code"] == -32602
+        assert payload["error"]["data"]["field"] == "request.model.modelID"
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ import pytest
 from opencode_a2a_server.app import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    MODEL_SELECTION_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
@@ -17,6 +18,7 @@ from opencode_a2a_server.extension_contracts import (
     SESSION_QUERY_MAX_LIMIT,
     build_compatibility_profile_params,
     build_interrupt_callback_extension_params,
+    build_model_selection_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
@@ -32,6 +34,7 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
     session_binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
+    model_selection = ext_by_uri[MODEL_SELECTION_EXTENSION_URI]
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
     interrupt_callback = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
@@ -43,6 +46,9 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     expected_session_binding = build_session_binding_extension_params(
         deployment_context=deployment_context,
         directory_override_enabled=True,
+    )
+    expected_model_selection = build_model_selection_extension_params(
+        deployment_context=deployment_context,
     )
     expected_streaming = build_streaming_extension_params()
     expected_session_query = build_session_query_extension_params(
@@ -65,6 +71,9 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
 
     assert session_binding.params == expected_session_binding, (
         "Session binding extension drifted from extension_contracts SSOT."
+    )
+    assert model_selection.params == expected_model_selection, (
+        "Model selection extension drifted from extension_contracts SSOT."
     )
     assert streaming.params == expected_streaming, (
         "Streaming extension drifted from extension_contracts SSOT."
@@ -94,6 +103,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     )
 
     session_binding = contract["session_binding"]
+    model_selection = contract["model_selection"]
     streaming = contract["streaming"]
     session_query = contract["session_query"]
     interrupt_callback = contract["interrupt_callback"]
@@ -104,6 +114,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     expected_session_binding = build_session_binding_extension_params(
         deployment_context=deployment_context,
         directory_override_enabled=True,
+    )
+    expected_model_selection = build_model_selection_extension_params(
+        deployment_context=deployment_context,
     )
     expected_streaming = build_streaming_extension_params()
     expected_session_query = build_session_query_extension_params(
@@ -124,6 +137,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
 
     assert session_binding == expected_session_binding, (
         "OpenAPI session binding contract drifted from extension_contracts SSOT."
+    )
+    assert model_selection == expected_model_selection, (
+        "OpenAPI model selection contract drifted from extension_contracts SSOT."
     )
     assert streaming == expected_streaming, (
         "OpenAPI streaming contract drifted from extension_contracts SSOT."

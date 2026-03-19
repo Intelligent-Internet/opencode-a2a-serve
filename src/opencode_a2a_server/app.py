@@ -44,6 +44,7 @@ from .extension_contracts import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     INTERRUPT_CALLBACK_METHODS,
+    MODEL_SELECTION_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -53,6 +54,7 @@ from .extension_contracts import (
     WIRE_CONTRACT_EXTENSION_URI,
     build_compatibility_profile_params,
     build_interrupt_callback_extension_params,
+    build_model_selection_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
@@ -288,8 +290,8 @@ def _build_agent_card_description(
         "Supports HTTP+JSON and JSON-RPC transports, streaming-first A2A messaging "
         "(message/send, message/stream), task APIs (tasks/get, tasks/cancel, "
         "tasks/resubscribe; REST mapping: GET /v1/tasks/{id}:subscribe), shared "
-        "session-binding/streaming contracts, provider-private OpenCode session "
-        "extensions, and shared interrupt callback extensions."
+        "session-binding/model-selection/streaming contracts, provider-private "
+        "OpenCode session extensions, and shared interrupt callback extensions."
     )
     parts: list[str] = [base, summary]
     parts.append("This server profile is intended for single-tenant, self-hosted coding workflows.")
@@ -343,7 +345,8 @@ def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool)
     return (
         "A2A JSON-RPC entrypoint. Supports core A2A methods "
         "(message/send, message/stream, tasks/get, tasks/cancel, tasks/resubscribe) "
-        "plus OpenCode session extensions and shared interrupt callback methods.\n\n"
+        "plus shared model-selection metadata, OpenCode session extensions, and "
+        "shared interrupt callback methods.\n\n"
         f"OpenCode session query/control methods: {', '.join(session_methods)}.\n"
         f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
         "Notification semantics: extension requests without JSON-RPC id return HTTP 204."
@@ -384,6 +387,29 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                             }
                         ],
                     }
+                },
+            },
+        },
+        "message_send_model_override": {
+            "summary": "Send message with shared model override",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 103,
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": "msg-model-1",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Answer with the faster model."}],
+                    },
+                    "metadata": {
+                        "shared": {
+                            "model": {
+                                "providerID": "google",
+                                "modelID": "gemini-2.5-flash",
+                            }
+                        }
+                    },
                 },
             },
         },
@@ -555,6 +581,24 @@ def _build_rest_message_openapi_examples() -> dict[str, Any]:
                 },
             },
         },
+        "message_with_model_override": {
+            "summary": "Send message with shared model override",
+            "value": {
+                "message": {
+                    "messageId": "msg-rest-model-1",
+                    "role": "ROLE_USER",
+                    "content": [{"text": "Answer with the faster model."}],
+                },
+                "metadata": {
+                    "shared": {
+                        "model": {
+                            "providerID": "google",
+                            "modelID": "gemini-2.5-flash",
+                        }
+                    }
+                },
+            },
+        },
     }
 
 
@@ -567,6 +611,9 @@ def _patch_jsonrpc_openapi_contract(
     session_binding = build_session_binding_extension_params(
         deployment_context=deployment_context,
         directory_override_enabled=bool(deployment_context["allow_directory_override"]),
+    )
+    model_selection = build_model_selection_extension_params(
+        deployment_context=deployment_context,
     )
     streaming = build_streaming_extension_params()
     session_query = build_session_query_extension_params(
@@ -603,6 +650,7 @@ def _patch_jsonrpc_openapi_contract(
                     )
                     post["x-a2a-extension-contracts"] = {
                         "session_binding": session_binding,
+                        "model_selection": model_selection,
                         "streaming": streaming,
                         "session_query": session_query,
                         "interrupt_callback": interrupt_callback,
@@ -689,6 +737,9 @@ def build_agent_card(settings: Settings) -> AgentCard:
         deployment_context=deployment_context,
         directory_override_enabled=settings.a2a_allow_directory_override,
     )
+    model_selection_extension_params = build_model_selection_extension_params(
+        deployment_context=deployment_context,
+    )
     streaming_extension_params = build_streaming_extension_params()
     session_query_extension_params = build_session_query_extension_params(
         deployment_context=deployment_context,
@@ -730,6 +781,16 @@ def build_agent_card(settings: Settings) -> AgentCard:
                         "server-side directory boundary validation."
                     ),
                     params=session_binding_extension_params,
+                ),
+                AgentExtension(
+                    uri=MODEL_SELECTION_EXTENSION_URI,
+                    required=False,
+                    description=(
+                        "Shared contract for request-scoped upstream model selection on the "
+                        "main chat path. Clients should pass metadata.shared.model with "
+                        "providerID/modelID."
+                    ),
+                    params=model_selection_extension_params,
                 ),
                 AgentExtension(
                     uri=STREAMING_EXTENSION_URI,
@@ -785,7 +846,7 @@ def build_agent_card(settings: Settings) -> AgentCard:
                 description=(
                     "Handle core A2A message/send and message/stream requests by routing "
                     "TextPart and FilePart inputs to OpenCode sessions with shared session "
-                    "binding."
+                    "binding and optional request-scoped model selection."
                 ),
                 tags=["assistant", "coding", "opencode", "core-a2a", "portable"],
                 examples=_build_chat_examples(settings.a2a_project),

@@ -25,18 +25,20 @@ need a stable service layer around it. This repository provides that layer by:
   extensions
 - SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
 - session continuation via `metadata.shared.session.id`
+- request-scoped model selection via `metadata.shared.model`
 - OpenCode session query/control extensions
 - released CLI install/upgrade flow and a foreground runtime entrypoint
 
 ## Extension Capability Overview
 
-The Agent Card declares six extension URIs. Shared contracts are intended for
+The Agent Card declares seven extension URIs. Shared contracts are intended for
 any compatible consumer; OpenCode-specific contracts stay provider-scoped even
 though they are exposed through A2A JSON-RPC.
 
 | Extension URI | Scope | Primary use |
 | --- | --- | --- |
 | `urn:a2a:session-binding/v1` | Shared | Bind a main chat request to an existing upstream session via `metadata.shared.session.id` |
+| `urn:a2a:model-selection/v1` | Shared | Override the upstream model for one main chat request via `metadata.shared.model` |
 | `urn:a2a:stream-hints/v1` | Shared | Advertise canonical stream metadata for blocks, usage, interrupts, and session hints |
 | `urn:opencode-a2a:session-query/v1` | OpenCode-specific | Query external sessions and invoke OpenCode session control methods |
 | `urn:a2a:interactive-interrupt/v1` | Shared | Reply to interrupt callbacks observed from stream metadata |
@@ -46,6 +48,7 @@ though they are exposed through A2A JSON-RPC.
 Detailed consumption guidance:
 
 - Shared session binding: [`docs/guide.md#shared-session-binding-contract`](docs/guide.md#shared-session-binding-contract)
+- Shared model selection: [`docs/guide.md#shared-model-selection-contract`](docs/guide.md#shared-model-selection-contract)
 - Shared stream hints: [`docs/guide.md#shared-stream-hints-contract`](docs/guide.md#shared-stream-hints-contract)
 - OpenCode session query: [`docs/guide.md#opencode-session-query-a2a-extension`](docs/guide.md#opencode-session-query-a2a-extension)
 - Shared interrupt callback: [`docs/guide.md#shared-interrupt-callback-a2a-extension`](docs/guide.md#shared-interrupt-callback-a2a-extension)
@@ -140,9 +143,6 @@ uv tool install "opencode-a2a-server==<version>"
 Run it against an existing project/workspace:
 
 ```bash
-GOOGLE_GENERATIVE_AI_API_KEY=<your-key> \
-OPENCODE_PROVIDER_ID=google \
-OPENCODE_MODEL_ID=gemini-3.1-pro-preview \
 opencode serve --hostname 127.0.0.1 --port 4096
 
 A2A_BEARER_TOKEN=prod-token \
@@ -163,6 +163,8 @@ Runtime boundary:
 
 - `opencode serve` owns provider auth, model defaults, and upstream lifecycle.
 - `opencode-a2a-server serve` connects to that upstream through `OPENCODE_BASE_URL`.
+- Request-scoped model selection remains available through `metadata.shared.model`
+  on the main chat path and `request.model` on session-control methods.
 
 Common runtime variables:
 
@@ -183,8 +185,9 @@ Common runtime variables:
 | `OPENCODE_TIMEOUT` | No | `120` | Upstream OpenCode request timeout in seconds. |
 | `OPENCODE_TIMEOUT_STREAM` | No | None | Upstream OpenCode stream timeout override in seconds. |
 
-For provider-specific auth, model IDs, and config details, use the OpenCode
-official docs and CLI:
+Provider auth and upstream model defaults belong to `opencode serve`, not to
+`opencode-a2a-server`. For provider-specific auth, model IDs, and config
+details, use the OpenCode official docs and CLI:
 
 - Providers: <https://opencode.ai/docs/providers/>
 - Models: <https://opencode.ai/docs/models/>
@@ -238,11 +241,15 @@ WantedBy=multi-user.target
 
 Replace `ExecStart` with the absolute path returned by `command -v opencode-a2a-server`.
 
-Migration notes:
+## Migration Notes
 
 - `OPENCODE_DIRECTORY` has been removed. Use `OPENCODE_WORKSPACE_ROOT`.
-- Built-in `init-release-system`, `deploy-release`, and `uninstall-instance` have been removed.
-- Secret storage, service users, restart policy, and supervisor configuration are now operator-managed.
+- Built-in deploy/bootstrap wrappers have been removed. Use your own process
+  manager and supervisor.
+- Built-in `init-release-system`, `deploy-release`, and `uninstall-instance`
+  have been removed.
+- Secret storage, service users, restart policy, and supervisor configuration
+  are now operator-managed.
 
 ## Contributor Paths
 
@@ -254,9 +261,6 @@ Quick source run:
 ```bash
 uv sync --all-extras
 
-GOOGLE_GENERATIVE_AI_API_KEY=<your-key> \
-OPENCODE_PROVIDER_ID=google \
-OPENCODE_MODEL_ID=gemini-3.1-pro-preview \
 opencode serve --hostname 127.0.0.1 --port 4096
 
 A2A_BEARER_TOKEN=dev-token \

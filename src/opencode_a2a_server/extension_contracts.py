@@ -5,12 +5,14 @@ from typing import Any
 
 SHARED_SESSION_BINDING_FIELD = "metadata.shared.session.id"
 SHARED_SESSION_METADATA_FIELD = "metadata.shared.session"
+SHARED_MODEL_SELECTION_FIELD = "metadata.shared.model"
 SHARED_STREAM_METADATA_FIELD = "metadata.shared.stream"
 SHARED_INTERRUPT_METADATA_FIELD = "metadata.shared.interrupt"
 SHARED_USAGE_METADATA_FIELD = "metadata.shared.usage"
 OPENCODE_DIRECTORY_METADATA_FIELD = "metadata.opencode.directory"
 
 SESSION_BINDING_EXTENSION_URI = "urn:a2a:session-binding/v1"
+MODEL_SELECTION_EXTENSION_URI = "urn:a2a:model-selection/v1"
 STREAMING_EXTENSION_URI = "urn:a2a:stream-hints/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:opencode-a2a:session-query/v1"
 INTERRUPT_CALLBACK_EXTENSION_URI = "urn:a2a:interactive-interrupt/v1"
@@ -42,6 +44,7 @@ class InterruptMethodContract:
 PROMPT_ASYNC_REQUEST_REQUIRED_FIELDS: tuple[str, ...] = ("parts",)
 PROMPT_ASYNC_REQUEST_OPTIONAL_FIELDS: tuple[str, ...] = (
     "messageID",
+    "model",
     "agent",
     "noReply",
     "tools",
@@ -57,6 +60,7 @@ COMMAND_REQUEST_REQUIRED_FIELDS: tuple[str, ...] = ("command", "arguments")
 COMMAND_REQUEST_OPTIONAL_FIELDS: tuple[str, ...] = (
     "messageID",
     "agent",
+    "model",
     "variant",
     "parts",
 )
@@ -65,7 +69,7 @@ COMMAND_REQUEST_ALLOWED_FIELDS: tuple[str, ...] = (
     *COMMAND_REQUEST_OPTIONAL_FIELDS,
 )
 SHELL_REQUEST_REQUIRED_FIELDS: tuple[str, ...] = ("agent", "command")
-SHELL_REQUEST_OPTIONAL_FIELDS: tuple[str, ...] = ()
+SHELL_REQUEST_OPTIONAL_FIELDS: tuple[str, ...] = ("model",)
 SHELL_REQUEST_ALLOWED_FIELDS: tuple[str, ...] = (
     *SHELL_REQUEST_REQUIRED_FIELDS,
     *SHELL_REQUEST_OPTIONAL_FIELDS,
@@ -105,6 +109,7 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         required_params=("session_id", "request.parts"),
         optional_params=(
             "request.messageID",
+            "request.model",
             "request.agent",
             "request.noReply",
             "request.tools",
@@ -122,6 +127,7 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         optional_params=(
             "request.messageID",
             "request.agent",
+            "request.model",
             "request.variant",
             "request.parts",
             OPENCODE_DIRECTORY_METADATA_FIELD,
@@ -132,7 +138,7 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
     "shell": SessionQueryMethodContract(
         method="opencode.sessions.shell",
         required_params=("session_id", "request.agent", "request.command"),
-        optional_params=(OPENCODE_DIRECTORY_METADATA_FIELD,),
+        optional_params=("request.model", OPENCODE_DIRECTORY_METADATA_FIELD),
         result_fields=("item",),
         notification_response_status=204,
     ),
@@ -293,6 +299,40 @@ def build_session_binding_extension_params(
             (
                 "Otherwise, the server will create a new upstream session and cache "
                 "the (identity, contextId)->session_id mapping in memory with TTL."
+            ),
+        ],
+    }
+
+
+def build_model_selection_extension_params(
+    *,
+    deployment_context: dict[str, str | bool],
+) -> dict[str, Any]:
+    return {
+        "metadata_field": SHARED_MODEL_SELECTION_FIELD,
+        "behavior": "prefer_metadata_model_else_upstream_default",
+        "applies_to_methods": ["message/send", "message/stream"],
+        "supported_metadata": [
+            "shared.model.providerID",
+            "shared.model.modelID",
+        ],
+        "provider_private_metadata": [],
+        "shared_workspace_across_consumers": True,
+        "tenant_isolation": "none",
+        "deployment_context": deployment_context,
+        "fields": {
+            "providerID": f"{SHARED_MODEL_SELECTION_FIELD}.providerID",
+            "modelID": f"{SHARED_MODEL_SELECTION_FIELD}.modelID",
+        },
+        "notes": [
+            (
+                "If both metadata.shared.model.providerID and metadata.shared.model.modelID "
+                "are non-empty strings, the server will override the upstream model for "
+                "this request only."
+            ),
+            (
+                "If shared model metadata is missing, partial, or invalid, the server "
+                "falls back to the upstream OpenCode default behavior."
             ),
         ],
     }
@@ -513,6 +553,11 @@ def build_compatibility_profile_params(
                 "availability": "always",
                 "retention": "required",
             },
+            MODEL_SELECTION_EXTENSION_URI: {
+                "surface": "core-runtime-metadata",
+                "availability": "always",
+                "retention": "stable",
+            },
             STREAMING_EXTENSION_URI: {
                 "surface": "core-runtime-metadata",
                 "availability": "always",
@@ -535,6 +580,10 @@ def build_compatibility_profile_params(
             (
                 "Treat this deployment as a single-tenant, shared-workspace coding profile; "
                 "do not assume per-consumer workspace or tenant isolation."
+            ),
+            (
+                "Treat shared model selection metadata as a stable request-scoped plugin "
+                "surface for the main chat path; provider defaults still belong to OpenCode."
             ),
             (
                 "Treat opencode.sessions.* as provider-private operational surfaces rather "
@@ -588,6 +637,7 @@ def build_wire_contract_params(
             "conditionally_available_methods": conditionally_available_methods,
             "extension_uris": [
                 SESSION_BINDING_EXTENSION_URI,
+                MODEL_SELECTION_EXTENSION_URI,
                 STREAMING_EXTENSION_URI,
                 SESSION_QUERY_EXTENSION_URI,
                 INTERRUPT_CALLBACK_EXTENSION_URI,

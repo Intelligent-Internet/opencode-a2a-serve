@@ -1,6 +1,7 @@
 from opencode_a2a_server.app import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    MODEL_SELECTION_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
@@ -63,6 +64,13 @@ def test_agent_card_injects_deployment_context_into_extensions() -> None:
     assert binding.params["directory_override_enabled"] is False
     assert binding.params["shared_workspace_across_consumers"] is True
     assert binding.params["tenant_isolation"] == "none"
+
+    model_selection = ext_by_uri[MODEL_SELECTION_EXTENSION_URI]
+    assert model_selection.params["metadata_field"] == "metadata.shared.model"
+    assert model_selection.params["fields"]["providerID"] == "metadata.shared.model.providerID"
+    assert model_selection.params["fields"]["modelID"] == "metadata.shared.model.modelID"
+    assert model_selection.params["applies_to_methods"] == ["message/send", "message/stream"]
+    assert model_selection.params["behavior"] == "prefer_metadata_model_else_upstream_default"
 
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
     assert streaming.params["artifact_metadata_field"] == "metadata.shared.stream"
@@ -175,12 +183,18 @@ def test_agent_card_injects_deployment_context_into_extensions() -> None:
         )
 
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
+    assert compatibility.params["extension_retention"][MODEL_SELECTION_EXTENSION_URI] == {
+        "surface": "core-runtime-metadata",
+        "availability": "always",
+        "retention": "stable",
+    }
     shell_policy = compatibility.params["method_retention"]["opencode.sessions.shell"]
     assert shell_policy["availability"] == "disabled"
     assert shell_policy["retention"] == "deployment-conditional"
     assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
+    assert MODEL_SELECTION_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert "opencode.sessions.shell" not in wire_contract.params["all_jsonrpc_methods"]
     assert wire_contract.params["extensions"]["conditionally_available_methods"] == {
         "opencode.sessions.shell": {

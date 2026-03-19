@@ -119,6 +119,7 @@ class DummyChatOpencodeClient:
     def __init__(self, settings: Settings | None = None) -> None:
         self.created_sessions = 0
         self.sent_session_ids: list[str] = []
+        self.sent_model_overrides: list[dict[str, str] | None] = []
         self.stream_timeout = None
         self.directory = None
         self.settings = settings or make_settings(
@@ -146,10 +147,12 @@ class DummyChatOpencodeClient:
         *,
         parts: list[dict[str, Any]] | None = None,
         directory: str | None = None,
+        model_override: dict[str, str] | None = None,
         timeout_override=None,  # noqa: ANN001
     ) -> OpencodeMessage:
         del directory, timeout_override, parts
         self.sent_session_ids.append(session_id)
+        self.sent_model_overrides.append(model_override)
         return OpencodeMessage(
             text=f"echo:{text or ''}",
             session_id=session_id,

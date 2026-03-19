@@ -95,6 +95,23 @@ def _raise_prompt_async_validation_error(*, field: str, message: str) -> None:
     raise _PromptAsyncValidationError(field=field, message=message)
 
 
+def _validate_model_ref(value: Any, *, field: str) -> None:
+    if not isinstance(value, dict):
+        _raise_prompt_async_validation_error(field=field, message=f"{field} must be an object")
+    provider = value.get("providerID")
+    model = value.get("modelID")
+    if not isinstance(provider, str) or not provider.strip():
+        _raise_prompt_async_validation_error(
+            field=f"{field}.providerID",
+            message=f"{field}.providerID must be a non-empty string",
+        )
+    if not isinstance(model, str) or not model.strip():
+        _raise_prompt_async_validation_error(
+            field=f"{field}.modelID",
+            message=f"{field}.modelID must be a non-empty string",
+        )
+
+
 def _validate_prompt_async_format(value: Any, *, field: str) -> None:
     if not isinstance(value, dict):
         _raise_prompt_async_validation_error(field=field, message=f"{field} must be an object")
@@ -163,6 +180,9 @@ def _validate_prompt_async_part(value: Any, *, field: str) -> None:
                     field=f"{field}.{key}",
                     message=f"{field}.{key} must be a string",
                 )
+        model = value.get("model")
+        if model is not None:
+            _validate_model_ref(model, field=f"{field}.model")
         command = value.get("command")
         if command is not None and not isinstance(command, str):
             _raise_prompt_async_validation_error(
@@ -193,6 +213,10 @@ def _validate_prompt_async_request_payload(value: dict[str, Any]) -> None:
                 field="request.messageID",
                 message="request.messageID must be a string starting with 'msg'",
             )
+
+    model = value.get("model")
+    if model is not None:
+        _validate_model_ref(model, field="request.model")
 
     for key in ("agent", "system", "variant"):
         data = value.get(key)
@@ -287,6 +311,10 @@ def _validate_command_request_payload(value: dict[str, Any]) -> None:
                 message="request.messageID must be a string starting with 'msg'",
             )
 
+    model = value.get("model")
+    if model is not None:
+        _validate_model_ref(model, field="request.model")
+
     for key in ("agent", "variant"):
         data = value.get(key)
         if data is not None and not isinstance(data, str):
@@ -324,6 +352,10 @@ def _validate_shell_request_payload(value: dict[str, Any]) -> None:
                 field=f"request.{key}",
                 message=f"request.{key} must be a non-empty string",
             )
+
+    model = value.get("model")
+    if model is not None:
+        _validate_model_ref(model, field="request.model")
 
 
 def _extract_session_title(session: dict[str, Any]) -> str:
