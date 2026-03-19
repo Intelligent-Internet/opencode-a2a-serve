@@ -15,6 +15,8 @@ from opencode_a2a_server.app import (
 )
 from opencode_a2a_server.extension_contracts import (
     INTERRUPT_CALLBACK_METHODS,
+    SESSION_QUERY_DEFAULT_LIMIT,
+    SESSION_QUERY_MAX_LIMIT,
     build_compatibility_profile_params,
     build_interrupt_callback_extension_params,
     build_model_selection_extension_params,
@@ -56,6 +58,8 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
         deployment_context=deployment_context,
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
+    assert expected_session_query["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert expected_session_query["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
     expected_provider_discovery = build_provider_discovery_extension_params(
         deployment_context=deployment_context,
     )
@@ -195,6 +199,16 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert not missing_methods, (
         "OpenAPI JSON-RPC examples are missing extension methods: " + ", ".join(missing_methods)
     )
+
+
+def test_openapi_jsonrpc_examples_use_declared_default_session_limit() -> None:
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    examples = app.openapi()["paths"]["/"]["post"]["requestBody"]["content"]["application/json"][
+        "examples"
+    ]
+
+    assert examples["session_list"]["value"]["params"]["limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert examples["session_messages"]["value"]["params"]["limit"] == SESSION_QUERY_DEFAULT_LIMIT
 
 
 @pytest.mark.asyncio

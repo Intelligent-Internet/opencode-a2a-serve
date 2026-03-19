@@ -89,6 +89,8 @@ SHELL_REQUEST_ALLOWED_FIELDS: tuple[str, ...] = (
 
 SESSION_QUERY_PAGINATION_MODE = "limit"
 SESSION_QUERY_PAGINATION_BEHAVIOR = "passthrough"
+SESSION_QUERY_DEFAULT_LIMIT = 20
+SESSION_QUERY_MAX_LIMIT = 100
 SESSION_QUERY_PAGINATION_PARAMS: tuple[str, ...] = ("limit",)
 SESSION_QUERY_PAGINATION_UNSUPPORTED: tuple[str, ...] = ("cursor", "page", "size")
 
@@ -488,6 +490,8 @@ def build_session_query_extension_params(
         "deployment_context": deployment_context,
         "pagination": {
             "mode": SESSION_QUERY_PAGINATION_MODE,
+            "default_limit": SESSION_QUERY_DEFAULT_LIMIT,
+            "max_limit": SESSION_QUERY_MAX_LIMIT,
             "behavior": SESSION_QUERY_PAGINATION_BEHAVIOR,
             "params": list(SESSION_QUERY_PAGINATION_PARAMS),
             "applies_to": pagination_applies_to,

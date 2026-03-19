@@ -411,6 +411,7 @@ introduced.
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
   - message history => `Message`
+  - limit pagination defaults to `20`; requests above `100` are rejected
   - `contextId` is an A2A context key derived by the adapter
     (format: `ctx:opencode-session:<session_id>`, not raw OpenCode session ID)
   - OpenCode session identity is exposed explicitly at `metadata.shared.session.id`
