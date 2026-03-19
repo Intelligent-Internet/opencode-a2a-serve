@@ -158,6 +158,27 @@ exposes to OpenCode.
 
 Default address: `http://127.0.0.1:8000`
 
+Common runtime variables:
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `A2A_BEARER_TOKEN` | Yes | None | Bearer token required for authenticated runtime requests. |
+| `OPENCODE_BASE_URL` | No | `http://127.0.0.1:4096` | Upstream OpenCode HTTP endpoint. |
+| `OPENCODE_WORKSPACE_ROOT` | No | None | Default workspace root exposed to OpenCode. |
+| `OPENCODE_PROVIDER_ID` | No | None | Default provider for the upstream runtime. |
+| `OPENCODE_MODEL_ID` | No | None | Default model for the upstream runtime. Set together with `OPENCODE_PROVIDER_ID`. |
+| `A2A_HOST` | No | `127.0.0.1` | Bind host for the A2A server. |
+| `A2A_PORT` | No | `8000` | Bind port for the A2A server. |
+| `A2A_PUBLIC_URL` | No | `http://127.0.0.1:8000` | Public base URL advertised by the Agent Card. |
+| `A2A_LOG_LEVEL` | No | `WARNING` | Server log level. |
+| `A2A_LOG_PAYLOADS` | No | `false` | Enable request/response payload logging. |
+| `A2A_LOG_BODY_LIMIT` | No | `0` | Payload preview size used when payload logging is enabled. |
+| `A2A_MAX_REQUEST_BODY_BYTES` | No | `1048576` | Maximum accepted request size. |
+| `A2A_ALLOW_DIRECTORY_OVERRIDE` | No | `true` | Allow request-level `metadata.opencode.directory` overrides. |
+| `A2A_ENABLE_SESSION_SHELL` | No | `false` | Enable high-risk `opencode.sessions.shell`. |
+| `OPENCODE_TIMEOUT` | No | `120` | Upstream OpenCode request timeout in seconds. |
+| `OPENCODE_TIMEOUT_STREAM` | No | None | Upstream OpenCode stream timeout override in seconds. |
+
 If you omit `OPENCODE_PROVIDER_ID` / `OPENCODE_MODEL_ID`, `opencode serve`
 uses your local OpenCode defaults (for example `~/.config/opencode/opencode.json`).
 
@@ -180,6 +201,47 @@ Use any supervisor you prefer for long-running operation:
 
 The project no longer ships built-in host bootstrap or process-manager
 wrappers. The official product surface is the runtime entrypoint itself.
+
+Minimal `systemd` example:
+
+1. Create an env file such as `/etc/opencode-a2a/alpha.env`:
+
+```bash
+A2A_BEARER_TOKEN=replace-me
+A2A_HOST=127.0.0.1
+A2A_PORT=8000
+A2A_PUBLIC_URL=https://a2a.example.com
+OPENCODE_BASE_URL=http://127.0.0.1:4096
+OPENCODE_WORKSPACE_ROOT=/srv/my-workspace
+```
+
+2. Create a unit file such as `/etc/systemd/system/opencode-a2a-server.service`:
+
+```ini
+[Unit]
+Description=OpenCode A2A Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/my-workspace
+EnvironmentFile=/etc/opencode-a2a/alpha.env
+ExecStart=/home/dev/.local/bin/opencode-a2a-server serve
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Replace `ExecStart` with the absolute path returned by `command -v opencode-a2a-server`.
+
+Migration notes:
+
+- `OPENCODE_DIRECTORY` has been removed. Use `OPENCODE_WORKSPACE_ROOT`.
+- Built-in `init-release-system`, `deploy-release`, and `uninstall-instance` have been removed.
+- Secret storage, service users, restart policy, and supervisor configuration are now operator-managed.
 
 ## Contributor Paths
 
