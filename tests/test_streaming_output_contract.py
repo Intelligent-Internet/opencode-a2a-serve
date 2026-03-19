@@ -847,7 +847,7 @@ async def test_streaming_final_status_state_is_completed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_streaming_emits_text_from_step_finish_snapshot_part() -> None:
+async def test_streaming_does_not_emit_text_from_step_finish_snapshot_part() -> None:
     client = DummyStreamingClient(
         stream_events_payload=[
             {
@@ -884,13 +884,12 @@ async def test_streaming_emits_text_from_step_finish_snapshot_part() -> None:
         queue,
     )
 
-    updates = _artifact_updates(queue)
-    assert updates
     text_updates = [
-        event for event in updates if _artifact_stream_meta(event)["block_type"] == "text"
+        event
+        for event in _artifact_updates(queue)
+        if _artifact_stream_meta(event)["block_type"] == "text"
     ]
-    assert text_updates
-    assert _part_text(text_updates[-1]) == "final answer from snapshot"
+    assert text_updates == []
 
     final_status = [
         event for event in queue.events if isinstance(event, TaskStatusUpdateEvent) and event.final

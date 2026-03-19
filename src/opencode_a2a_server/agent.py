@@ -2287,8 +2287,6 @@ def _extract_stream_part_type(part: Mapping[str, Any], props: Mapping[str, Any])
 
 def _extract_stream_snapshot_text(part: Mapping[str, Any]) -> str | None:
     part_type = _extract_stream_part_type(part, {})
-    if part_type in {"step-start", "step-finish", "snapshot"}:
-        return _extract_first_nonempty_string(part, ("snapshot",))
     if part_type in {"text", "reasoning"}:
         return _extract_first_nonempty_string(part, ("text",))
     return None
@@ -2353,7 +2351,7 @@ def _log_stream_event_debug(event: Mapping[str, Any], *, limit: int) -> None:
 def _map_part_type_to_block_type(part_type: str | None) -> BlockType | None:
     if not part_type:
         return None
-    if part_type in {"text", "snapshot", "step-start", "step-finish"}:
+    if part_type == "text":
         return BlockType.TEXT
     if part_type == "reasoning":
         return BlockType.REASONING
