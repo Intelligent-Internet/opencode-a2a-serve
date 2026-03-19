@@ -1,8 +1,9 @@
 # Usage Guide
 
-This guide covers configuration, authentication, API behavior, streaming re-subscription, and A2A client usage examples.
-It is also the canonical document for implementation-level protocol contracts
-and JSON-RPC extension details (README stays at overview level).
+This guide covers configuration, authentication, API behavior, streaming
+re-subscription, and A2A client examples.
+It is the canonical document for implementation-level protocol contracts and
+JSON-RPC extension details; README stays at overview level.
 
 ## Transport Contracts
 
@@ -86,78 +87,93 @@ OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
 opencode-a2a-server serve
 ```
 
-## Service Behavior
+## Core Behavior
 
 - The service forwards A2A `message:send` to OpenCode session/message calls.
 - Main chat requests may override the upstream model for one request through
   `metadata.shared.model`.
 - Provider/model catalog discovery is available through
   `opencode.providers.list` and `opencode.models.list`.
-- Streaming is always enabled in this server profile; `message:stream` is part
-  of the stable runtime baseline.
 - Main chat input supports structured A2A `parts` passthrough:
   - `TextPart` is forwarded as an OpenCode text part.
   - `FilePart(FileWithBytes)` is forwarded as a `file` part with a `data:` URL.
-  - `FilePart(FileWithUri)` is forwarded as a `file` part with the original URI.
+  - `FilePart(FileWithUri)` is forwarded as a `file` part with the original
+    URI.
   - `DataPart` is currently rejected explicitly; it is not silently downgraded.
 - Task state defaults to `completed` for successful turns.
 - The deployment profile is single-tenant and shared-workspace: one server
   instance exposes one OpenCode workspace/environment to all consumers bound to
   that instance.
+
+## Streaming Contract
+
+- Streaming is always enabled in this server profile; `message:stream` is part
+  of the stable runtime baseline.
 - Streaming (`/v1/message:stream`) emits incremental
   `TaskArtifactUpdateEvent` and then
-  `TaskStatusUpdateEvent(final=true)`. Stream artifacts carry
-  `artifact.metadata.shared.stream.block_type` with values
-  `text` / `reasoning` / `tool_call`. All chunks share one stream
-  artifact ID and preserve original timeline via
+  `TaskStatusUpdateEvent(final=true)`.
+- Stream artifacts carry `artifact.metadata.shared.stream.block_type` with
+  values `text` / `reasoning` / `tool_call`.
+- All chunks share one stream artifact ID and preserve original timeline via
   `artifact.metadata.shared.stream.event_id`.
-  `artifact.metadata.shared.stream.message_id` remains best-effort metadata:
-  when upstream omits `message_id`, service falls back to a stable
-  request-scoped message identity. `artifact.metadata.shared.stream.sequence`
-  carries the canonical per-request stream sequence. A final snapshot is
-  only emitted when stream
-  chunks did not already produce the same final text.
-  Stream routing is schema-first: the service classifies chunks primarily by
-  OpenCode `part.type` (plus `part_id` state) rather than inline text markers.
-  `message.part.delta` and `message.part.updated` are merged per `part_id`;
+- `artifact.metadata.shared.stream.message_id` remains best-effort metadata:
+  when upstream omits `message_id`, the service falls back to a stable
+  request-scoped message identity.
+- `artifact.metadata.shared.stream.sequence` carries the canonical per-request
+  stream sequence.
+- A final snapshot is emitted only when streaming chunks did not already
+  produce the same final text.
+- Stream routing is schema-first: the service classifies chunks primarily by
+  OpenCode `part.type` and `part_id` state rather than inline text markers.
+- `message.part.delta` and `message.part.updated` are merged per `part_id`;
   out-of-order deltas are buffered and replayed when the corresponding
-  `part.updated` arrives. Structured `tool` parts are emitted as `tool_call`
-  blocks backed by `DataPart(data={...})`, while `text` and `reasoning`
-  continue to use `TextPart`. Final status event metadata may include
-  normalized token usage at `metadata.shared.usage` with fields like
-  `input_tokens`, `output_tokens`, `total_tokens`, and optional `cost`.
-  Usage is extracted from documented info payloads and supported usage parts
+  `part.updated` arrives.
+- Structured `tool` parts are emitted as `tool_call` blocks backed by
+  `DataPart(data={...})`, while `text` and `reasoning` continue to use
+  `TextPart`.
+- Final status event metadata may include normalized token usage at
+  `metadata.shared.usage` with fields such as `input_tokens`,
+  `output_tokens`, `total_tokens`, and optional `cost`.
+- Usage is extracted from documented info payloads and supported usage parts
   such as `step-finish`; non-usage parts with similar fields are ignored.
-  Interrupt events (`permission.asked` / `question.asked`) are mapped to
+- Interrupt events (`permission.asked` / `question.asked`) are mapped to
   `TaskStatusUpdateEvent(final=false, state=input-required)` with details at
-  `metadata.shared.interrupt` (including `request_id`, interrupt `type`,
-  `phase=asked`, and normalized minimal callback payload). Resolved interrupt
-  events (`permission.replied` / `question.replied` / `question.rejected`) are
-  emitted as `TaskStatusUpdateEvent(final=false, state=working)` with
+  `metadata.shared.interrupt`, including `request_id`, interrupt `type`,
+  `phase=asked`, and a normalized minimal callback payload.
+- Resolved interrupt events (`permission.replied` / `question.replied` /
+  `question.rejected`) are emitted as
+  `TaskStatusUpdateEvent(final=false, state=working)` with
   `metadata.shared.interrupt.phase=resolved` and a normalized
-  `metadata.shared.interrupt.resolution`. Duplicate or unknown resolved events
-  are suppressed unless the matching request is still pending.
-  Non-streaming requests return a `Task` directly.
+  `metadata.shared.interrupt.resolution`.
+- Duplicate or unknown resolved events are suppressed unless the matching
+  request is still pending.
+- Non-streaming requests return a `Task` directly.
 - Non-streaming `message:send` responses may include normalized token usage at
   `Task.metadata.shared.usage` with the same field schema.
+
+## Auth, Limits, and Failure Contract
+
 - Requests require `Authorization: Bearer <token>`; otherwise `401` is
   returned. Agent Card endpoints are public.
 - Requests above `A2A_MAX_REQUEST_BODY_BYTES` are rejected with HTTP `413`
   before transport handling.
-- Error handling:
-  - For validation failures, missing context (`task_id`/`context_id`), or
-    internal errors, the service attempts to return standard A2A failure events
-    via `event_queue`.
-  - Failure events include concrete error details with `failed` state.
-- Directory validation and normalization:
-  - Clients can pass `metadata.opencode.directory`, but it must stay inside
-    `${OPENCODE_WORKSPACE_ROOT}` (or service runtime root if not configured).
-  - `OPENCODE_WORKSPACE_ROOT` is the service-level default workspace root used
-    when clients do not request a narrower directory override.
-  - All paths are normalized with `realpath` to prevent `..` or symlink
-    boundary bypass.
-  - If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is
-    accepted.
+- For validation failures, missing context (`task_id` / `context_id`), or
+  internal errors, the service attempts to return standard A2A failure events
+  via `event_queue`.
+- Failure events include concrete error details with `failed` state.
+
+## Directory Rules
+
+- Clients can pass `metadata.opencode.directory`, but it must stay inside
+  `${OPENCODE_WORKSPACE_ROOT}` or the service runtime root when no workspace
+  root is configured.
+- `OPENCODE_WORKSPACE_ROOT` is the service-level default workspace root used
+  when clients do not request a narrower directory override.
+- All paths are normalized with `realpath` to prevent `..` or symlink boundary
+  bypass.
+- If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is
+  accepted.
+
 ## Wire Contract
 
 The service publishes a machine-readable wire contract through Agent Card and

@@ -2,9 +2,9 @@
 
 > Turn OpenCode into a stateful A2A service with a clear runtime boundary.
 
-`opencode-a2a-server` wraps `opencode serve` with the service-layer pieces that
-applications usually need in practice: A2A transports, bearer auth, streaming,
-session continuity, interrupt handling, and an explicit deployment boundary.
+`opencode-a2a-server` wraps OpenCode with a stateful A2A service boundary:
+A2A transports, bearer auth, streaming, session continuity, interrupt
+handling, and an explicit deployment boundary.
 
 ## What This Is
 
@@ -104,27 +104,17 @@ Read before deployment:
 - [SECURITY.md](SECURITY.md)
 - [docs/guide.md](docs/guide.md)
 
-## Documentation Map
+## Further Reading
 
 - [docs/guide.md](docs/guide.md)
   Usage guide, transport details, streaming behavior, extensions, and examples.
 - [SECURITY.md](SECURITY.md)
   Threat model, deployment caveats, and vulnerability disclosure guidance.
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-  Contributor workflow and validation expectations.
-- [scripts/README.md](scripts/README.md)
-  Contributor helper script index.
 
 ## Development
 
-Use the repository checkout directly only for development, local debugging, or
-validation against unreleased changes.
-
-```bash
-uv sync --all-extras
-uv run pre-commit run --all-files
-uv run pytest
-```
+For contributor workflow, local validation, and helper scripts, see
+[CONTRIBUTING.md](CONTRIBUTING.md) and [scripts/README.md](scripts/README.md).
 
 ## License
 
