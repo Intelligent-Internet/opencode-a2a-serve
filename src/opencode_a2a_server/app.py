@@ -49,6 +49,7 @@ from .extension_contracts import (
     PROVIDER_DISCOVERY_METHODS,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_CONTROL_METHODS,
+    SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_EXTENSION_URI,
     SESSION_QUERY_METHODS,
     STREAMING_EXTENSION_URI,
@@ -459,7 +460,7 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": SESSION_QUERY_METHODS["list_sessions"],
-                "params": {"limit": 20},
+                "params": {"limit": SESSION_QUERY_DEFAULT_LIMIT},
             },
         },
         "session_messages": {
@@ -468,7 +469,7 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": SESSION_QUERY_METHODS["get_session_messages"],
-                "params": {"session_id": "s-1", "limit": 20},
+                "params": {"session_id": "s-1", "limit": SESSION_QUERY_DEFAULT_LIMIT},
             },
         },
         "session_prompt_async": {

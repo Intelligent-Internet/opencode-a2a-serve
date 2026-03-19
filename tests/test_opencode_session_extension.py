@@ -4,6 +4,10 @@ import httpx
 import pytest
 
 from opencode_a2a_server.config import Settings
+from opencode_a2a_server.extension_contracts import (
+    SESSION_QUERY_DEFAULT_LIMIT,
+    SESSION_QUERY_MAX_LIMIT,
+)
 from opencode_a2a_server.opencode_client import UpstreamContractError
 from tests.helpers import DummySessionQueryOpencodeClient as DummyOpencodeClient
 from tests.helpers import make_settings
@@ -118,6 +122,107 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         assert _session_meta(message)["id"] == "s-1"
         assert dummy.last_messages_params is not None
         assert dummy.last_messages_params.get("limit") == 5
+
+
+@pytest.mark.asyncio
+async def test_session_query_extension_applies_default_limit(monkeypatch):
+    import opencode_a2a_server.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_directory="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+    dummy._sessions_payload = [
+        {"id": f"s-{index}", "title": f"Session s-{index}"}
+        for index in range(1, SESSION_QUERY_DEFAULT_LIMIT + 6)
+    ]
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_directory="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={"jsonrpc": "2.0", "id": 1, "method": "opencode.sessions.list", "params": {}},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert len(payload["result"]["items"]) == SESSION_QUERY_DEFAULT_LIMIT
+        assert dummy.last_sessions_params is not None
+        assert dummy.last_sessions_params["limit"] == SESSION_QUERY_DEFAULT_LIMIT
+
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "opencode.sessions.messages.list",
+                "params": {"session_id": "s-1"},
+            },
+        )
+        assert resp.status_code == 200
+        assert dummy.last_messages_params is not None
+        assert dummy.last_messages_params["limit"] == SESSION_QUERY_DEFAULT_LIMIT
+
+
+@pytest.mark.asyncio
+async def test_session_query_extension_enforces_session_limit_locally(monkeypatch):
+    import opencode_a2a_server.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_directory="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+    dummy._sessions_payload = [
+        {"id": "s-1", "title": "Session s-1"},
+        {"id": "s-2", "title": "Session s-2"},
+        {"id": "s-3", "title": "Session s-3"},
+    ]
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_directory="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "opencode.sessions.list",
+                "params": {"limit": 2},
+            },
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert [item["id"] for item in payload["result"]["items"]] == ["s-1", "s-2"]
+        assert dummy.last_sessions_params == {"limit": 2}
 
 
 @pytest.mark.asyncio
@@ -541,6 +646,95 @@ async def test_session_query_extension_rejects_page_size_pagination(monkeypatch)
         assert payload["jsonrpc"] == "2.0"
         assert payload["id"] == 1
         assert payload["error"]["code"] == -32602
+
+
+@pytest.mark.asyncio
+async def test_session_query_extension_rejects_limit_above_max(monkeypatch):
+    import opencode_a2a_server.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_directory="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_directory="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "opencode.sessions.list",
+                "params": {"limit": SESSION_QUERY_MAX_LIMIT + 1},
+            },
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["jsonrpc"] == "2.0"
+        assert payload["id"] == 3
+        assert payload["error"]["code"] == -32602
+        assert payload["error"]["data"]["field"] == "limit"
+        assert payload["error"]["data"]["max"] == SESSION_QUERY_MAX_LIMIT
+
+
+@pytest.mark.asyncio
+async def test_session_query_extension_accepts_equivalent_string_and_integer_limit(
+    monkeypatch,
+):
+    import opencode_a2a_server.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_directory="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_directory="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "opencode.sessions.list",
+                "params": {"limit": "2", "query": {"limit": 2}},
+            },
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["jsonrpc"] == "2.0"
+        assert payload["id"] == 4
+        assert "error" not in payload
+        assert dummy.last_sessions_params == {"limit": 2}
 
 
 @pytest.mark.asyncio

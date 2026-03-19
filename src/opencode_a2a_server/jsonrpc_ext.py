@@ -31,8 +31,12 @@ from .extension_contracts import (
     PROMPT_ASYNC_REQUEST_ALLOWED_FIELDS,
     PROVIDER_DISCOVERY_ERROR_BUSINESS_CODES,
     SESSION_QUERY_ERROR_BUSINESS_CODES,
-    SESSION_QUERY_PAGINATION_UNSUPPORTED,
     SHELL_REQUEST_ALLOWED_FIELDS,
+)
+from .jsonrpc_models import (
+    JsonRpcParamsValidationError,
+    parse_get_session_messages_params,
+    parse_list_sessions_params,
 )
 from .opencode_client import OpencodeClient, UpstreamContractError
 from .text_parts import extract_text_from_parts
@@ -91,22 +95,6 @@ def _parse_question_answers(value: Any) -> list[list[str]]:
                 parsed_group.append(normalized)
         answers.append(parsed_group)
     return answers
-
-
-def _parse_positive_int(value: Any, *, field: str) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        raise ValueError(f"{field} must be an integer")
-    if isinstance(value, int):
-        parsed = value
-    elif isinstance(value, str):
-        parsed = int(value)
-    else:
-        raise ValueError(f"{field} must be an integer")
-    if parsed < 1:
-        raise ValueError(f"{field} must be >= 1")
-    return parsed
 
 
 def _raise_prompt_async_validation_error(*, field: str, message: str) -> None:
@@ -452,6 +440,12 @@ def _extract_raw_items(raw_result: Any, *, kind: str) -> list[Any]:
     raise ValueError(f"OpenCode {kind} payload must be an array; got {type(raw_result).__name__}")
 
 
+def _apply_session_query_limit(items: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    if limit >= len(items):
+        return items
+    return items[:limit]
+
+
 def _extract_provider_catalog(
     raw_result: Any,
 ) -> tuple[list[dict[str, Any]], dict[str, str], list[str]]:
@@ -657,25 +651,6 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             ),
         )
 
-    def _invalid_pagination_mode_response(
-        self,
-        request_id: str | int | None,
-        unsupported_fields: tuple[str, ...],
-    ) -> Response:
-        return self._generate_error_response(
-            request_id,
-            A2AError(
-                root=InvalidParamsError(
-                    message="Only limit pagination is supported",
-                    data={
-                        "type": "INVALID_PAGINATION_MODE",
-                        "supported": ["limit"],
-                        "unsupported": list(unsupported_fields),
-                    },
-                )
-            ),
-        )
-
     def _extract_directory_from_metadata(
         self,
         *,
@@ -847,76 +822,29 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         base_request: JSONRPCRequest,
         params: dict[str, Any],
     ) -> Response:
-        query: dict[str, Any] = {}
-        raw_query = params.get("query")
-        if raw_query is not None and not isinstance(raw_query, dict):
-            return self._generate_error_response(
-                base_request.id,
-                A2AError(
-                    root=InvalidParamsError(
-                        message="query must be an object",
-                        data={"type": "INVALID_FIELD", "field": "query"},
-                    )
-                ),
-            )
-        if isinstance(raw_query, dict):
-            query.update(raw_query)
-
-        unsupported_pagination_fields = tuple(SESSION_QUERY_PAGINATION_UNSUPPORTED)
-        if any(field in params for field in unsupported_pagination_fields):
-            return self._invalid_pagination_mode_response(
-                base_request.id, unsupported_pagination_fields
-            )
-        if any(field in query for field in unsupported_pagination_fields):
-            return self._invalid_pagination_mode_response(
-                base_request.id, unsupported_pagination_fields
-            )
-
-        if "limit" in params and "limit" in query and params["limit"] != query["limit"]:
-            return self._generate_error_response(
-                base_request.id,
-                A2AError(
-                    root=InvalidParamsError(
-                        message="limit is ambiguous between params.limit and params.query.limit",
-                        data={
-                            "type": "INVALID_FIELD",
-                            "field": "limit",
-                        },
-                    )
-                ),
-            )
-        raw_limit = params.get("limit", query.get("limit"))
         try:
-            limit = _parse_positive_int(raw_limit, field="limit")
-        except ValueError as exc:
+            if base_request.method == self._method_list_sessions:
+                query = parse_list_sessions_params(params)
+                session_id: str | None = None
+            else:
+                session_id, query = parse_get_session_messages_params(params)
+        except JsonRpcParamsValidationError as exc:
             return self._generate_error_response(
                 base_request.id,
                 A2AError(
                     root=InvalidParamsError(
                         message=str(exc),
-                        data={"type": "INVALID_FIELD", "field": "limit"},
+                        data=exc.data,
                     )
                 ),
             )
-        if limit is not None:
-            query["limit"] = limit
 
-        session_id: str | None = None
+        limit = int(query["limit"])
         try:
             if base_request.method == self._method_list_sessions:
                 raw_result = await self._opencode_client.list_sessions(params=query)
             else:
-                session_id = params.get("session_id")
-                if not isinstance(session_id, str) or not session_id:
-                    return self._generate_error_response(
-                        base_request.id,
-                        A2AError(
-                            root=InvalidParamsError(
-                                message="Missing required params.session_id",
-                                data={"type": "MISSING_FIELD", "field": "session_id"},
-                            )
-                        ),
-                    )
+                assert session_id is not None
                 raw_result = await self._opencode_client.list_messages(session_id, params=query)
         except httpx.HTTPStatusError as exc:
             upstream_status = exc.response.status_code
@@ -980,7 +908,9 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 task = _as_a2a_session_task(item)
                 if task is not None:
                     mapped.append(task)
-            items: list[dict[str, Any]] = mapped
+            # OpenCode documents `limit` for message history, not for session list.
+            # Enforce the adapter contract locally so the declared pagination stays true.
+            items: list[dict[str, Any]] = _apply_session_query_limit(mapped, limit=limit)
         else:
             assert session_id is not None
             mapped = []
