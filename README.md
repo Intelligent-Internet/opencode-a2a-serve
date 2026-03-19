@@ -158,12 +158,25 @@ exposes to OpenCode.
 
 Default address: `http://127.0.0.1:8000`
 
+OpenCode upstream modes:
+
+- External upstream: you start and manage `opencode serve` yourself, then point
+  `OPENCODE_BASE_URL` at that HTTP endpoint.
+- Managed upstream: set `OPENCODE_MANAGED_SERVER=true` and
+  `opencode-a2a-server` will start a local `opencode serve`, capture its actual
+  listening URL, and stop it on shutdown.
+
 Common runtime variables:
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
 | `A2A_BEARER_TOKEN` | Yes | None | Bearer token required for authenticated runtime requests. |
-| `OPENCODE_BASE_URL` | No | `http://127.0.0.1:4096` | Upstream OpenCode HTTP endpoint. |
+| `OPENCODE_BASE_URL` | No | `http://127.0.0.1:4096` | Upstream OpenCode HTTP endpoint for externally managed upstream mode. |
+| `OPENCODE_MANAGED_SERVER` | No | `false` | Start and manage a local `opencode serve` child process. |
+| `OPENCODE_MANAGED_SERVER_HOST` | No | `127.0.0.1` | Bind host used when managed upstream mode is enabled. |
+| `OPENCODE_MANAGED_SERVER_PORT` | No | auto-pick | Bind port used when managed upstream mode is enabled. |
+| `OPENCODE_COMMAND` | No | `opencode` | OpenCode CLI executable used for managed upstream mode. |
+| `OPENCODE_STARTUP_TIMEOUT` | No | `20` | Seconds to wait for managed upstream startup. |
 | `OPENCODE_WORKSPACE_ROOT` | No | None | Default workspace root exposed to OpenCode. |
 | `OPENCODE_PROVIDER_ID` | No | None | Default provider for the upstream runtime. |
 | `OPENCODE_MODEL_ID` | No | None | Default model for the upstream runtime. Set together with `OPENCODE_PROVIDER_ID`. |
@@ -181,6 +194,9 @@ Common runtime variables:
 
 If you omit `OPENCODE_PROVIDER_ID` / `OPENCODE_MODEL_ID`, `opencode serve`
 uses your local OpenCode defaults (for example `~/.config/opencode/opencode.json`).
+
+When `OPENCODE_MANAGED_SERVER=true`, `OPENCODE_BASE_URL` is ignored and the
+runtime binds itself to the managed child process instead.
 
 For provider-specific auth, model IDs, and config details, use the OpenCode
 official docs and CLI:
@@ -236,6 +252,16 @@ WantedBy=multi-user.target
 ```
 
 Replace `ExecStart` with the absolute path returned by `command -v opencode-a2a-server`.
+
+Minimal managed-upstream foreground example:
+
+```bash
+A2A_BEARER_TOKEN=dev-token \
+A2A_PUBLIC_URL=http://127.0.0.1:8000 \
+OPENCODE_MANAGED_SERVER=true \
+OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
+opencode-a2a-server serve
+```
 
 Migration notes:
 
