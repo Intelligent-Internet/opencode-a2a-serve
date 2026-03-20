@@ -42,6 +42,15 @@ def test_agent_card_injects_profile_into_extensions() -> None:
             opencode_agent="code-reviewer",
             opencode_variant="safe",
             a2a_allow_directory_override=False,
+            a2a_sandbox_mode="workspace-write",
+            a2a_sandbox_filesystem_scope="workspace_and_declared_roots",
+            a2a_sandbox_writable_roots=("/srv/workspaces/alpha", "/tmp/opencode"),
+            a2a_network_access="restricted",
+            a2a_network_allowed_domains=("api.openai.com", "github.com"),
+            a2a_approval_policy="never",
+            a2a_approval_escalation_behavior="unsupported",
+            a2a_write_access_scope="workspace_and_declared_roots",
+            a2a_write_access_outside_workspace="disallowed",
         )
     )
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
@@ -71,6 +80,25 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "allow_override": False,
         "scope": "workspace_root_only",
         "metadata_field": "metadata.opencode.directory",
+    }
+    assert profile["runtime_features"]["execution_environment"] == {
+        "sandbox": {
+            "mode": "workspace-write",
+            "filesystem_scope": "workspace_and_declared_roots",
+            "writable_roots": ["/srv/workspaces/alpha", "/tmp/opencode"],
+        },
+        "network": {
+            "access": "restricted",
+            "allowed_domains": ["api.openai.com", "github.com"],
+        },
+        "approval": {
+            "policy": "never",
+            "escalation_behavior": "unsupported",
+        },
+        "write_access": {
+            "scope": "workspace_and_declared_roots",
+            "outside_workspace": "disallowed",
+        },
     }
 
     model_selection = ext_by_uri[MODEL_SELECTION_EXTENSION_URI]

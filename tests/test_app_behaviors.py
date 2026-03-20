@@ -150,6 +150,23 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
                 "availability": "enabled",
                 "toggle": "A2A_ENABLE_SESSION_SHELL",
             },
+            "execution_environment": {
+                "sandbox": {
+                    "mode": "unknown",
+                    "filesystem_scope": "unknown",
+                },
+                "network": {
+                    "access": "unknown",
+                },
+                "approval": {
+                    "policy": "unknown",
+                    "escalation_behavior": "unknown",
+                },
+                "write_access": {
+                    "scope": "unknown",
+                    "outside_workspace": "unknown",
+                },
+            },
             "service_features": {
                 "streaming": {
                     "enabled": True,
@@ -244,6 +261,23 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch) -> None:
                         "enabled": True,
                         "availability": "enabled",
                         "toggle": "A2A_ENABLE_SESSION_SHELL",
+                    },
+                    "execution_environment": {
+                        "sandbox": {
+                            "mode": "unknown",
+                            "filesystem_scope": "unknown",
+                        },
+                        "network": {
+                            "access": "unknown",
+                        },
+                        "approval": {
+                            "policy": "unknown",
+                            "escalation_behavior": "unknown",
+                        },
+                        "write_access": {
+                            "scope": "unknown",
+                            "outside_workspace": "unknown",
+                        },
                     },
                     "service_features": {
                         "streaming": {

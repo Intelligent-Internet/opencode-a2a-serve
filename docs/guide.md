@@ -34,6 +34,17 @@ Key variables to understand protocol behavior:
   `metadata.opencode.directory`.
 - `A2A_ENABLE_SESSION_SHELL`: gates high-risk JSON-RPC method
   `opencode.sessions.shell`.
+- `A2A_SANDBOX_MODE` / `A2A_SANDBOX_FILESYSTEM_SCOPE` /
+  `A2A_SANDBOX_WRITABLE_ROOTS`: declarative execution-boundary metadata for
+  sandbox mode, filesystem scope, and optional writable roots.
+- `A2A_NETWORK_ACCESS` / `A2A_NETWORK_ALLOWED_DOMAINS`: declarative
+  execution-boundary metadata for network policy and optional allowlist
+  disclosure.
+- `A2A_APPROVAL_POLICY` / `A2A_APPROVAL_ESCALATION_BEHAVIOR`: declarative
+  execution-boundary metadata for approval workflow.
+- `A2A_WRITE_ACCESS_SCOPE` / `A2A_WRITE_ACCESS_OUTSIDE_WORKSPACE`: declarative
+  execution-boundary metadata for write scope and whether writes may extend
+  outside the primary workspace boundary.
 - `A2A_HOST` / `A2A_PORT`: runtime bind address. Defaults:
   `127.0.0.1:8000`.
 - `A2A_PUBLIC_URL`: public base URL advertised by the Agent Card. Default:
@@ -54,6 +65,11 @@ Key variables to understand protocol behavior:
 - `OPENCODE_TIMEOUT` / `OPENCODE_TIMEOUT_STREAM`: upstream request timeout and
   optional stream timeout override.
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
+
+Execution-boundary metadata is intentionally declarative deployment metadata:
+it is published through `RuntimeProfile`, Agent Card, OpenAPI, and `/health`,
+and should not be interpreted as a live per-request privilege snapshot or a
+runtime CLI self-inspection result.
 
 Recommended two-process example:
 
@@ -247,13 +263,25 @@ Current profile shape:
   - `directory_binding.scope=workspace_root_or_descendant|workspace_root_only`
   - `session_shell.enabled=true|false`
   - `session_shell.availability=enabled|disabled`
+  - `execution_environment.sandbox.mode=unknown|read-only|workspace-write|danger-full-access|custom`
+  - `execution_environment.sandbox.filesystem_scope=unknown|workspace_only|workspace_and_declared_roots|unrestricted|custom`
+  - `execution_environment.network.access=unknown|disabled|enabled|restricted|custom`
+  - `execution_environment.approval.policy=unknown|never|on-request|on-failure|untrusted|custom`
+  - `execution_environment.approval.escalation_behavior=unknown|manual|automatic|unsupported|custom`
+  - `execution_environment.write_access.scope=unknown|none|workspace_only|workspace_and_declared_roots|unrestricted|custom`
+  - `execution_environment.write_access.outside_workspace=unknown|allowed|disallowed|custom`
   - `service_features.streaming.enabled=true`
   - `service_features.health_endpoint.enabled=true`
+- Optional disclosure fields are emitted only when explicitly configured:
+  - `execution_environment.sandbox.writable_roots`
+  - `execution_environment.network.allowed_domains`
 - Core methods and endpoints are declared under `core`.
 - Extension retention policy is declared under `extension_retention`.
 - Per-method retention and availability are declared under `method_retention`.
 - Extension params and `/health` expose the same structured `profile` object; there is no
   separate legacy deployment-context shape.
+- Execution-environment values are deployment declarations, not a per-turn
+  runtime approval or sandbox result.
 
 Retention guidance:
 
