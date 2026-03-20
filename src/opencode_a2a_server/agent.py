@@ -9,6 +9,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Mapping
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -123,6 +124,373 @@ def _emit_metric(
         logger.debug("metric=%s value=%s labels=%s", name, value, labels_text)
         return
     logger.debug("metric=%s value=%s", name, value)
+
+
+@dataclass(frozen=True)
+class _PreparedExecution:
+    identity: str
+    streaming_request: bool
+    request_parts: list[Any]
+    user_text: str
+    session_title: str
+    use_structured_parts: bool
+    bound_session_id: str | None
+    model_override: dict[str, str] | None
+    directory: str | None
+
+
+class _ExecutionCoordinator:
+    def __init__(
+        self,
+        executor: OpencodeAgentExecutor,
+        *,
+        context: RequestContext,
+        event_queue: EventQueue,
+        task_id: str,
+        context_id: str,
+        prepared: _PreparedExecution,
+    ) -> None:
+        self._executor = executor
+        self._context = context
+        self._event_queue = event_queue
+        self._task_id = task_id
+        self._context_id = context_id
+        self._prepared = prepared
+        self._stream_artifact_id = f"{task_id}:stream"
+        self._stream_state = _StreamOutputState(
+            user_text=prepared.user_text,
+            stable_message_id=f"{task_id}:{context_id}:assistant",
+            event_id_namespace=f"{task_id}:{context_id}:{self._stream_artifact_id}",
+        )
+        self._stream_terminal_signal: asyncio.Future[_StreamTerminalSignal] | None = None
+        self._stop_event = asyncio.Event()
+        self._stream_task: asyncio.Task[None] | None = None
+        self._pending_preferred_claim = False
+        self._session_lock: asyncio.Lock | None = None
+        self._session_id = ""
+        self._execution_key = (task_id, context_id)
+
+    async def run(self) -> None:
+        current_task = asyncio.current_task()
+        if current_task is not None:
+            await self._register_running_request(current_task)
+
+        try:
+            await self._bind_session()
+            await self._enqueue_working_status()
+            response = await self._send_message()
+            if self._pending_preferred_claim:
+                await self._executor._finalize_preferred_session_binding(
+                    identity=self._prepared.identity,
+                    context_id=self._context_id,
+                    session_id=self._session_id,
+                )
+                self._pending_preferred_claim = False
+            await self._handle_response(response)
+        except httpx.HTTPStatusError as exc:
+            logger.exception("OpenCode request failed with HTTP error")
+            error_type, state, message = _format_upstream_error(
+                exc,
+                request="send_message",
+            )
+            await self._executor._emit_error(
+                self._event_queue,
+                task_id=self._task_id,
+                context_id=self._context_id,
+                message=message,
+                state=state,
+                error_type=error_type,
+                upstream_status=exc.response.status_code,
+                streaming_request=self._prepared.streaming_request,
+            )
+        except httpx.TimeoutException as exc:
+            logger.exception("OpenCode request timed out")
+            await self._executor._emit_error(
+                self._event_queue,
+                task_id=self._task_id,
+                context_id=self._context_id,
+                message=f"OpenCode request timed out: {exc}",
+                state=TaskState.failed,
+                error_type="UPSTREAM_TIMEOUT",
+                streaming_request=self._prepared.streaming_request,
+            )
+        except UpstreamContractError as exc:
+            logger.warning("OpenCode request failed with payload mismatch: %s", exc)
+            await self._executor._emit_error(
+                self._event_queue,
+                task_id=self._task_id,
+                context_id=self._context_id,
+                message=f"OpenCode payload mismatch: {exc}",
+                state=TaskState.failed,
+                error_type="UPSTREAM_PAYLOAD_ERROR",
+                streaming_request=self._prepared.streaming_request,
+            )
+        except Exception as exc:
+            logger.exception("OpenCode request failed")
+            await self._executor._emit_error(
+                self._event_queue,
+                task_id=self._task_id,
+                context_id=self._context_id,
+                message=f"OpenCode error: {exc}",
+                state=TaskState.failed,
+                streaming_request=self._prepared.streaming_request,
+            )
+        finally:
+            await self._cleanup()
+
+    async def _register_running_request(self, current_task: asyncio.Task[Any]) -> None:
+        async with self._executor._lock:
+            self._executor._running_requests[self._execution_key] = current_task
+            self._executor._running_stop_events[self._execution_key] = self._stop_event
+            self._executor._running_identities[self._execution_key] = self._prepared.identity
+
+    async def _bind_session(self) -> None:
+        (
+            self._session_id,
+            self._pending_preferred_claim,
+        ) = await self._executor._get_or_create_session(
+            self._prepared.identity,
+            self._context_id,
+            self._prepared.session_title or self._prepared.user_text,
+            preferred_session_id=self._prepared.bound_session_id,
+            directory=self._prepared.directory,
+        )
+        self._session_lock = await self._executor._get_session_lock(self._session_id)
+        await self._session_lock.acquire()
+        async with self._executor._lock:
+            self._executor._running_session_ids[self._execution_key] = self._session_id
+            self._executor._running_directories[self._execution_key] = self._prepared.directory
+
+        if self._prepared.streaming_request:
+            self._stream_terminal_signal = asyncio.get_running_loop().create_future()
+            self._stream_task = asyncio.create_task(
+                self._executor._consume_opencode_stream(
+                    session_id=self._session_id,
+                    identity=self._prepared.identity,
+                    task_id=self._task_id,
+                    context_id=self._context_id,
+                    artifact_id=self._stream_artifact_id,
+                    stream_state=self._stream_state,
+                    event_queue=self._event_queue,
+                    stop_event=self._stop_event,
+                    directory=self._prepared.directory,
+                    terminal_signal=self._stream_terminal_signal,
+                )
+            )
+
+    async def _enqueue_working_status(self) -> None:
+        await self._event_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id=self._task_id,
+                context_id=self._context_id,
+                status=TaskStatus(state=TaskState.working),
+                final=False,
+            )
+        )
+
+    async def _send_message(self) -> Any:
+        send_kwargs: dict[str, Any] = {
+            "directory": self._prepared.directory,
+            "model_override": self._prepared.model_override,
+        }
+        if self._prepared.streaming_request:
+            send_kwargs["timeout_override"] = self._executor._client.stream_timeout
+
+        if not self._prepared.use_structured_parts:
+            return await self._executor._client.send_message(
+                self._session_id,
+                self._prepared.user_text,
+                **send_kwargs,
+            )
+
+        return await self._executor._client.send_message(
+            self._session_id,
+            self._prepared.user_text or None,
+            parts=self._prepared.request_parts,
+            **send_kwargs,
+        )
+
+    async def _handle_response(self, response: Any) -> None:
+        response_text = response.text or ""
+        resolved_message_id = self._stream_state.resolve_message_id(response.message_id)
+        response_error = _extract_upstream_error_from_response(response.raw)
+        resolved_token_usage = _merge_token_usage(
+            _extract_token_usage(response.raw),
+            self._stream_state.token_usage,
+        )
+
+        logger.debug(
+            "OpenCode response task_id=%s session_id=%s message_id=%s text=%s",
+            self._task_id,
+            response.session_id,
+            resolved_message_id,
+            response_text,
+        )
+
+        if response_error is not None:
+            await self._executor._emit_error(
+                self._event_queue,
+                task_id=self._task_id,
+                context_id=self._context_id,
+                message=response_error.message,
+                state=response_error.state,
+                error_type=response_error.error_type,
+                upstream_status=response_error.upstream_status,
+                streaming_request=self._prepared.streaming_request,
+            )
+            return
+
+        if self._prepared.streaming_request:
+            await self._handle_streaming_response(
+                response=response,
+                response_text=response_text,
+                resolved_message_id=resolved_message_id,
+                resolved_token_usage=resolved_token_usage,
+            )
+            return
+
+        await self._handle_non_streaming_response(
+            response=response,
+            response_text=response_text,
+            resolved_message_id=resolved_message_id,
+            resolved_token_usage=resolved_token_usage,
+        )
+
+    async def _handle_streaming_response(
+        self,
+        *,
+        response: Any,
+        response_text: str,
+        resolved_message_id: str,
+        resolved_token_usage: Mapping[str, Any] | None,
+    ) -> None:
+        del response
+        if self._stream_terminal_signal is None:
+            raise RuntimeError("Streaming terminal signal was not initialized")
+
+        terminal_signal = await _await_stream_terminal_signal(
+            stream_task=self._stream_task,
+            terminal_signal=self._stream_terminal_signal,
+            session_id=self._session_id,
+        )
+        if terminal_signal.state != TaskState.completed:
+            await self._executor._emit_error(
+                self._event_queue,
+                task_id=self._task_id,
+                context_id=self._context_id,
+                message=terminal_signal.message or "OpenCode execution failed.",
+                state=terminal_signal.state,
+                error_type=terminal_signal.error_type,
+                upstream_status=terminal_signal.upstream_status,
+                streaming_request=True,
+            )
+            return
+
+        if self._stream_state.upstream_error is not None:
+            await self._executor._emit_error(
+                self._event_queue,
+                task_id=self._task_id,
+                context_id=self._context_id,
+                message=self._stream_state.upstream_error.message,
+                state=self._stream_state.upstream_error.state,
+                error_type=self._stream_state.upstream_error.error_type,
+                upstream_status=self._stream_state.upstream_error.upstream_status,
+                streaming_request=True,
+            )
+            return
+
+        if self._stream_state.should_emit_final_snapshot(response_text):
+            sequence = self._stream_state.next_sequence()
+            await _enqueue_artifact_update(
+                event_queue=self._event_queue,
+                task_id=self._task_id,
+                context_id=self._context_id,
+                artifact_id=self._stream_artifact_id,
+                part=Part(root=TextPart(text=response_text)),
+                append=self._stream_state.emitted_stream_chunk,
+                last_chunk=True,
+                artifact_metadata=_build_stream_artifact_metadata(
+                    block_type=BlockType.TEXT,
+                    shared_source="final_snapshot",
+                    message_id=resolved_message_id,
+                    event_id=self._stream_state.build_event_id(sequence),
+                    sequence=sequence,
+                ),
+            )
+
+        await self._event_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id=self._task_id,
+                context_id=self._context_id,
+                status=TaskStatus(state=TaskState.completed),
+                final=True,
+                metadata=_build_output_metadata(
+                    session_id=self._session_id,
+                    usage=resolved_token_usage,
+                    stream={
+                        "message_id": resolved_message_id,
+                        "event_id": f"{self._stream_state.event_id_namespace}:status",
+                        "source": "status",
+                    },
+                ),
+            )
+        )
+
+    async def _handle_non_streaming_response(
+        self,
+        *,
+        response: Any,
+        response_text: str,
+        resolved_message_id: str,
+        resolved_token_usage: Mapping[str, Any] | None,
+    ) -> None:
+        response_text = response_text or "(No text content returned by OpenCode.)"
+        assistant_message = _build_assistant_message(
+            task_id=self._task_id,
+            context_id=self._context_id,
+            text=response_text,
+            message_id=resolved_message_id,
+        )
+        artifact = Artifact(
+            artifact_id=str(uuid.uuid4()),
+            name="response",
+            parts=[Part(root=TextPart(text=response_text))],
+        )
+        history = _build_history(self._context)
+        task = Task(
+            id=self._task_id,
+            context_id=self._context_id,
+            status=TaskStatus(state=TaskState.completed),
+            history=history,
+            artifacts=[artifact],
+            metadata=_build_output_metadata(
+                session_id=response.session_id,
+                usage=resolved_token_usage,
+            ),
+        )
+        task.status.message = assistant_message
+        await self._event_queue.enqueue_event(task)
+
+    async def _cleanup(self) -> None:
+        if self._pending_preferred_claim and self._session_id:
+            with suppress(Exception):
+                await self._executor._release_preferred_session_claim(
+                    identity=self._prepared.identity,
+                    session_id=self._session_id,
+                )
+        self._stop_event.set()
+        if self._stream_task:
+            self._stream_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._stream_task
+        if self._session_lock and self._session_lock.locked():
+            self._session_lock.release()
+        async with self._executor._lock:
+            self._executor._running_requests.pop(self._execution_key, None)
+            self._executor._running_stop_events.pop(self._execution_key, None)
+            self._executor._running_identities.pop(self._execution_key, None)
+            self._executor._running_session_ids.pop(self._execution_key, None)
+            self._executor._running_directories.pop(self._execution_key, None)
 
 
 class OpencodeAgentExecutor(AgentExecutor):
@@ -325,301 +693,26 @@ class OpencodeAgentExecutor(AgentExecutor):
             user_text,
             len(request_parts),
         )
-
-        stream_artifact_id = f"{task_id}:stream"
-        stream_state = _StreamOutputState(
+        prepared = _PreparedExecution(
+            identity=identity,
+            streaming_request=streaming_request,
+            request_parts=request_parts,
             user_text=user_text,
-            stable_message_id=f"{task_id}:{context_id}:assistant",
-            event_id_namespace=f"{task_id}:{context_id}:{stream_artifact_id}",
+            session_title=session_title or user_text,
+            use_structured_parts=use_structured_parts,
+            bound_session_id=bound_session_id,
+            model_override=model_override,
+            directory=directory,
         )
-        stream_terminal_signal: asyncio.Future[_StreamTerminalSignal] | None = None
-        stop_event = asyncio.Event()
-        stream_task: asyncio.Task[None] | None = None
-        pending_preferred_claim = False
-        session_lock: asyncio.Lock | None = None
-        session_id = ""
-        execution_key = (task_id, context_id)
-        current_task = asyncio.current_task()
-        if current_task is not None:
-            async with self._lock:
-                self._running_requests[execution_key] = current_task
-                self._running_stop_events[execution_key] = stop_event
-                self._running_identities[execution_key] = identity
-
-        try:
-            session_id, pending_preferred_claim = await self._get_or_create_session(
-                identity,
-                context_id,
-                session_title or user_text,
-                preferred_session_id=bound_session_id,
-                directory=directory,
-            )
-            session_lock = await self._get_session_lock(session_id)
-            await session_lock.acquire()
-            async with self._lock:
-                self._running_session_ids[execution_key] = session_id
-                self._running_directories[execution_key] = directory
-
-            if streaming_request:
-                stream_terminal_signal = asyncio.get_running_loop().create_future()
-                stream_task = asyncio.create_task(
-                    self._consume_opencode_stream(
-                        session_id=session_id,
-                        identity=identity,
-                        task_id=task_id,
-                        context_id=context_id,
-                        artifact_id=stream_artifact_id,
-                        stream_state=stream_state,
-                        event_queue=event_queue,
-                        stop_event=stop_event,
-                        directory=directory,
-                        terminal_signal=stream_terminal_signal,
-                    )
-                )
-
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=task_id,
-                    context_id=context_id,
-                    status=TaskStatus(state=TaskState.working),
-                    final=False,
-                )
-            )
-            send_kwargs: dict[str, Any] = {
-                "directory": directory,
-                "model_override": model_override,
-            }
-            if streaming_request:
-                send_kwargs["timeout_override"] = self._client.stream_timeout
-
-            if not use_structured_parts:
-                response = await self._client.send_message(
-                    session_id,
-                    user_text,
-                    **send_kwargs,
-                )
-            else:
-                response = await self._client.send_message(
-                    session_id,
-                    user_text or None,
-                    parts=request_parts,
-                    **send_kwargs,
-                )
-
-            if pending_preferred_claim:
-                await self._finalize_preferred_session_binding(
-                    identity=identity,
-                    context_id=context_id,
-                    session_id=session_id,
-                )
-                pending_preferred_claim = False
-
-            response_text = response.text or ""
-            resolved_message_id = stream_state.resolve_message_id(response.message_id)
-            response_error = _extract_upstream_error_from_response(response.raw)
-            logger.debug(
-                "OpenCode response task_id=%s session_id=%s message_id=%s text=%s",
-                task_id,
-                response.session_id,
-                resolved_message_id,
-                response_text,
-            )
-            if streaming_request:
-                resolved_token_usage = _merge_token_usage(
-                    _extract_token_usage(response.raw),
-                    stream_state.token_usage,
-                )
-                if response_error is not None:
-                    await self._emit_error(
-                        event_queue,
-                        task_id=task_id,
-                        context_id=context_id,
-                        message=response_error.message,
-                        state=response_error.state,
-                        error_type=response_error.error_type,
-                        upstream_status=response_error.upstream_status,
-                        streaming_request=True,
-                    )
-                    return
-                if stream_terminal_signal is None:
-                    raise RuntimeError("Streaming terminal signal was not initialized")
-                terminal_signal = await _await_stream_terminal_signal(
-                    stream_task=stream_task,
-                    terminal_signal=stream_terminal_signal,
-                    session_id=session_id,
-                )
-                if terminal_signal.state != TaskState.completed:
-                    await self._emit_error(
-                        event_queue,
-                        task_id=task_id,
-                        context_id=context_id,
-                        message=terminal_signal.message or "OpenCode execution failed.",
-                        state=terminal_signal.state,
-                        error_type=terminal_signal.error_type,
-                        upstream_status=terminal_signal.upstream_status,
-                        streaming_request=True,
-                    )
-                elif stream_state.upstream_error is not None:
-                    await self._emit_error(
-                        event_queue,
-                        task_id=task_id,
-                        context_id=context_id,
-                        message=stream_state.upstream_error.message,
-                        state=stream_state.upstream_error.state,
-                        error_type=stream_state.upstream_error.error_type,
-                        upstream_status=stream_state.upstream_error.upstream_status,
-                        streaming_request=True,
-                    )
-                else:
-                    if stream_state.should_emit_final_snapshot(response_text):
-                        sequence = stream_state.next_sequence()
-                        await _enqueue_artifact_update(
-                            event_queue=event_queue,
-                            task_id=task_id,
-                            context_id=context_id,
-                            artifact_id=stream_artifact_id,
-                            part=Part(root=TextPart(text=response_text)),
-                            append=stream_state.emitted_stream_chunk,
-                            last_chunk=True,
-                            artifact_metadata=_build_stream_artifact_metadata(
-                                block_type=BlockType.TEXT,
-                                shared_source="final_snapshot",
-                                message_id=resolved_message_id,
-                                event_id=stream_state.build_event_id(sequence),
-                                sequence=sequence,
-                            ),
-                        )
-                    await event_queue.enqueue_event(
-                        TaskStatusUpdateEvent(
-                            task_id=task_id,
-                            context_id=context_id,
-                            status=TaskStatus(
-                                state=TaskState.completed,
-                            ),
-                            final=True,
-                            metadata=_build_output_metadata(
-                                session_id=response.session_id,
-                                usage=resolved_token_usage,
-                                stream={
-                                    "message_id": resolved_message_id,
-                                    "event_id": f"{stream_state.event_id_namespace}:status",
-                                    "source": "status",
-                                },
-                            ),
-                        ),
-                    )
-            else:
-                resolved_token_usage = _merge_token_usage(
-                    _extract_token_usage(response.raw),
-                    stream_state.token_usage,
-                )
-                if response_error is not None:
-                    await self._emit_error(
-                        event_queue,
-                        task_id=task_id,
-                        context_id=context_id,
-                        message=response_error.message,
-                        state=response_error.state,
-                        error_type=response_error.error_type,
-                        upstream_status=response_error.upstream_status,
-                        streaming_request=False,
-                    )
-                    return
-                response_text = response_text or "(No text content returned by OpenCode.)"
-                assistant_message = _build_assistant_message(
-                    task_id=task_id,
-                    context_id=context_id,
-                    text=response_text,
-                    message_id=resolved_message_id,
-                )
-                artifact = Artifact(
-                    artifact_id=str(uuid.uuid4()),
-                    name="response",
-                    parts=[Part(root=TextPart(text=response_text))],
-                )
-                history = _build_history(context)
-                task = Task(
-                    id=task_id,
-                    context_id=context_id,
-                    status=TaskStatus(state=TaskState.completed),
-                    history=history,
-                    artifacts=[artifact],
-                    metadata=_build_output_metadata(
-                        session_id=response.session_id,
-                        usage=resolved_token_usage,
-                    ),
-                )
-                # Attach the assistant message as the current status message.
-                task.status.message = assistant_message
-                await event_queue.enqueue_event(task)
-        except httpx.HTTPStatusError as exc:
-            logger.exception("OpenCode request failed with HTTP error")
-            error_type, state, message = _format_upstream_error(
-                exc,
-                request="send_message",
-            )
-            await self._emit_error(
-                event_queue,
-                task_id=task_id,
-                context_id=context_id,
-                message=message,
-                state=state,
-                error_type=error_type,
-                upstream_status=exc.response.status_code,
-                streaming_request=streaming_request,
-            )
-        except httpx.TimeoutException as exc:
-            logger.exception("OpenCode request timed out")
-            await self._emit_error(
-                event_queue,
-                task_id=task_id,
-                context_id=context_id,
-                message=f"OpenCode request timed out: {exc}",
-                state=TaskState.failed,
-                error_type="UPSTREAM_TIMEOUT",
-                streaming_request=streaming_request,
-            )
-        except UpstreamContractError as exc:
-            logger.warning("OpenCode request failed with payload mismatch: %s", exc)
-            await self._emit_error(
-                event_queue,
-                task_id=task_id,
-                context_id=context_id,
-                message=f"OpenCode payload mismatch: {exc}",
-                state=TaskState.failed,
-                error_type="UPSTREAM_PAYLOAD_ERROR",
-                streaming_request=streaming_request,
-            )
-        except Exception as exc:
-            logger.exception("OpenCode request failed")
-            await self._emit_error(
-                event_queue,
-                task_id=task_id,
-                context_id=context_id,
-                message=f"OpenCode error: {exc}",
-                state=TaskState.failed,
-                streaming_request=streaming_request,
-            )
-        finally:
-            if pending_preferred_claim and session_id:
-                with suppress(Exception):
-                    await self._release_preferred_session_claim(
-                        identity=identity,
-                        session_id=session_id,
-                    )
-            stop_event.set()
-            if stream_task:
-                stream_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await stream_task
-            if session_lock and session_lock.locked():
-                session_lock.release()
-            async with self._lock:
-                self._running_requests.pop(execution_key, None)
-                self._running_stop_events.pop(execution_key, None)
-                self._running_identities.pop(execution_key, None)
-                self._running_session_ids.pop(execution_key, None)
-                self._running_directories.pop(execution_key, None)
+        coordinator = _ExecutionCoordinator(
+            self,
+            context=context,
+            event_queue=event_queue,
+            task_id=task_id,
+            context_id=context_id,
+            prepared=prepared,
+        )
+        await coordinator.run()
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id = context.task_id
