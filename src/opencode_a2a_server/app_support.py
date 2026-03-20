@@ -799,14 +799,3 @@ def build_agent_card(settings: Settings) -> AgentCard:
         security_schemes=security_schemes,
         security=security,
     )
-
-
-def _normalize_log_level(value: str) -> str:
-    normalized = value.strip().upper()
-    if normalized in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}:
-        return normalized
-    return "INFO"
-
-
-def _configure_logging(level: str) -> None:
-    logging.basicConfig(level=getattr(logging, level, logging.INFO))

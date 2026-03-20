@@ -422,11 +422,6 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> JsonRpcCapa
     )
 
 
-def build_supported_jsonrpc_methods(*, runtime_profile: RuntimeProfile) -> list[str]:
-    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
-    return capability_snapshot.supported_jsonrpc_methods()
-
-
 def _build_method_contract_params(
     *,
     required: tuple[str, ...],
