@@ -409,15 +409,12 @@ class JsonRpcCapabilitySnapshot:
         }
 
 
-def _build_capability_snapshot_for_session_shell(
-    *,
-    session_shell_enabled: bool,
-) -> JsonRpcCapabilitySnapshot:
+def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> JsonRpcCapabilitySnapshot:
     return JsonRpcCapabilitySnapshot(
         conditional_methods={
             SESSION_CONTROL_METHODS["shell"]: DeploymentConditionalMethod(
                 method=SESSION_CONTROL_METHODS["shell"],
-                enabled=session_shell_enabled,
+                enabled=runtime_profile.session_shell_enabled,
                 extension_uri=SESSION_QUERY_EXTENSION_URI,
                 toggle=SESSION_SHELL_TOGGLE,
             )
@@ -425,27 +422,8 @@ def _build_capability_snapshot_for_session_shell(
     )
 
 
-def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> JsonRpcCapabilitySnapshot:
-    return _build_capability_snapshot_for_session_shell(
-        session_shell_enabled=runtime_profile.session_shell_enabled,
-    )
-
-
-def build_supported_jsonrpc_methods(
-    *,
-    runtime_profile: RuntimeProfile | None = None,
-    session_shell_enabled: bool | None = None,
-) -> list[str]:
-    if runtime_profile is not None:
-        capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
-    elif session_shell_enabled is not None:
-        capability_snapshot = _build_capability_snapshot_for_session_shell(
-            session_shell_enabled=session_shell_enabled,
-        )
-    else:
-        raise TypeError(
-            "build_supported_jsonrpc_methods requires runtime_profile or session_shell_enabled"
-        )
+def build_supported_jsonrpc_methods(*, runtime_profile: RuntimeProfile) -> list[str]:
+    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     return capability_snapshot.supported_jsonrpc_methods()
 
 

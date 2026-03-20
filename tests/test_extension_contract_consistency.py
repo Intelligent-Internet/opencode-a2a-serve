@@ -25,7 +25,6 @@ from opencode_a2a_server.extension_contracts import (
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
-    build_supported_jsonrpc_methods,
     build_wire_contract_params,
 )
 from opencode_a2a_server.jsonrpc_ext import SESSION_CONTEXT_PREFIX
@@ -208,21 +207,6 @@ def test_openapi_jsonrpc_examples_use_declared_default_session_limit() -> None:
 
     assert examples["session_list"]["value"]["params"]["limit"] == SESSION_QUERY_DEFAULT_LIMIT
     assert examples["session_messages"]["value"]["params"]["limit"] == SESSION_QUERY_DEFAULT_LIMIT
-
-
-@pytest.mark.parametrize("session_shell_enabled", [False, True])
-def test_supported_methods_builder_keeps_legacy_boolean_entrypoint(
-    session_shell_enabled: bool,
-) -> None:
-    settings = make_settings(
-        a2a_bearer_token="test-token",
-        a2a_enable_session_shell=session_shell_enabled,
-    )
-    runtime_profile = build_runtime_profile(settings)
-
-    assert build_supported_jsonrpc_methods(runtime_profile=runtime_profile) == (
-        build_supported_jsonrpc_methods(session_shell_enabled=session_shell_enabled)
-    )
 
 
 @pytest.mark.asyncio
