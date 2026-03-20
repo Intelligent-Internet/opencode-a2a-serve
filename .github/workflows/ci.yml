@@ -43,6 +43,9 @@ jobs:
       - name: Run dependency vulnerability audit
         run: uv run pip-audit
 
+      - name: Clean previous build artifacts
+        run: rm -rf build dist
+
       - name: Build package artifacts
         run: uv build --no-sources
 

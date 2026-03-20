@@ -15,7 +15,7 @@ remaining repository-maintenance helpers.
 - [`doctor.sh`](./doctor.sh): local development regression entrypoint (`sync`/`pip check` + lint + tests)
 - [`dependency_health.sh`](./dependency_health.sh): dependency review entrypoint (`sync`/`pip check` + outdated + audit)
 - [`lint.sh`](./lint.sh): lint helper
-- [`smoke_test_built_cli.sh`](./smoke_test_built_cli.sh): wheel-install smoke test for the released CLI runtime
+- [`smoke_test_built_cli.sh`](./smoke_test_built_cli.sh): wheel-install smoke test for the released CLI runtime; uses the active Python interpreter by default and requires an explicit wheel path when multiple local wheels exist
 
 ## Notes
 

@@ -30,6 +30,15 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Run regression baseline
+        run: bash ./scripts/doctor.sh
+
+      - name: Run dependency vulnerability audit
+        run: uv run pip-audit
+
+      - name: Clean previous build artifacts
+        run: rm -rf build dist
+
       - name: Build package artifacts
         run: uv build --no-sources
 
@@ -41,8 +50,8 @@ jobs:
 
           dist_dir = pathlib.Path("dist")
           wheels = sorted(dist_dir.glob("opencode_a2a_server-*.whl"))
-          if not wheels:
-              raise SystemExit("No wheel produced in dist/")
+          if len(wheels) != 1:
+              raise SystemExit(f"Expected exactly one wheel in dist/, found {len(wheels)}")
           wheel = wheels[0].name
           version = wheel.removeprefix("opencode_a2a_server-").split("-py3", 1)[0]
           tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")

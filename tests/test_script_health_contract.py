@@ -3,6 +3,7 @@ from pathlib import Path
 DOCTOR_TEXT = Path("scripts/doctor.sh").read_text()
 DEPENDENCY_HEALTH_TEXT = Path("scripts/dependency_health.sh").read_text()
 HEALTH_COMMON_TEXT = Path("scripts/health_common.sh").read_text()
+SMOKE_TEST_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
 SCRIPTS_INDEX_TEXT = Path("scripts/README.md").read_text()
 
 
@@ -39,3 +40,12 @@ def test_scripts_index_documents_split_health_entrypoints() -> None:
     assert "local development regression entrypoint" in SCRIPTS_INDEX_TEXT
     assert "dependency review entrypoint" in SCRIPTS_INDEX_TEXT
     assert "health_common.sh" in SCRIPTS_INDEX_TEXT
+
+
+def test_smoke_test_requires_explicit_wheel_selection_when_dist_is_ambiguous() -> None:
+    assert 'wheel_path="${1:-${SMOKE_TEST_WHEEL_PATH:-}}"' in SMOKE_TEST_TEXT
+    assert (
+        "Multiple built wheels found; pass an explicit wheel path or set SMOKE_TEST_WHEEL_PATH."
+        in SMOKE_TEST_TEXT
+    )
+    assert 'uv tool install "${wheel_path}" --python "${python_bin}"' in SMOKE_TEST_TEXT
