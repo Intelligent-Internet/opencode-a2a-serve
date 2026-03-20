@@ -260,9 +260,9 @@ def test_role_session_and_terminal_extractors_cover_event_shapes() -> None:
     props = {"sessionID": "ses-props", "info": {"sessionID": "ses-info"}}
     assert _extract_stream_session_id(part, props) == "ses-part"
     assert _extract_event_session_id({"properties": props}) == "ses-props"
-    assert _extract_event_session_id(
-        {"properties": {"info": {"sessionID": "ses-info"}}}
-    ) == "ses-info"
+    assert (
+        _extract_event_session_id({"properties": {"info": {"sessionID": "ses-info"}}}) == "ses-info"
+    )
     assert _extract_stream_snapshot_text(part) == "hello"
     assert _extract_stream_snapshot_text({"type": "tool", "text": "ignored"}) is None
 
@@ -319,10 +319,13 @@ def test_upstream_error_and_progress_extractors_cover_edge_cases() -> None:
         "title": "Write tests",
         "subtitle": "finished",
     }
-    assert _build_progress_identity(
-        {"type": "snapshot"},
-        {"messageID": "msg-1"},
-    ) == "snapshot:msg-1"
+    assert (
+        _build_progress_identity(
+            {"type": "snapshot"},
+            {"messageID": "msg-1"},
+        )
+        == "snapshot:msg-1"
+    )
 
 
 def test_interrupt_question_and_event_extractors_normalize_payloads() -> None:
