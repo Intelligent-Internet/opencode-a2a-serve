@@ -1,11 +1,62 @@
 from __future__ import annotations
 
-from typing import cast
+import json
+from typing import Annotated, Any, Literal, cast
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from opencode_a2a_server import __version__
+
+SandboxMode = Literal[
+    "unknown",
+    "read-only",
+    "workspace-write",
+    "danger-full-access",
+    "custom",
+]
+SandboxFilesystemScope = Literal[
+    "unknown",
+    "workspace_only",
+    "workspace_and_declared_roots",
+    "unrestricted",
+    "custom",
+]
+NetworkAccess = Literal["unknown", "disabled", "enabled", "restricted", "custom"]
+ApprovalPolicy = Literal["unknown", "never", "on-request", "on-failure", "untrusted", "custom"]
+EscalationBehavior = Literal["unknown", "manual", "automatic", "unsupported", "custom"]
+WriteAccessScope = Literal[
+    "unknown",
+    "none",
+    "workspace_only",
+    "workspace_and_declared_roots",
+    "unrestricted",
+    "custom",
+]
+OutsideWorkspaceAccess = Literal["unknown", "allowed", "disallowed", "custom"]
+DeclaredStringList = Annotated[tuple[str, ...], NoDecode]
+
+
+def _parse_declared_list(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return ()
+        if raw.startswith("["):
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = None
+            else:
+                if not isinstance(parsed, list):
+                    raise TypeError("Expected a JSON array for declared list values.")
+                return tuple(str(item).strip() for item in parsed if str(item).strip())
+        return tuple(item.strip() for item in raw.split(",") if item.strip())
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item).strip() for item in value if str(item).strip())
+    raise TypeError("Expected a comma-separated string, JSON array, or sequence.")
 
 
 class Settings(BaseSettings):
@@ -51,6 +102,36 @@ class Settings(BaseSettings):
     a2a_documentation_url: str | None = Field(default=None, alias="A2A_DOCUMENTATION_URL")
     a2a_allow_directory_override: bool = Field(default=True, alias="A2A_ALLOW_DIRECTORY_OVERRIDE")
     a2a_enable_session_shell: bool = Field(default=False, alias="A2A_ENABLE_SESSION_SHELL")
+    a2a_sandbox_mode: SandboxMode = Field(default="unknown", alias="A2A_SANDBOX_MODE")
+    a2a_sandbox_filesystem_scope: SandboxFilesystemScope = Field(
+        default="unknown",
+        alias="A2A_SANDBOX_FILESYSTEM_SCOPE",
+    )
+    a2a_sandbox_writable_roots: DeclaredStringList = Field(
+        default=(),
+        alias="A2A_SANDBOX_WRITABLE_ROOTS",
+    )
+    a2a_network_access: NetworkAccess = Field(default="unknown", alias="A2A_NETWORK_ACCESS")
+    a2a_network_allowed_domains: DeclaredStringList = Field(
+        default=(),
+        alias="A2A_NETWORK_ALLOWED_DOMAINS",
+    )
+    a2a_approval_policy: ApprovalPolicy = Field(
+        default="unknown",
+        alias="A2A_APPROVAL_POLICY",
+    )
+    a2a_approval_escalation_behavior: EscalationBehavior = Field(
+        default="unknown",
+        alias="A2A_APPROVAL_ESCALATION_BEHAVIOR",
+    )
+    a2a_write_access_scope: WriteAccessScope = Field(
+        default="unknown",
+        alias="A2A_WRITE_ACCESS_SCOPE",
+    )
+    a2a_write_access_outside_workspace: OutsideWorkspaceAccess = Field(
+        default="unknown",
+        alias="A2A_WRITE_ACCESS_OUTSIDE_WORKSPACE",
+    )
     a2a_host: str = Field(default="127.0.0.1", alias="A2A_HOST")
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
     a2a_bearer_token: str = Field(..., min_length=1, alias="A2A_BEARER_TOKEN")
@@ -63,6 +144,11 @@ class Settings(BaseSettings):
         ge=0.0,
         alias="A2A_CANCEL_ABORT_TIMEOUT_SECONDS",
     )
+
+    @field_validator("a2a_sandbox_writable_roots", "a2a_network_allowed_domains", mode="before")
+    @classmethod
+    def _normalize_declared_lists(cls, value: Any) -> tuple[str, ...]:
+        return _parse_declared_list(value)
 
     @classmethod
     def from_env(cls) -> Settings:

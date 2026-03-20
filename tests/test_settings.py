@@ -27,6 +27,15 @@ def test_settings_valid():
         "A2A_MAX_REQUEST_BODY_BYTES": "2048",
         "A2A_CANCEL_ABORT_TIMEOUT_SECONDS": "0.75",
         "A2A_ENABLE_SESSION_SHELL": "true",
+        "A2A_SANDBOX_MODE": "danger-full-access",
+        "A2A_SANDBOX_FILESYSTEM_SCOPE": "unrestricted",
+        "A2A_SANDBOX_WRITABLE_ROOTS": "/srv/workspaces/alpha,/tmp/opencode",
+        "A2A_NETWORK_ACCESS": "restricted",
+        "A2A_NETWORK_ALLOWED_DOMAINS": '["api.openai.com", "github.com"]',
+        "A2A_APPROVAL_POLICY": "never",
+        "A2A_APPROVAL_ESCALATION_BEHAVIOR": "unsupported",
+        "A2A_WRITE_ACCESS_SCOPE": "unrestricted",
+        "A2A_WRITE_ACCESS_OUTSIDE_WORKSPACE": "allowed",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
@@ -37,6 +46,15 @@ def test_settings_valid():
         assert settings.a2a_max_request_body_bytes == 2048
         assert settings.a2a_cancel_abort_timeout_seconds == 0.75
         assert settings.a2a_enable_session_shell is True
+        assert settings.a2a_sandbox_mode == "danger-full-access"
+        assert settings.a2a_sandbox_filesystem_scope == "unrestricted"
+        assert settings.a2a_sandbox_writable_roots == ("/srv/workspaces/alpha", "/tmp/opencode")
+        assert settings.a2a_network_access == "restricted"
+        assert settings.a2a_network_allowed_domains == ("api.openai.com", "github.com")
+        assert settings.a2a_approval_policy == "never"
+        assert settings.a2a_approval_escalation_behavior == "unsupported"
+        assert settings.a2a_write_access_scope == "unrestricted"
+        assert settings.a2a_write_access_outside_workspace == "allowed"
         assert settings.a2a_version == __version__
 
 

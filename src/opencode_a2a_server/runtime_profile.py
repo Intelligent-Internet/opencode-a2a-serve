@@ -68,6 +68,74 @@ class ServiceFeaturesProfile:
 
 
 @dataclass(frozen=True)
+class SandboxProfile:
+    mode: str
+    filesystem_scope: str
+    writable_roots: tuple[str, ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "mode": self.mode,
+            "filesystem_scope": self.filesystem_scope,
+        }
+        if self.writable_roots:
+            payload["writable_roots"] = list(self.writable_roots)
+        return payload
+
+
+@dataclass(frozen=True)
+class NetworkProfile:
+    access: str
+    allowed_domains: tuple[str, ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"access": self.access}
+        if self.allowed_domains:
+            payload["allowed_domains"] = list(self.allowed_domains)
+        return payload
+
+
+@dataclass(frozen=True)
+class ApprovalProfile:
+    policy: str
+    escalation_behavior: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "policy": self.policy,
+            "escalation_behavior": self.escalation_behavior,
+        }
+
+
+@dataclass(frozen=True)
+class WriteAccessProfile:
+    scope: str
+    outside_workspace: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "scope": self.scope,
+            "outside_workspace": self.outside_workspace,
+        }
+
+
+@dataclass(frozen=True)
+class ExecutionEnvironmentProfile:
+    sandbox: SandboxProfile
+    network: NetworkProfile
+    approval: ApprovalProfile
+    write_access: WriteAccessProfile
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "sandbox": self.sandbox.as_dict(),
+            "network": self.network.as_dict(),
+            "approval": self.approval.as_dict(),
+            "write_access": self.write_access.as_dict(),
+        }
+
+
+@dataclass(frozen=True)
 class RuntimeContext:
     project: str | None = None
     workspace_root: str | None = None
@@ -93,6 +161,7 @@ class RuntimeProfile:
     deployment: DeploymentProfile
     directory_binding: DirectoryBindingProfile
     session_shell: SessionShellProfile
+    execution_environment: ExecutionEnvironmentProfile
     service_features: ServiceFeaturesProfile
     runtime_context: RuntimeContext
 
@@ -104,6 +173,7 @@ class RuntimeProfile:
         return {
             "directory_binding": self.directory_binding.as_dict(),
             "session_shell": self.session_shell.as_dict(),
+            "execution_environment": self.execution_environment.as_dict(),
             "service_features": self.service_features.as_dict(),
         }
 
@@ -151,6 +221,25 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
         session_shell=SessionShellProfile(
             enabled=settings.a2a_enable_session_shell,
             availability="enabled" if settings.a2a_enable_session_shell else "disabled",
+        ),
+        execution_environment=ExecutionEnvironmentProfile(
+            sandbox=SandboxProfile(
+                mode=settings.a2a_sandbox_mode,
+                filesystem_scope=settings.a2a_sandbox_filesystem_scope,
+                writable_roots=settings.a2a_sandbox_writable_roots,
+            ),
+            network=NetworkProfile(
+                access=settings.a2a_network_access,
+                allowed_domains=settings.a2a_network_allowed_domains,
+            ),
+            approval=ApprovalProfile(
+                policy=settings.a2a_approval_policy,
+                escalation_behavior=settings.a2a_approval_escalation_behavior,
+            ),
+            write_access=WriteAccessProfile(
+                scope=settings.a2a_write_access_scope,
+                outside_workspace=settings.a2a_write_access_outside_workspace,
+            ),
         ),
         service_features=ServiceFeaturesProfile(
             streaming={"enabled": True, "availability": "always"},
