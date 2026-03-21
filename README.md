@@ -28,95 +28,45 @@ flowchart TD
 
 ## Quick Start
 
-Install the released CLI with `uv tool`:
+Install with `uv tool`:
 
 ```bash
 uv tool install opencode-a2a-server
 ```
 
-Upgrade later with:
+Start the service with a bearer token:
 
 ```bash
-uv tool upgrade opencode-a2a-server
+A2A_BEARER_TOKEN=dev-token opencode-a2a-server serve
 ```
 
-Make sure provider credentials and a default model are configured on the
-OpenCode side, then start OpenCode:
-
-```bash
-opencode auth login
-opencode models
-opencode serve --hostname 127.0.0.1 --port 4096
-```
-
-Then start `opencode-a2a-server` against that upstream:
-
-```bash
-A2A_BEARER_TOKEN=dev-token \
-OPENCODE_BASE_URL=http://127.0.0.1:4096 \
-A2A_HOST=127.0.0.1 \
-A2A_PORT=8000 \
-A2A_PUBLIC_URL=http://127.0.0.1:8000 \
-A2A_STREAM_SSE_PING_SECONDS=15 \
-OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
-opencode-a2a-server serve
-```
-
-Verify that the service is up:
-
-```bash
-curl http://127.0.0.1:8000/.well-known/agent-card.json
-```
-
-Default local address: `http://127.0.0.1:8000`
+For advanced configuration, two-process setup, and the full environment variable catalog, see [`docs/guide.md`](docs/guide.md).
 
 ## What You Get
 
-- A2A HTTP+JSON endpoints such as `/v1/message:send` and
-  `/v1/message:stream`
-- A2A JSON-RPC support on `POST /`
-- SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
-- Explicit REST SSE keepalive configurable through `A2A_STREAM_SSE_PING_SECONDS`
-- Session continuity through `metadata.shared.session.id`
-- Request-scoped model selection through `metadata.shared.model`
-- OpenCode-oriented JSON-RPC extensions for session and model/provider queries
+- A2A HTTP+JSON and JSON-RPC support
+- SSE streaming with normalized block types (`text`, `reasoning`, `tool_call`)
+- Session continuity and model selection through shared metadata extensions
+- [Agent Card](https://github.com/liujuanjuan1984/a2a-spec) discovery and OpenAPI metadata
 
-Detailed protocol contracts, examples, and extension docs live in
-[`docs/guide.md`](docs/guide.md).
+Detailed protocol contracts and extension docs live in [`docs/guide.md`](docs/guide.md).
 
 ## When To Use It
 
-Use this project when:
+Use this project when you need an A2A adapter for `opencode serve`. It provides a thin service boundary with auth and streaming, but it is **not** a hardened multi-tenant platform.
 
-- you want to keep OpenCode as the runtime
-- you need A2A transports and Agent Card discovery
-- you want a thin service boundary instead of building your own adapter
-
-Look elsewhere if:
-
-- you need hard multi-tenant isolation inside one shared runtime
-- you want this project to manage your process supervisor or host bootstrap
-- you want a general client integration layer rather than a server wrapper
-
-For client-side integration, prefer
-[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
+For mutually untrusted tenants, run separate instance pairs in isolated environments.
 
 ## Deployment Boundary
 
-This repository improves the service boundary around OpenCode, but it does not
-turn OpenCode into a hardened multi-tenant platform.
+This repository focuses on the service boundary around OpenCode. For detailed security guidance, threat model, and isolation principles, see [SECURITY.md](SECURITY.md).
 
 - `A2A_BEARER_TOKEN` protects the A2A surface.
-- Provider auth and default model configuration remain on the OpenCode side.
-- Deployment supervision is intentionally BYO. Use `systemd`, Docker,
-  Kubernetes, or another supervisor if you need long-running operation.
-- For mutually untrusted tenants, run separate instance pairs with isolated
-  users, containers, workspaces, credentials, and ports.
+- One instance pair is a single-tenant trust boundary by design.
+- Deployment supervision is BYO (e.g., `systemd`, Docker).
 
-Read before deployment:
+Read [SECURITY.md](SECURITY.md) before production deployment.
 
-- [SECURITY.md](SECURITY.md)
-- [docs/guide.md](docs/guide.md)
 
 ## Further Reading
 

@@ -2,10 +2,7 @@
 
 ## Scope
 
-This repository wraps OpenCode as an A2A adapter service. It exposes A2A
-HTTP+JSON and JSON-RPC interfaces, and adds authentication, task/session
-contracts, streaming, interrupt handling, and runtime guidance. It does not
-fully isolate upstream model credentials from OpenCode runtime behavior.
+This repository provides an A2A adapter service around OpenCode. For general product positioning and overview, see [README.md](README.md).
 
 ## Security Boundary
 

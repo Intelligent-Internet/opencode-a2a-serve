@@ -43,44 +43,28 @@ uv run opencode-a2a-server serve
 
 ## Validation
 
-Run the default validation baseline before opening a PR:
+Run the primary validation entrypoint before opening a PR. This script runs `pre-commit`, `pytest`, and enforces coverage policy:
 
 ```bash
-uv run pre-commit run --all-files
-uv run pytest
+./scripts/doctor.sh
 ```
 
-If you change shell scripts, also run `bash -n` on each modified script, for
-example:
-
-```bash
-bash -n scripts/doctor.sh
-bash -n scripts/lint.sh
-```
-
-If you change extension methods, extension metadata, or Agent Card/OpenAPI
-contract surfaces, also run:
-
-```bash
-uv run pytest tests/contracts/test_extension_contract_consistency.py
-uv run mypy src/opencode_a2a_server
-```
-
-## Change Expectations
-
-- Keep code, comments, and docs in English.
-- Keep issue / PR discussion in Simplified Chinese when collaborating in this repository.
-- Do not drift Agent Card, OpenAPI examples, wire contract metadata, and runtime behavior.
-- Prefer additive, explicit compatibility changes over silent behavior changes.
-- Treat `opencode.*` surfaces as provider-private unless the repository already defines them as shared A2A contracts.
+For more details on available scripts, see [scripts/README.md](scripts/README.md).
 
 ## Git and PR Workflow
 
-- Branch from the latest `main`.
-- Use `git fetch` and `git merge --ff-only` to sync mainline.
-- Do not push directly to protected branches.
-- Link the relevant issue in commits and PR descriptions when applicable.
-- Open PRs as Draft by default when the change still needs review or iteration.
+- **Mainline Sync**: Branch from the latest `main`. Use `git fetch` and `git merge --ff-only` to sync mainline and avoid implicit merges.
+- **Branching**: Implement each task on an independent branch. Do not push directly to protected branches (`main`, `master`, `release/*`).
+- **History**: Do not rewrite shared history. Avoid `git push --force` or arbitrary `rebase` on public branches.
+- **Commits**: Commit only files related to the current task. Link the relevant `#issue` in commit messages and PR descriptions.
+- **Draft PRs**: Open PRs as Draft by default for iteration and review.
+
+## Change Expectations
+
+- **Language**: Keep code, comments, and documentation in English. Use Simplified Chinese for issues, PRs, and collaboration discussion.
+- **Consistency**: Keep runtime behavior, Agent Card declarations, OpenAPI examples, and machine-readable extension contracts aligned.
+- **Compatibility**: Prefer additive, explicit compatibility changes over silent behavior changes.
+- **AI Agents**: If you are an AI agent, see [AGENTS.md](AGENTS.md) for additional coordination rules and CLI tool conventions.
 
 ## Documentation
 

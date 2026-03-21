@@ -67,6 +67,7 @@ Key variables to understand protocol behavior:
   (`10` minutes).
 - `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: best-effort timeout for upstream
   `session.abort` in cancel flow.
+- `A2A_STREAM_SSE_PING_SECONDS`: REST SSE keepalive interval. Default: `15`.
 - `OPENCODE_TIMEOUT` / `OPENCODE_TIMEOUT_STREAM`: upstream request timeout and
   optional stream timeout override.
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
@@ -125,9 +126,7 @@ opencode-a2a-server serve
     URI.
   - `DataPart` is currently rejected explicitly; it is not silently downgraded.
 - Task state defaults to `completed` for successful turns.
-- The deployment profile is single-tenant and shared-workspace: one server
-  instance exposes one OpenCode workspace/environment to all consumers bound to
-  that instance.
+- The deployment profile is single-tenant and shared-workspace. For detailed isolation principles and security boundaries, see [SECURITY.md](../SECURITY.md).
 
 ## Streaming Contract
 
