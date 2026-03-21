@@ -89,11 +89,6 @@ class Settings(BaseSettings):
     a2a_log_level: str = Field(default="WARNING", alias="A2A_LOG_LEVEL")
     a2a_log_payloads: bool = Field(default=False, alias="A2A_LOG_PAYLOADS")
     a2a_log_body_limit: int = Field(default=0, alias="A2A_LOG_BODY_LIMIT")
-    a2a_stream_sse_ping_seconds: int = Field(
-        default=15,
-        ge=1,
-        alias="A2A_STREAM_SSE_PING_SECONDS",
-    )
     a2a_max_request_body_bytes: int = Field(
         default=1_048_576,
         ge=0,
@@ -139,6 +134,16 @@ class Settings(BaseSettings):
     # Session cache settings
     a2a_session_cache_ttl_seconds: int = Field(default=3600, alias="A2A_SESSION_CACHE_TTL_SECONDS")
     a2a_session_cache_maxsize: int = Field(default=10_000, alias="A2A_SESSION_CACHE_MAXSIZE")
+    a2a_interrupt_request_ttl_seconds: float = Field(
+        default=10_800.0,
+        ge=0.0,
+        alias="A2A_INTERRUPT_REQUEST_TTL_SECONDS",
+    )
+    a2a_interrupt_request_tombstone_ttl_seconds: float = Field(
+        default=600.0,
+        ge=0.0,
+        alias="A2A_INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS",
+    )
     a2a_cancel_abort_timeout_seconds: float = Field(
         default=2.0,
         ge=0.0,

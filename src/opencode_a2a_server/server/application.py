@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import logging
 import secrets
-from collections.abc import AsyncIterable, AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
 from typing import TYPE_CHECKING, Any
@@ -12,12 +11,7 @@ from typing import TYPE_CHECKING, Any
 import uvicorn
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPI
 from a2a.server.apps.jsonrpc.jsonrpc_app import DefaultCallContextBuilder
-from a2a.server.apps.rest.rest_adapter import (
-    EventSourceResponse,
-    InvalidRequestError,
-    RESTAdapter,
-    rest_stream_error_handler,
-)
+from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.events import EventConsumer
 from a2a.server.request_handlers.default_request_handler import (
     TERMINAL_TASK_STATES,
@@ -314,38 +308,6 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
         return context
 
 
-class KeepaliveRESTAdapter(RESTAdapter):
-    def __init__(self, *args: Any, sse_ping_seconds: int, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._sse_ping_seconds = sse_ping_seconds
-
-    @rest_stream_error_handler
-    async def _handle_streaming_request(
-        self,
-        method: Any,
-        request: Request,
-    ) -> EventSourceResponse:
-        try:
-            await request.body()
-        except (ValueError, RuntimeError, OSError) as exc:
-            raise ServerError(
-                error=InvalidRequestError(message=f"Failed to pre-consume request body: {exc}")
-            ) from exc
-
-        call_context = self._context_builder.build(request)
-
-        async def event_generator(
-            stream: AsyncIterable[Any],
-        ) -> AsyncIterator[dict[str, dict[str, Any]]]:
-            async for item in stream:
-                yield {"data": item}
-
-        return EventSourceResponse(
-            event_generator(method(request, call_context)),
-            ping=self._sse_ping_seconds,
-        )
-
-
 def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
     token = settings.a2a_bearer_token
 
@@ -420,11 +382,10 @@ def create_app(settings: Settings) -> FastAPI:
         session_claim_release=executor.release_session_for_control,
         methods=jsonrpc_methods,
     )
-    rest_adapter = KeepaliveRESTAdapter(
+    rest_adapter = RESTAdapter(
         agent_card=agent_card,
         http_handler=handler,
         context_builder=context_builder,
-        sse_ping_seconds=settings.a2a_stream_sse_ping_seconds,
     )
 
     app = A2AFastAPI(
