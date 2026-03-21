@@ -29,7 +29,9 @@ from opencode_a2a_server.server.application import (
     build_agent_card,
     create_app,
 )
-from tests.support.helpers import DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient
+from tests.support.helpers import (
+    DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient,
+)
 from tests.support.helpers import make_settings
 
 

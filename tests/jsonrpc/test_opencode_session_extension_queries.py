@@ -8,7 +8,9 @@ from opencode_a2a_server.contracts.extensions import (
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
 )
-from tests.support.helpers import DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient
+from tests.support.helpers import (
+    DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient,
+)
 from tests.support.helpers import make_settings
 from tests.support.session_extensions import _BASE_SETTINGS, _session_meta
 

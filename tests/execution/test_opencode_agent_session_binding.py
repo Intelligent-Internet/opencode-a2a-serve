@@ -5,7 +5,11 @@ from a2a.types import Task
 
 from opencode_a2a_server.execution.executor import OpencodeAgentExecutor
 from opencode_a2a_server.opencode_upstream_client import OpencodeMessage
-from tests.support.helpers import DummyChatOpencodeUpstreamClient, DummyEventQueue, make_request_context
+from tests.support.helpers import (
+    DummyChatOpencodeUpstreamClient,
+    DummyEventQueue,
+    make_request_context,
+)
 
 
 @pytest.mark.asyncio

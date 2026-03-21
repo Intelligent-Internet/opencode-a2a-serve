@@ -19,6 +19,8 @@ lib64/
 parts/
 !src/opencode_a2a_server/parts/
 !src/opencode_a2a_server/parts/*.py
+!tests/parts/
+!tests/parts/*.py
 src/opencode_a2a_server/parts/__pycache__/
 sdist/
 var/

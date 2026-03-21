@@ -1,7 +1,9 @@
 import httpx
 import pytest
 
-from tests.support.helpers import DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient
+from tests.support.helpers import (
+    DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient,
+)
 from tests.support.helpers import make_settings
 from tests.support.session_extensions import _BASE_SETTINGS, _session_meta
 

@@ -4,7 +4,9 @@ import httpx
 import pytest
 
 from opencode_a2a_server.opencode_upstream_client import UpstreamContractError
-from tests.support.helpers import DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient
+from tests.support.helpers import (
+    DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient,
+)
 from tests.support.helpers import make_settings
 from tests.support.session_extensions import _BASE_SETTINGS
 
