@@ -578,8 +578,12 @@ def test_normalize_model_ref_rejects_blank_or_partial_values() -> None:
         "modelID": "gemini",
     }
     assert OpencodeUpstreamClient._normalize_model_ref({"providerID": "google"}) is None
-    assert OpencodeUpstreamClient._normalize_model_ref({"providerID": "", "modelID": "gemini"}) is None
-    assert OpencodeUpstreamClient._normalize_model_ref({"providerID": "google", "modelID": 1}) is None
+    assert (
+        OpencodeUpstreamClient._normalize_model_ref({"providerID": "", "modelID": "gemini"}) is None
+    )
+    assert (
+        OpencodeUpstreamClient._normalize_model_ref({"providerID": "google", "modelID": 1}) is None
+    )
 
 
 def test_merge_params_keeps_empty_directory_out_of_query() -> None:
