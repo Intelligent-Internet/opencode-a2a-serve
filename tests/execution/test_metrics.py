@@ -173,7 +173,7 @@ async def test_streaming_retry_metric_increments_once_per_retry(monkeypatch, cap
             self.calls += 1
             if self.calls == 1:
                 raise RuntimeError("boom")
-            if False:
+            for _ in ():
                 yield {}
 
     async def _fast_sleep(_seconds: float) -> None:

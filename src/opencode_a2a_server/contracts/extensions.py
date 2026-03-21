@@ -32,7 +32,6 @@ class SessionQueryMethodContract:
     unsupported_params: tuple[str, ...] = ()
     result_fields: tuple[str, ...] = ()
     items_type: str | None = None
-    items_field: str | None = None
     notification_response_status: int | None = None
     pagination_mode: str | None = None
 
@@ -52,7 +51,6 @@ class ProviderDiscoveryMethodContract:
     optional_params: tuple[str, ...] = ()
     result_fields: tuple[str, ...] = ()
     items_type: str | None = None
-    items_field: str | None = None
     notification_response_status: int | None = None
 
 
@@ -104,7 +102,6 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         unsupported_params=SESSION_QUERY_PAGINATION_UNSUPPORTED,
         result_fields=("items",),
         items_type="Task[]",
-        items_field="items",
         notification_response_status=204,
         pagination_mode=SESSION_QUERY_PAGINATION_MODE,
     ),
@@ -115,7 +112,6 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         unsupported_params=SESSION_QUERY_PAGINATION_UNSUPPORTED,
         result_fields=("items",),
         items_type="Message[]",
-        items_field="items",
         notification_response_status=204,
         pagination_mode=SESSION_QUERY_PAGINATION_MODE,
     ),
@@ -240,7 +236,6 @@ PROVIDER_DISCOVERY_METHOD_CONTRACTS: dict[str, ProviderDiscoveryMethodContract] 
         method="opencode.providers.list",
         result_fields=("items", "default_by_provider", "connected"),
         items_type="ProviderSummary[]",
-        items_field="items",
         notification_response_status=204,
     ),
     "list_models": ProviderDiscoveryMethodContract(
@@ -248,7 +243,6 @@ PROVIDER_DISCOVERY_METHOD_CONTRACTS: dict[str, ProviderDiscoveryMethodContract] 
         optional_params=("provider_id",),
         result_fields=("items", "default_by_provider", "connected"),
         items_type="ModelSummary[]",
-        items_field="items",
         notification_response_status=204,
     ),
 }
