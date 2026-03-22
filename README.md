@@ -112,10 +112,9 @@ This repository improves the service boundary around OpenCode, but it does not
 turn OpenCode into a hardened multi-tenant platform.
 
 - `A2A_BEARER_TOKEN` protects the A2A surface.
-- Provider auth and default model configuration remain on the OpenCode side.
-- Persisted OpenCode auth/config state under the deployed user's HOME/XDG
-  directories may affect which credentials and default model are actually used
-  at runtime.
+- Provider auth and default model configuration remain on the OpenCode side; deployment-time
+  precedence details and HOME/XDG state impact are documented in
+  [docs/guide.md](docs/guide.md#troubleshooting-provider-auth-state).
 - Deployment supervision is intentionally BYO. Use `systemd`, Docker,
   Kubernetes, or another supervisor if you need long-running operation.
 - For mutually untrusted tenants, run separate instance pairs with isolated
