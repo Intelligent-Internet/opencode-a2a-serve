@@ -70,6 +70,33 @@ Key variables to understand protocol behavior:
 - `OPENCODE_TIMEOUT` / `OPENCODE_TIMEOUT_STREAM`: upstream request timeout and
   optional stream timeout override.
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
+- Client-side bootstrap flags are not part of the core server runtime contract, but
+  are available for consumer-side integration under `src/opencode_a2a/client/`:
+  - `A2A_CLIENT_TIMEOUT_SECONDS`
+  - `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`
+  - `A2A_CLIENT_USE_CLIENT_PREFERENCE`
+  - `A2A_CLIENT_SUPPORTED_TRANSPORTS`
+
+## Client Initialization Facade (Preview)
+
+`opencode-a2a` now includes a minimal client bootstrap module in
+`src/opencode_a2a/client/` to support downstream consumer usage while keeping
+server and client concerns separate.
+
+Boundary separation:
+
+- Server code owns runtime request handling, transport orchestration, stream
+  behavior, and public compatibility profile exposure.
+- Client code owns peer card discovery, SDK client construction, operation call
+  helpers, and protocol error normalization.
+
+Current client facade API:
+
+- `A2AClient.get_agent_card()`
+- `A2AClient.send()` / `A2AClient.send_message()`
+- `A2AClient.get_task()`
+- `A2AClient.cancel_task()`
+- `A2AClient.resubscribe_task()`
 
 Execution-boundary metadata is intentionally declarative deployment metadata:
 it is published through `RuntimeProfile`, Agent Card, OpenAPI, and `/health`,
