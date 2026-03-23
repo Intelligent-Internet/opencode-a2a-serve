@@ -16,28 +16,28 @@ deployment boundary.
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     External["A2A Clients / a2a-client-hub / Gateways"]
 
-    subgraph Adapter["opencode-a2a"]
-        direction TB
+    subgraph Adapter["opencode-a2a Runtime"]
         Ingress["Inbound A2A Surface\nREST + JSON-RPC"]
         OpenCode["OpenCode Runtime"]
-        Outbound["Embedded A2A Client\na2a_call path"]
+        Outbound["Embedded A2A Client\na2a_call"]
     end
 
-    subgraph Peers["Peer network"]
-        direction TB
+    subgraph Peers["Peer A2A services"]
         PeerA2A["Peer A2A Agent"]
         PeerRuntime["Peer OpenCode Runtime"]
-        PeerA2A <--> PeerRuntime
+        PeerA2A --> PeerRuntime
     end
 
-    External -->|message/send, message:stream| Ingress
-    Ingress <--> OpenCode
-    Ingress -->|invoke a2a_call| Outbound
-    Outbound -->|message/send, message:stream| PeerA2A
-    PeerA2A -->|tool result / task updates| Outbound
+    External -->|message/send,\nmessage:stream| Ingress
+    Ingress -->|tool call| OpenCode
+    OpenCode -->|model/tool result events| Ingress
+    Ingress -->|a2a_call| Outbound
+    Outbound -->|message/send,\nmessage:stream| PeerA2A
+    PeerA2A -->|tool result| Outbound
+    PeerRuntime -->|task session\nexecution| PeerA2A
 ```
 
 ## Quick Start
