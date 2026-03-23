@@ -80,8 +80,6 @@ OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
 opencode-a2a
 ```
 
-`opencode-a2a serve` remains available as a backward-compatible alias.
-
 Verify that the service is up:
 
 ```bash

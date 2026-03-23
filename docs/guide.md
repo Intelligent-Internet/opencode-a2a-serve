@@ -157,8 +157,6 @@ OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
 opencode-a2a
 ```
 
-`opencode-a2a serve` remains available as a backward-compatible alias.
-
 ## Troubleshooting Provider Auth State
 
 If one deployment works while another fails against the same upstream provider,

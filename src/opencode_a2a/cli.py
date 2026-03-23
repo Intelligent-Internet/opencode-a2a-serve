@@ -56,10 +56,6 @@ def build_parser() -> argparse.ArgumentParser:
             "OpenCode A2A runtime. Run without a subcommand to start the service."
             " Deployment supervision is intentionally left to the operator."
         ),
-        epilog=(
-            "Running `opencode-a2a` with no subcommand starts the runtime."
-            " `serve` is kept as a backward-compatible alias."
-        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -69,14 +65,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser(
-        "serve",
-        help="Backward-compatible alias for starting the OpenCode A2A runtime.",
-        description=(
-            "Backward-compatible alias for starting the OpenCode A2A runtime"
-            " using environment-based settings."
-        ),
-    )
 
     call_parser = subparsers.add_parser(
         "call",
@@ -103,10 +91,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     namespace = parser.parse_args(args)
-    if namespace.command == "serve":
-        serve_main()
-        return 0
-
     if namespace.command == "call":
         return asyncio.run(run_call(namespace.agent_url, namespace.text, namespace.token))
 
