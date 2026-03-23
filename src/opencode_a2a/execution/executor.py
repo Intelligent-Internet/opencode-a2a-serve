@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..server.application import A2AClientManager
+    from ..server.state_store import SessionStateRepository
 
 import httpx
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -531,6 +532,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         session_cache_ttl_seconds: int = 3600,
         session_cache_maxsize: int = 10_000,
         a2a_client_manager: A2AClientManager | None = None,
+        session_state_repository: SessionStateRepository | None = None,
     ) -> None:
         self._client = client
         self._streaming_enabled = streaming_enabled
@@ -544,6 +546,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             client=client,
             session_cache_ttl_seconds=session_cache_ttl_seconds,
             session_cache_maxsize=session_cache_maxsize,
+            state_repository=session_state_repository,
         )
         self._stream_runtime = StreamRuntime(
             client=client,

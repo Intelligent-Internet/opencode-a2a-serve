@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -78,7 +79,12 @@ from .request_parsing import (
     _request_body_too_large_response,
     _RequestBodyTooLargeError,
 )
-from .task_store import build_task_store, close_task_store, initialize_task_store
+from .state_store import (
+    build_interrupt_request_repository,
+    build_session_state_repository,
+    initialize_state_repository,
+)
+from .task_store import build_database_engine, build_task_store, initialize_task_store
 
 logger = logging.getLogger(__name__)
 
@@ -488,18 +494,52 @@ class _ClientCacheEntry:
         self.pending_eviction = pending_eviction
 
 
+def _call_with_optional_kwargs(factory, /, *args, **kwargs):  # noqa: ANN001
+    try:
+        return factory(*args, **kwargs)
+    except TypeError as exc:
+        signature = inspect.signature(factory)
+        supported_kwargs = {
+            name: value for name, value in kwargs.items() if name in signature.parameters
+        }
+        if supported_kwargs == kwargs:
+            raise
+        try:
+            return factory(*args, **supported_kwargs)
+        except TypeError:
+            raise exc from None
+
+
 def create_app(settings: Settings) -> FastAPI:
-    upstream_client = OpencodeUpstreamClient(settings)
+    database_engine = (
+        build_database_engine(settings) if settings.a2a_task_store_backend == "database" else None
+    )
+    session_state_repository = build_session_state_repository(settings, engine=database_engine)
+    interrupt_request_repository = build_interrupt_request_repository(
+        settings,
+        engine=database_engine,
+    )
+    upstream_client = _call_with_optional_kwargs(
+        OpencodeUpstreamClient,
+        settings,
+        interrupt_request_repository=interrupt_request_repository,
+    )
     client_manager = A2AClientManager(settings)
-    executor = OpencodeAgentExecutor(
+    executor = _call_with_optional_kwargs(
+        OpencodeAgentExecutor,
         upstream_client,
         streaming_enabled=True,
         cancel_abort_timeout_seconds=settings.a2a_cancel_abort_timeout_seconds,
         session_cache_ttl_seconds=settings.a2a_session_cache_ttl_seconds,
         session_cache_maxsize=settings.a2a_session_cache_maxsize,
         a2a_client_manager=client_manager,
+        session_state_repository=session_state_repository,
     )
-    task_store = build_task_store(settings)
+    task_store = _call_with_optional_kwargs(
+        build_task_store,
+        settings,
+        engine=database_engine,
+    )
     handler = OpencodeRequestHandler(
         agent_executor=executor,
         task_store=task_store,
@@ -550,8 +590,11 @@ def create_app(settings: Settings) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         await initialize_task_store(task_store)
+        await initialize_state_repository(session_state_repository)
+        await initialize_state_repository(interrupt_request_repository)
         yield
-        await close_task_store(task_store)
+        if database_engine is not None:
+            await database_engine.dispose()
         await client_manager.close_all()
         await upstream_client.close()
 

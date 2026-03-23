@@ -17,7 +17,7 @@ class _ConfiguredDatabaseTaskStore(TaskStore):
     def __init__(
         self,
         *,
-        engine: "AsyncEngine",
+        engine: AsyncEngine,
         create_table: bool,
         table_name: str,
     ) -> None:
@@ -44,7 +44,7 @@ class _ConfiguredDatabaseTaskStore(TaskStore):
             self._delegate.task_model = task_model
 
     @property
-    def engine(self) -> "AsyncEngine":
+    def engine(self) -> AsyncEngine:
         return self._delegate.engine
 
     async def initialize(self) -> None:
@@ -60,19 +60,27 @@ class _ConfiguredDatabaseTaskStore(TaskStore):
         await self._delegate.delete(task_id, context)
 
 
-def build_task_store(settings: Settings) -> TaskStore:
+def build_task_store(
+    settings: Settings,
+    *,
+    engine: AsyncEngine | None = None,
+) -> TaskStore:
     if settings.a2a_task_store_backend == "memory":
         return InMemoryTaskStore()
 
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    database_url = cast(str, settings.a2a_task_store_database_url)
-    engine = create_async_engine(database_url)
+    resolved_engine = engine or build_database_engine(settings)
     return _ConfiguredDatabaseTaskStore(
-        engine=engine,
+        engine=resolved_engine,
         create_table=settings.a2a_task_store_create_table,
         table_name=settings.a2a_task_store_table_name,
     )
+
+
+def build_database_engine(settings: Settings) -> AsyncEngine:
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    database_url = cast(str, settings.a2a_task_store_database_url)
+    return create_async_engine(database_url)
 
 
 async def initialize_task_store(task_store: TaskStore) -> None:

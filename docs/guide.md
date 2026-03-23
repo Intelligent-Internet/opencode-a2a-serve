@@ -175,9 +175,14 @@ A2A_TASK_STORE_DATABASE_URL=sqlite+aiosqlite:///./opencode-a2a.db \
 opencode-a2a
 ```
 
-At the moment, this database-backed store persists task records only.
-Session binding state and interrupt request bindings remain in-process runtime
-state and are not yet persisted.
+When `A2A_TASK_STORE_BACKEND=database`, the service now persists:
+
+- task records
+- session binding / ownership state
+- interrupt request bindings and tombstones
+
+In-flight asyncio locks, outbound A2A client caches, and stream-local
+aggregation buffers remain process-local runtime state.
 
 ## Troubleshooting Provider Auth State
 
