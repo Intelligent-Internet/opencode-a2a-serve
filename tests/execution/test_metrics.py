@@ -39,8 +39,6 @@ async def test_stream_request_metrics_track_total_and_active(caplog) -> None:
             del params, context
             queue = AsyncMock()
             producer_task = asyncio.create_task(asyncio.sleep(10))
-            self._producer_task = producer_task
-            self._queue = queue
             return MagicMock(), "task-1", queue, _FakeAggregator(), producer_task
 
         async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001

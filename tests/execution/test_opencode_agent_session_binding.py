@@ -424,11 +424,17 @@ async def test_agent_handles_a2a_call_tool_errors() -> None:
 
 @pytest.mark.asyncio
 async def test_agent_maps_a2a_call_tool_auth_errors_to_stable_payload() -> None:
-    class MockA2AClient:
-        async def send_message(self, text: str):
-            del text
+    class _AuthErrorStream:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
             raise A2AClientHTTPError(401, "unauthorized")
-            yield
+
+    class MockA2AClient:
+        def send_message(self, text: str):
+            del text
+            return _AuthErrorStream()
 
     class MockManager:
         async def get_client(self, url: str):
