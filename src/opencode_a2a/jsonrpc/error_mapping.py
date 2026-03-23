@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from a2a.types import A2AError, InternalError, InvalidParamsError, JSONRPCError
+from a2a.types import A2AError, InvalidParamsError, JSONRPCError
 
 
 def invalid_params_error(
@@ -11,18 +11,6 @@ def invalid_params_error(
     data: dict[str, Any] | None = None,
 ) -> A2AError:
     return A2AError(root=InvalidParamsError(message=message, data=data))
-
-
-def invalid_params_exception_error(
-    exc: Exception,
-    *,
-    data: dict[str, Any] | None = None,
-) -> A2AError:
-    return invalid_params_error(str(exc), data=data)
-
-
-def internal_error(exc: Exception) -> A2AError:
-    return A2AError(root=InternalError(message=str(exc)))
 
 
 def method_not_supported_error(
@@ -83,7 +71,6 @@ def upstream_http_error(
     session_id: str | None = None,
     request_id: str | None = None,
     detail: str | None = None,
-    message: str = "Upstream OpenCode error",
 ) -> JSONRPCError:
     data: dict[str, Any] = {
         "type": "UPSTREAM_HTTP_ERROR",
@@ -97,7 +84,7 @@ def upstream_http_error(
         data["request_id"] = request_id
     if detail is not None:
         data["detail"] = detail
-    return JSONRPCError(code=code, message=message, data=data)
+    return JSONRPCError(code=code, message="Upstream OpenCode error", data=data)
 
 
 def upstream_unreachable_error(
@@ -106,7 +93,6 @@ def upstream_unreachable_error(
     method: str | None = None,
     session_id: str | None = None,
     request_id: str | None = None,
-    message: str = "Upstream OpenCode unreachable",
 ) -> JSONRPCError:
     data: dict[str, Any] = {"type": "UPSTREAM_UNREACHABLE"}
     if method is not None:
@@ -115,7 +101,7 @@ def upstream_unreachable_error(
         data["session_id"] = session_id
     if request_id is not None:
         data["request_id"] = request_id
-    return JSONRPCError(code=code, message=message, data=data)
+    return JSONRPCError(code=code, message="Upstream OpenCode unreachable", data=data)
 
 
 def upstream_payload_error(
@@ -125,7 +111,6 @@ def upstream_payload_error(
     method: str | None = None,
     session_id: str | None = None,
     request_id: str | None = None,
-    message: str = "Upstream OpenCode payload mismatch",
 ) -> JSONRPCError:
     data: dict[str, Any] = {
         "type": "UPSTREAM_PAYLOAD_ERROR",
@@ -137,14 +122,12 @@ def upstream_payload_error(
         data["session_id"] = session_id
     if request_id is not None:
         data["request_id"] = request_id
-    return JSONRPCError(code=code, message=message, data=data)
+    return JSONRPCError(code=code, message="Upstream OpenCode payload mismatch", data=data)
 
 
 __all__ = [
-    "internal_error",
     "interrupt_not_found_error",
     "invalid_params_error",
-    "invalid_params_exception_error",
     "method_not_supported_error",
     "session_forbidden_error",
     "session_not_found_error",

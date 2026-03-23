@@ -8,6 +8,7 @@ import httpx
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
 from a2a.types import (
     A2AError,
+    InternalError,
     InvalidRequestError,
     JSONRPCRequest,
 )
@@ -22,10 +23,8 @@ from ..contracts.extensions import (
 )
 from ..opencode_upstream_client import OpencodeUpstreamClient, UpstreamContractError
 from .error_mapping import (
-    internal_error,
     interrupt_not_found_error,
     invalid_params_error,
-    invalid_params_exception_error,
     method_not_supported_error,
     session_forbidden_error,
     session_not_found_error,
@@ -316,7 +315,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         except JsonRpcParamsValidationError as exc:
             return self._generate_error_response(
                 base_request.id,
-                invalid_params_exception_error(exc, data=exc.data),
+                invalid_params_error(str(exc), data=exc.data),
             )
 
         limit = int(query["limit"])
@@ -350,7 +349,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             logger.exception("OpenCode session query JSON-RPC method failed")
             return self._generate_error_response(
                 base_request.id,
-                internal_error(exc),
+                A2AError(root=InternalError(message=str(exc))),
             )
 
         try:
@@ -446,8 +445,8 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         except ValueError as exc:
             return self._generate_error_response(
                 base_request.id,
-                invalid_params_exception_error(
-                    exc,
+                invalid_params_error(
+                    str(exc),
                     data={"type": "INVALID_FIELD", "field": "metadata.opencode.directory"},
                 ),
             )
@@ -476,7 +475,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             logger.exception("OpenCode provider discovery JSON-RPC method failed")
             return self._generate_error_response(
                 base_request.id,
-                internal_error(exc),
+                A2AError(root=InternalError(message=str(exc))),
             )
 
         try:
@@ -597,10 +596,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         except _PromptAsyncValidationError as exc:
             return self._generate_error_response(
                 base_request.id,
-                invalid_params_exception_error(
-                    exc,
-                    data={"type": "INVALID_FIELD", "field": exc.field},
-                ),
+                invalid_params_error(str(exc), data={"type": "INVALID_FIELD", "field": exc.field}),
             )
 
         directory, metadata_error = self._extract_directory_from_metadata(
@@ -615,8 +611,8 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         except ValueError as exc:
             return self._generate_error_response(
                 base_request.id,
-                invalid_params_exception_error(
-                    exc,
+                invalid_params_error(
+                    str(exc),
                     data={"type": "INVALID_FIELD", "field": "metadata.opencode.directory"},
                 ),
             )
@@ -729,7 +725,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             logger.exception("OpenCode session control JSON-RPC method failed")
             return self._generate_error_response(
                 base_request.id,
-                internal_error(exc),
+                A2AError(root=InternalError(message=str(exc))),
             )
         finally:
             if pending_claim and not claim_finalized and identity:
@@ -877,7 +873,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         except ValueError as exc:
             return self._generate_error_response(
                 base_request.id,
-                invalid_params_exception_error(exc, data={"type": "INVALID_FIELD"}),
+                invalid_params_error(str(exc), data={"type": "INVALID_FIELD"}),
             )
         except httpx.HTTPStatusError as exc:
             upstream_status = exc.response.status_code
@@ -912,7 +908,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             logger.exception("OpenCode interrupt callback JSON-RPC method failed")
             return self._generate_error_response(
                 base_request.id,
-                internal_error(exc),
+                A2AError(root=InternalError(message=str(exc))),
             )
 
         if base_request.id is None:

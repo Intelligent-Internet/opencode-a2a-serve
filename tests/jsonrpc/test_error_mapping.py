@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from a2a.types import InternalError, InvalidParamsError
+from a2a.types import InvalidParamsError
 
 from opencode_a2a.jsonrpc.error_mapping import (
-    internal_error,
     interrupt_not_found_error,
-    invalid_params_exception_error,
+    invalid_params_error,
     method_not_supported_error,
     session_forbidden_error,
     session_not_found_error,
@@ -70,15 +69,11 @@ def test_jsonrpc_error_mapping_helpers_build_upstream_envelopes() -> None:
     }
 
 
-def test_invalid_and_internal_error_helpers_wrap_a2a_errors() -> None:
-    invalid = invalid_params_exception_error(
-        ValueError("bad field"),
+def test_invalid_error_helper_wraps_a2a_error() -> None:
+    invalid = invalid_params_error(
+        "bad field",
         data={"type": "INVALID_FIELD", "field": "request"},
     )
     assert isinstance(invalid.root, InvalidParamsError)
     assert invalid.root.message == "bad field"
     assert invalid.root.data == {"type": "INVALID_FIELD", "field": "request"}
-
-    internal = internal_error(RuntimeError("boom"))
-    assert isinstance(internal.root, InternalError)
-    assert internal.root.message == "boom"
