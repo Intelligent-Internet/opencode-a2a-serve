@@ -92,7 +92,12 @@ class SessionStateRepository(ABC):
     async def set_pending_claim(self, *, session_id: str, identity: str) -> None: ...
 
     @abstractmethod
-    async def clear_pending_claim(self, *, session_id: str, identity: str | None = None) -> None: ...
+    async def clear_pending_claim(
+        self,
+        *,
+        session_id: str,
+        identity: str | None = None,
+    ) -> None: ...
 
 
 class InterruptRequestRepository(ABC):
@@ -165,7 +170,7 @@ class DatabaseSessionStateRepository(SessionStateRepository):
     def __init__(
         self,
         *,
-        engine: "AsyncEngine",
+        engine: AsyncEngine,
         ttl_seconds: int,
         maxsize: int,
         clock: Callable[[], float] = time.time,
@@ -175,7 +180,9 @@ class DatabaseSessionStateRepository(SessionStateRepository):
         self._maxsize = int(maxsize)
         self._clock = clock
         self._initialized = False
-        self._session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+        self._session_maker = async_sessionmaker(
+            engine, expire_on_commit=False, class_=AsyncSession
+        )
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -201,12 +208,18 @@ class DatabaseSessionStateRepository(SessionStateRepository):
     ) -> None:
         await session.execute(
             delete(_SESSION_BINDINGS).where(
-                and_(_SESSION_BINDINGS.c.expires_at.is_not(None), _SESSION_BINDINGS.c.expires_at <= now)
+                and_(
+                    _SESSION_BINDINGS.c.expires_at.is_not(None),
+                    _SESSION_BINDINGS.c.expires_at <= now,
+                )
             )
         )
         await session.execute(
             delete(_SESSION_OWNERS).where(
-                and_(_SESSION_OWNERS.c.expires_at.is_not(None), _SESSION_OWNERS.c.expires_at <= now)
+                and_(
+                    _SESSION_OWNERS.c.expires_at.is_not(None),
+                    _SESSION_OWNERS.c.expires_at <= now,
+                )
             )
         )
 
@@ -325,7 +338,9 @@ class DatabaseSessionStateRepository(SessionStateRepository):
         async with self._session_maker.begin() as session:
             await self._prune_expired(session, now=now)
             exists = await session.execute(
-                select(_SESSION_OWNERS.c.session_id).where(_SESSION_OWNERS.c.session_id == session_id)
+                select(_SESSION_OWNERS.c.session_id).where(
+                    _SESSION_OWNERS.c.session_id == session_id
+                )
             )
             values = {
                 "identity": identity,
@@ -375,7 +390,12 @@ class DatabaseSessionStateRepository(SessionStateRepository):
                     .values(**values)
                 )
 
-    async def clear_pending_claim(self, *, session_id: str, identity: str | None = None) -> None:
+    async def clear_pending_claim(
+        self,
+        *,
+        session_id: str,
+        identity: str | None = None,
+    ) -> None:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             stmt = delete(_PENDING_SESSION_CLAIMS).where(
@@ -486,7 +506,7 @@ class DatabaseInterruptRequestRepository(InterruptRequestRepository):
     def __init__(
         self,
         *,
-        engine: "AsyncEngine",
+        engine: AsyncEngine,
         request_ttl_seconds: float,
         tombstone_ttl_seconds: float,
         clock: Callable[[], float] = time.time,
@@ -496,7 +516,9 @@ class DatabaseInterruptRequestRepository(InterruptRequestRepository):
         self._tombstone_ttl_seconds = float(tombstone_ttl_seconds)
         self._clock = clock
         self._initialized = False
-        self._session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+        self._session_maker = async_sessionmaker(
+            engine, expire_on_commit=False, class_=AsyncSession
+        )
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -521,9 +543,7 @@ class DatabaseInterruptRequestRepository(InterruptRequestRepository):
 
     async def _set_tombstone(self, session: AsyncSession, *, request_id: str, now: float) -> None:
         tombstone_expires_at = (
-            None
-            if self._tombstone_ttl_seconds <= 0
-            else now + self._tombstone_ttl_seconds
+            None if self._tombstone_ttl_seconds <= 0 else now + self._tombstone_ttl_seconds
         )
         await session.execute(
             update(_INTERRUPT_REQUESTS)
@@ -571,7 +591,9 @@ class DatabaseInterruptRequestRepository(InterruptRequestRepository):
                 "tombstone_expires_at": None,
             }
             if exists.scalar_one_or_none() is None:
-                await session.execute(insert(_INTERRUPT_REQUESTS).values(request_id=request_id, **values))
+                await session.execute(
+                    insert(_INTERRUPT_REQUESTS).values(request_id=request_id, **values)
+                )
             else:
                 await session.execute(
                     update(_INTERRUPT_REQUESTS)
@@ -629,7 +651,7 @@ class DatabaseInterruptRequestRepository(InterruptRequestRepository):
 def build_session_state_repository(
     settings: Settings,
     *,
-    engine: "AsyncEngine | None" = None,
+    engine: AsyncEngine | None = None,
 ) -> SessionStateRepository:
     if settings.a2a_task_store_backend == "database":
         return DatabaseSessionStateRepository(
@@ -646,7 +668,7 @@ def build_session_state_repository(
 def build_interrupt_request_repository(
     settings: Settings,
     *,
-    engine: "AsyncEngine | None" = None,
+    engine: AsyncEngine | None = None,
 ) -> InterruptRequestRepository:
     if settings.a2a_task_store_backend == "database":
         return DatabaseInterruptRequestRepository(
