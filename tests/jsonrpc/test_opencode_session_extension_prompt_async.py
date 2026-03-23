@@ -8,7 +8,7 @@ from tests.support.helpers import (
     DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient,
 )
 from tests.support.helpers import make_settings
-from tests.support.session_extensions import _BASE_SETTINGS
+from tests.support.session_extensions import _BASE_SETTINGS, _jsonrpc_app
 
 
 @pytest.mark.asyncio
@@ -173,8 +173,9 @@ async def test_session_prompt_async_extension_rejects_owner_mismatch(monkeypatch
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    app.state.opencode_agent_executor._session_manager._session_owners.set(  # noqa: SLF001
-        "s-1", "bearer:other"
+    await _jsonrpc_app(app)._session_claim_finalize(  # noqa: SLF001
+        identity="bearer:other",
+        session_id="s-1",
     )
 
     transport = httpx.ASGITransport(app=app)

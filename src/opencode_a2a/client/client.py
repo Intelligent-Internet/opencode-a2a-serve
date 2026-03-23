@@ -32,23 +32,14 @@ from .agent_card import build_resolver_http_kwargs, normalize_agent_card_endpoin
 from .config import A2AClientSettings, load_settings
 from .error_mapping import (
     map_agent_card_error,
-    map_http_error,
-    map_jsonrpc_error,
     map_operation_error,
 )
-from .errors import (
-    A2AAgentUnavailableError,
-    A2AClientResetRequiredError,
-    A2APeerProtocolError,
-    A2AUnsupportedBindingError,
-    A2AUnsupportedOperationError,
-)
+from .errors import A2AUnsupportedBindingError
 from .payload_text import extract_text as extract_text_from_payload
 from .request_context import (
     HeaderInterceptor,
     build_call_context,
     build_client_interceptors,
-    build_default_headers,
     split_request_metadata,
 )
 from .types import A2AClientEvent
@@ -303,9 +294,6 @@ class A2AClient:
     ):
         return build_call_context(self._settings.bearer_token, extra_headers)
 
-    def _build_default_headers(self) -> dict[str, str]:
-        return build_default_headers(self._settings.bearer_token)
-
     def _build_interceptors(self):
         return build_client_interceptors(self._settings.bearer_token)
 
@@ -318,41 +306,6 @@ class A2AClient:
     @classmethod
     def extract_text(cls, payload: Any) -> str | None:
         return extract_text_from_payload(payload)
-
-    def _map_jsonrpc_error(
-        self,
-        exc: A2AClientJSONRPCError,
-    ) -> A2AClientResetRequiredError | A2APeerProtocolError | A2AUnsupportedOperationError:
-        mapped = map_jsonrpc_error(exc)
-        if isinstance(
-            mapped,
-            (A2AClientResetRequiredError, A2APeerProtocolError, A2AUnsupportedOperationError),
-        ):
-            return mapped
-        raise TypeError("Unexpected JSON-RPC error mapping result")
-
-    def _map_http_error(
-        self,
-        operation: str,
-        exc: A2AClientHTTPError,
-    ) -> (
-        A2AAgentUnavailableError
-        | A2AClientResetRequiredError
-        | A2APeerProtocolError
-        | A2AUnsupportedOperationError
-    ):
-        mapped = map_http_error(operation, exc)
-        if isinstance(
-            mapped,
-            (
-                A2AAgentUnavailableError,
-                A2AClientResetRequiredError,
-                A2APeerProtocolError,
-                A2AUnsupportedOperationError,
-            ),
-        ):
-            return mapped
-        raise TypeError("Unexpected HTTP error mapping result")
 
     # keep parts construction explicitly typed for mypy compatibility in older stubs
     def _normalize_parts(self, text: str) -> list[Part]:

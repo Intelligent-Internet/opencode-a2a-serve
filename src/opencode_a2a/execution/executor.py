@@ -336,28 +336,6 @@ class _ExecutionCoordinator:
             )
         )
 
-    async def _send_message(self) -> Any:
-        send_kwargs: dict[str, Any] = {
-            "directory": self._prepared.directory,
-            "model_override": self._prepared.model_override,
-        }
-        if self._prepared.streaming_request:
-            send_kwargs["timeout_override"] = self._executor._client.stream_timeout
-
-        if not self._prepared.use_structured_parts:
-            return await self._executor._client.send_message(
-                self._session_id,
-                self._prepared.user_text,
-                **send_kwargs,
-            )
-
-        return await self._executor._client.send_message(
-            self._session_id,
-            self._prepared.user_text or None,
-            parts=self._prepared.request_parts,
-            **send_kwargs,
-        )
-
     async def _handle_response(self, response: Any) -> None:
         response_text = response.text or ""
         resolved_message_id = self._stream_state.resolve_message_id(response.message_id)
