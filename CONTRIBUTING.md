@@ -1,8 +1,8 @@
 # Contributing
 
-Thanks for contributing to `opencode-a2a-server`.
+Thanks for contributing to `opencode-a2a`.
 
-This repository maintains an A2A adapter service around OpenCode. Changes
+This repository maintains an OpenCode A2A runtime. Changes
 should keep runtime behavior, Agent Card declarations, OpenAPI examples, and
 machine-readable extension contracts aligned.
 
@@ -32,39 +32,55 @@ Start OpenCode in one terminal:
 opencode serve --hostname 127.0.0.1 --port 4096
 ```
 
-Then start the A2A server in another terminal:
+Then start the A2A runtime in another terminal:
 
 ```bash
 A2A_BEARER_TOKEN=dev-token \
 OPENCODE_BASE_URL=http://127.0.0.1:4096 \
 OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
-uv run opencode-a2a-server serve
+uv run opencode-a2a serve
 ```
 
 ## Validation
 
-Run the primary validation entrypoint before opening a PR. This script runs `pre-commit`, `pytest`, and enforces coverage policy:
+Run the default validation baseline before opening a PR:
 
 ```bash
-./scripts/doctor.sh
+uv run pre-commit run --all-files
+uv run pytest
 ```
 
-For more details on available scripts, see [scripts/README.md](scripts/README.md).
+If you change shell scripts, also run `bash -n` on each modified script, for
+example:
 
-## Git and PR Workflow
+```bash
+bash -n scripts/doctor.sh
+bash -n scripts/lint.sh
+```
 
-- **Mainline Sync**: Branch from the latest `main`. Use `git fetch` and `git merge --ff-only` to sync mainline and avoid implicit merges.
-- **Branching**: Implement each task on an independent branch. Do not push directly to protected branches (`main`, `master`, `release/*`).
-- **History**: Do not rewrite shared history. Avoid `git push --force` or arbitrary `rebase` on public branches.
-- **Commits**: Commit only files related to the current task. Link the relevant `#issue` in commit messages and PR descriptions.
-- **Draft PRs**: Open PRs as Draft by default for iteration and review.
+If you change extension methods, extension metadata, or Agent Card/OpenAPI
+contract surfaces, also run:
+
+```bash
+uv run pytest tests/contracts/test_extension_contract_consistency.py
+uv run mypy src/opencode_a2a
+```
 
 ## Change Expectations
 
-- **Language**: Keep code, comments, and documentation in English. Use Simplified Chinese for issues, PRs, and collaboration discussion.
-- **Consistency**: Keep runtime behavior, Agent Card declarations, OpenAPI examples, and machine-readable extension contracts aligned.
-- **Compatibility**: Prefer additive, explicit compatibility changes over silent behavior changes.
-- **AI Agents**: If you are an AI agent, see [AGENTS.md](AGENTS.md) for additional coordination rules and CLI tool conventions.
+- Keep code, comments, and docs in English.
+- Keep issue / PR discussion in Simplified Chinese when collaborating in this repository.
+- Do not drift Agent Card, OpenAPI examples, wire contract metadata, and runtime behavior.
+- Prefer additive, explicit compatibility changes over silent behavior changes.
+- Treat `opencode.*` surfaces as provider-private unless the repository already defines them as shared A2A contracts.
+
+## Git and PR Workflow
+
+- Branch from the latest `main`.
+- Use `git fetch` and `git merge --ff-only` to sync mainline.
+- Do not push directly to protected branches.
+- Link the relevant issue in commits and PR descriptions when applicable.
+- Open PRs as Draft by default when the change still needs review or iteration.
 
 ## Documentation
 
@@ -79,7 +95,7 @@ Keep compatibility guidance centralized in [docs/guide.md](docs/guide.md) unless
 new standalone document is clearly necessary.
 
 When changing extension contracts, update
-[`src/opencode_a2a_server/contracts/extensions.py`](src/opencode_a2a_server/contracts/extensions.py)
+[`src/opencode_a2a/contracts/extensions.py`](src/opencode_a2a/contracts/extensions.py)
 first and keep these generated/documented surfaces aligned:
 
 - Agent Card extension params

@@ -19,7 +19,7 @@ JSON-RPC extension details; README stays at overview level.
 
 This section keeps only the protocol-relevant variables.
 For the full runtime variable catalog and defaults, see
-[`../src/opencode_a2a_server/config.py`](../src/opencode_a2a_server/config.py).
+[`../src/opencode_a2a/config.py`](../src/opencode_a2a/config.py).
 Deployment supervision is intentionally out of scope for this project; use your
 own process manager, container runtime, or host orchestration.
 
@@ -70,7 +70,47 @@ Key variables to understand protocol behavior:
 - `A2A_STREAM_SSE_PING_SECONDS`: REST SSE keepalive interval. Default: `15`.
 - `OPENCODE_TIMEOUT` / `OPENCODE_TIMEOUT_STREAM`: upstream request timeout and
   optional stream timeout override.
+- `A2A_CLIENT_TIMEOUT_SECONDS`: outbound client timeout. Default: `30` seconds.
+- `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`: outbound Agent Card fetch timeout.
+  Default: `5` seconds.
+- `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether the outbound client prefers its own transport choices.
+- `A2A_CLIENT_BEARER_TOKEN`: optional bearer token attached to outbound peer
+  calls made by the embedded A2A client and `a2a_call` tool path.
+- `A2A_CLIENT_SUPPORTED_TRANSPORTS`: ordered outbound transport preference list.
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
+- The same outbound client flags are also honored by the server-side embedded
+  A2A client used for peer calls and `a2a_call` tool execution:
+  - `A2A_CLIENT_TIMEOUT_SECONDS`
+  - `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`
+  - `A2A_CLIENT_USE_CLIENT_PREFERENCE`
+  - `A2A_CLIENT_BEARER_TOKEN`
+  - `A2A_CLIENT_SUPPORTED_TRANSPORTS`
+
+## Client Initialization Facade (Preview)
+
+`opencode-a2a` now includes a minimal client bootstrap module in
+`src/opencode_a2a/client/` to support downstream consumer usage while keeping
+server and client concerns separate.
+
+Boundary separation:
+
+- Server code owns runtime request handling, transport orchestration, stream
+  behavior, and public compatibility profile exposure.
+- Client code owns peer card discovery, SDK client construction, operation call
+  helpers, and protocol error normalization.
+
+Current client facade API:
+
+- `A2AClient.get_agent_card()`
+- `A2AClient.send()` / `A2AClient.send_message()`
+- `A2AClient.get_task()`
+- `A2AClient.cancel_task()`
+- `A2AClient.resubscribe_task()`
+
+Server-side outbound peer calls use bearer auth only for now. Configure
+`A2A_CLIENT_BEARER_TOKEN` when the remote agent protects its runtime surface.
+CLI outbound calls may pass `--token` explicitly or use
+`A2A_CLIENT_BEARER_TOKEN`.
 
 Execution-boundary metadata is intentionally declarative deployment metadata:
 it is published through `RuntimeProfile`, Agent Card, OpenAPI, and `/health`,
@@ -100,7 +140,13 @@ starting that upstream process:
 If your provider uses environment variables for auth, export them before
 starting `opencode serve`.
 
-Then start `opencode-a2a-server` against that explicit upstream URL:
+Do not assume startup-script env vars always erase previously persisted
+OpenCode auth state for the deployed user. When debugging provider-auth
+surprises, inspect the deployed user's HOME/XDG config directories and the
+OpenCode files stored there before concluding that `opencode-a2a` changed the
+credential selection.
+
+Then start `opencode-a2a` against that explicit upstream URL:
 
 ```bash
 OPENCODE_BASE_URL=http://127.0.0.1:4096 \
@@ -109,8 +155,25 @@ A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
-opencode-a2a-server serve
+opencode-a2a serve
 ```
+
+## Troubleshooting Provider Auth State
+
+If one deployment works while another fails against the same upstream provider,
+check the deployed OpenCode user's local state before assuming the difference
+comes from the `opencode-a2a` package itself.
+
+- Provider auth and service-level model defaults belong to `opencode serve`.
+- The deployed user's HOME/XDG config directories are operational input.
+- Existing OpenCode auth/config files may still influence runtime behavior even
+  when you also inject provider env vars from a process manager or shell
+  wrapper.
+- Compare the deployed user's OpenCode auth/config files, HOME/XDG values, and
+  effective workspace directory before blaming the A2A adapter layer.
+- For OpenCode-specific auth/config troubleshooting, inspect files such as
+  `~/.local/share/opencode/auth.json` and `~/.config/opencode/opencode.json`
+  (or the equivalent XDG-resolved paths for that service user).
 
 ## Core Behavior
 
@@ -442,7 +505,7 @@ Consumer guidance:
 - Treat `metadata.shared.model` as request-scoped preference data rather than
   deployment configuration.
 - Provider auth and service-level model defaults belong to `opencode serve`,
-  not to `opencode-a2a-server`.
+  not to `opencode-a2a`.
 
 Minimal example:
 
@@ -855,7 +918,7 @@ If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscr
 - Idempotency contract: repeated `tasks/cancel` on an already `canceled` task returns the current terminal task state without error.
 - Terminal subscribe contract: calling `subscribe` on a terminal task replays one terminal `Task` snapshot and then closes the stream.
 - These two semantics are also declared as machine-readable `service_behaviors` in the compatibility profile and wire contract extensions.
-- The service emits lightweight metric log records (`logger=opencode_a2a_server.execution.executor`):
+- The service emits lightweight metric log records (`logger=opencode_a2a.execution.executor`):
   - `a2a_stream_requests_total`
   - `a2a_stream_active` (`value=1` when a stream starts, `value=-1` when it closes)
   - `opencode_stream_retries_total`

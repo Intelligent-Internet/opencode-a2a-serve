@@ -6,7 +6,7 @@ import pytest
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.types import TransportProtocol
 
-from opencode_a2a_server.server.application import (
+from opencode_a2a.server.application import (
     _normalize_log_level,
     build_agent_card,
     create_app,
@@ -89,7 +89,7 @@ def test_openapi_jsonrpc_examples_include_core_message_methods() -> None:
 
 @pytest.mark.asyncio
 async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
@@ -127,7 +127,7 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
 
 @pytest.mark.asyncio
 async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatch) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
@@ -216,14 +216,14 @@ def _jsonrpc_message_send_payload(text: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_log_payloads_keeps_body_for_rest_handler(monkeypatch, caplog) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
     transport = httpx.ASGITransport(app=app)
     headers = {"Authorization": "Bearer test-token"}
 
-    with caplog.at_level(logging.DEBUG, logger="opencode_a2a_server.server.application"):
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.server.application"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/v1/message:send",
@@ -240,14 +240,14 @@ async def test_log_payloads_keeps_body_for_rest_handler(monkeypatch, caplog) -> 
 
 @pytest.mark.asyncio
 async def test_log_payloads_streaming_response_path(monkeypatch, caplog) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
     transport = httpx.ASGITransport(app=app)
     headers = {"Authorization": "Bearer test-token"}
 
-    with caplog.at_level(logging.DEBUG, logger="opencode_a2a_server.server.application"):
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.server.application"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             async with client.stream(
                 "POST", "/v1/message:stream", headers=headers, json=_rest_message_payload()
@@ -267,7 +267,7 @@ async def test_log_payloads_streaming_response_path(monkeypatch, caplog) -> None
 
 @pytest.mark.asyncio
 async def test_log_payloads_omits_non_json_request_body(monkeypatch, caplog) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
@@ -277,7 +277,7 @@ async def test_log_payloads_omits_non_json_request_body(monkeypatch, caplog) -> 
         "Content-Type": "application/octet-stream",
     }
 
-    with caplog.at_level(logging.DEBUG, logger="opencode_a2a_server.server.application"):
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.server.application"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/", headers=headers, content=b"\x00\x01\x02\x03")
             assert resp.status_code < 500
@@ -291,7 +291,7 @@ async def test_log_payloads_omits_non_json_request_body(monkeypatch, caplog) -> 
 
 @pytest.mark.asyncio
 async def test_log_payloads_omits_text_plain_request_body(monkeypatch, caplog) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
@@ -305,7 +305,7 @@ async def test_log_payloads_omits_text_plain_request_body(monkeypatch, caplog) -
         '{"messageId":"m","role":"user","parts":[{"kind":"text","text":"secret"}]}}}'
     )
 
-    with caplog.at_level(logging.DEBUG, logger="opencode_a2a_server.server.application"):
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.server.application"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/", headers=headers, content=body)
             assert resp.status_code < 500
@@ -319,7 +319,7 @@ async def test_log_payloads_omits_text_plain_request_body(monkeypatch, caplog) -
 
 @pytest.mark.asyncio
 async def test_log_payloads_omits_when_content_length_missing(monkeypatch, caplog) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(
@@ -342,7 +342,7 @@ async def test_log_payloads_omits_when_content_length_missing(monkeypatch, caplo
     async def _body_stream():
         yield body
 
-    with caplog.at_level(logging.DEBUG, logger="opencode_a2a_server.server.application"):
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.server.application"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/",
@@ -364,7 +364,7 @@ async def test_log_payloads_omits_when_content_length_missing(monkeypatch, caplo
 
 @pytest.mark.asyncio
 async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(
@@ -378,7 +378,7 @@ async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) ->
     headers = {"Authorization": "Bearer test-token"}
     oversized_text = "x" * 512
 
-    with caplog.at_level(logging.DEBUG, logger="opencode_a2a_server.server.application"):
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.server.application"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/",
@@ -396,7 +396,7 @@ async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) ->
 
 @pytest.mark.asyncio
 async def test_request_body_limit_rejects_oversized_content_length(monkeypatch) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(
@@ -420,7 +420,7 @@ async def test_request_body_limit_rejects_oversized_content_length(monkeypatch) 
 async def test_request_body_limit_rejects_oversized_stream_without_content_length(
     monkeypatch,
 ) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(
@@ -450,7 +450,7 @@ async def test_request_body_limit_rejects_oversized_stream_without_content_lengt
 
 @pytest.mark.asyncio
 async def test_request_body_limit_preserves_body_for_downstream_handlers(monkeypatch) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     app = app_module.create_app(
@@ -471,7 +471,7 @@ async def test_request_body_limit_preserves_body_for_downstream_handlers(monkeyp
 
 
 def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     captured: dict[str, float | bool | int] = {}
 
@@ -484,11 +484,13 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
             cancel_abort_timeout_seconds: float,
             session_cache_ttl_seconds: int,
             session_cache_maxsize: int,
+            a2a_client_manager: object = None,
         ) -> None:
             captured["streaming_enabled"] = streaming_enabled
             captured["cancel_abort_timeout_seconds"] = cancel_abort_timeout_seconds
             captured["session_cache_ttl_seconds"] = session_cache_ttl_seconds
             captured["session_cache_maxsize"] = session_cache_maxsize
+            captured["a2a_client_manager"] = a2a_client_manager
 
         async def execute(self, _context, _event_queue) -> None:  # noqa: ANN001
             raise NotImplementedError
@@ -526,8 +528,32 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
     assert captured["session_cache_maxsize"] == 22
 
 
+def test_create_app_propagates_outbound_client_settings(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_client_timeout_seconds=41.0,
+            a2a_client_card_fetch_timeout_seconds=7.0,
+            a2a_client_use_client_preference=True,
+            a2a_client_bearer_token="peer-token",
+            a2a_client_supported_transports=("http-json", "json-rpc"),
+        )
+    )
+
+    client_manager = app.state.a2a_client_manager
+    settings = client_manager.client_settings
+    assert settings.default_timeout == 41.0
+    assert settings.card_fetch_timeout == 7.0
+    assert settings.use_client_preference is True
+    assert settings.bearer_token == "peer-token"
+    assert settings.supported_transports == ("HTTP+JSON", "JSONRPC")
+
+
 def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
-    import opencode_a2a_server.server.application as app_module
+    import opencode_a2a.server.application as app_module
 
     class _BrokenExecutor:
         def __init__(
@@ -538,12 +564,14 @@ def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
             cancel_abort_timeout_seconds: float,
             session_cache_ttl_seconds: int,
             session_cache_maxsize: int,
+            a2a_client_manager: object = None,
         ) -> None:
             del (
                 streaming_enabled,
                 cancel_abort_timeout_seconds,
                 session_cache_ttl_seconds,
                 session_cache_maxsize,
+                a2a_client_manager,
             )
             self.claim_session_for_control = None
 

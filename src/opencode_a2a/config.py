@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal, cast
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from opencode_a2a_server import __version__
+from opencode_a2a import __version__
 
 SandboxMode = Literal[
     "unknown",
@@ -81,9 +81,7 @@ class Settings(BaseSettings):
     a2a_public_url: str = Field(default="http://127.0.0.1:8000", alias="A2A_PUBLIC_URL")
     a2a_project: str | None = Field(default=None, alias="A2A_PROJECT")
     a2a_title: str = Field(default="OpenCode A2A", alias="A2A_TITLE")
-    a2a_description: str = Field(
-        default="A2A wrapper service for OpenCode", alias="A2A_DESCRIPTION"
-    )
+    a2a_description: str = Field(default="OpenCode A2A runtime", alias="A2A_DESCRIPTION")
     a2a_version: str = Field(default=__version__, alias="A2A_VERSION")
     a2a_protocol_version: str = Field(default="0.3.0", alias="A2A_PROTOCOL_VERSION")
     a2a_log_level: str = Field(default="WARNING", alias="A2A_LOG_LEVEL")
@@ -150,7 +148,27 @@ class Settings(BaseSettings):
         alias="A2A_CANCEL_ABORT_TIMEOUT_SECONDS",
     )
 
-    @field_validator("a2a_sandbox_writable_roots", "a2a_network_allowed_domains", mode="before")
+    # Outbound A2A Client settings
+    a2a_client_timeout_seconds: float = Field(default=30.0, alias="A2A_CLIENT_TIMEOUT_SECONDS")
+    a2a_client_card_fetch_timeout_seconds: float = Field(
+        default=5.0,
+        alias="A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS",
+    )
+    a2a_client_use_client_preference: bool = Field(
+        default=False, alias="A2A_CLIENT_USE_CLIENT_PREFERENCE"
+    )
+    a2a_client_bearer_token: str | None = Field(default=None, alias="A2A_CLIENT_BEARER_TOKEN")
+    a2a_client_supported_transports: DeclaredStringList = Field(
+        default=("JSONRPC", "HTTP+JSON"),
+        alias="A2A_CLIENT_SUPPORTED_TRANSPORTS",
+    )
+
+    @field_validator(
+        "a2a_sandbox_writable_roots",
+        "a2a_network_allowed_domains",
+        "a2a_client_supported_transports",
+        mode="before",
+    )
     @classmethod
     def _normalize_declared_lists(cls, value: Any) -> tuple[str, ...]:
         return _parse_declared_list(value)

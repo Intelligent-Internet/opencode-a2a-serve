@@ -1,8 +1,8 @@
-# opencode-a2a-server
+# opencode-a2a
 
 > Expose OpenCode through A2A.
 
-`opencode-a2a-server` adds an A2A service layer to `opencode serve`, with
+`opencode-a2a` adds an A2A runtime layer to `opencode serve`, with
 auth, streaming, session continuity, interrupt handling, and a clear
 deployment boundary.
 
@@ -17,7 +17,7 @@ flowchart TD
     Client["a2a-client-hub / any A2A client"]
 
     subgraph ServerSide["Server-side"]
-        Adapter["opencode-a2a-server\nA2A adapter service"]
+        Adapter["opencode-a2a\nA2A adapter service"]
         Runtime["opencode serve\nOpenCode runtime"]
 
         Adapter <--> Runtime
@@ -28,45 +28,130 @@ flowchart TD
 
 ## Quick Start
 
-Install with `uv tool`:
+Install the released CLI with `uv tool`:
 
 ```bash
-uv tool install opencode-a2a-server
+uv tool install opencode-a2a
 ```
 
-Start the service with a bearer token:
+Upgrade later with:
 
 ```bash
-A2A_BEARER_TOKEN=dev-token opencode-a2a-server serve
+uv tool upgrade opencode-a2a
 ```
 
-For advanced configuration, two-process setup, and the full environment variable catalog, see [`docs/guide.md`](docs/guide.md).
+Make sure provider credentials and a default model are configured on the
+OpenCode side, then start OpenCode:
+
+```bash
+opencode auth login
+opencode models
+opencode serve --hostname 127.0.0.1 --port 4096
+```
+
+Treat the deployed OpenCode user's HOME/XDG config directories as part of the
+runtime state. If a packaged or service-managed deployment appears to ignore
+fresh provider env vars, inspect that user's persisted OpenCode auth/config
+files before assuming the A2A adapter layer is overriding credentials.
+
+Then start `opencode-a2a` against that upstream:
+
+```bash
+A2A_BEARER_TOKEN=dev-token \
+OPENCODE_BASE_URL=http://127.0.0.1:4096 \
+A2A_HOST=127.0.0.1 \
+A2A_PORT=8000 \
+A2A_PUBLIC_URL=http://127.0.0.1:8000 \
+A2A_STREAM_SSE_PING_SECONDS=15 \
+OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
+opencode-a2a serve
+```
+
+Verify that the service is up:
+
+```bash
+curl http://127.0.0.1:8000/.well-known/agent-card.json
+```
+
+Default local address: `http://127.0.0.1:8000`
 
 ## What You Get
 
-- A2A HTTP+JSON and JSON-RPC support
-- SSE streaming with normalized block types (`text`, `reasoning`, `tool_call`)
-- Session continuity and model selection through shared metadata extensions
-- [Agent Card](https://github.com/liujuanjuan1984/a2a-spec) discovery and OpenAPI metadata
+- A2A HTTP+JSON endpoints such as `/v1/message:send` and
+  `/v1/message:stream`
+- A2A JSON-RPC support on `POST /`
+- Peering capabilities: can act as a client via `opencode-a2a call`
+- Autonomous tool execution: supports `a2a_call` tool for outbound agent-to-agent communication
+- SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
+- Explicit REST SSE keepalive configurable through `A2A_STREAM_SSE_PING_SECONDS`
+- Session continuity through `metadata.shared.session.id`
+- Request-scoped model selection through `metadata.shared.model`
+- OpenCode-oriented JSON-RPC extensions for session and model/provider queries
 
-Detailed protocol contracts and extension docs live in [`docs/guide.md`](docs/guide.md).
+## Peering Node
+
+`opencode-a2a` supports a "Peering Node" architecture where a single process handles both inbound (Server) and outbound (Client) A2A traffic.
+
+### CLI Client
+Interact with other A2A agents directly from the command line:
+
+```bash
+opencode-a2a call http://other-agent:8000 "How are you?" --token your-outbound-token
+```
+
+### Outbound Agent Calls (Tools)
+The server can autonomously execute `a2a_call(url, message)` tool calls emitted by the OpenCode runtime. Results are fetched via A2A and returned to the model as tool results, enabling multi-agent orchestration.
+
+When the target peer requires bearer auth, configure `A2A_CLIENT_BEARER_TOKEN`
+for server-side outbound calls. CLI calls can continue using `--token` or
+`A2A_CLIENT_BEARER_TOKEN`.
+
+Server-side outbound client settings are fully wired through runtime config:
+`A2A_CLIENT_TIMEOUT_SECONDS`, `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`,
+`A2A_CLIENT_USE_CLIENT_PREFERENCE`, `A2A_CLIENT_BEARER_TOKEN`, and
+`A2A_CLIENT_SUPPORTED_TRANSPORTS`.
+
+Detailed protocol contracts, examples, and extension docs live in
+[`docs/guide.md`](docs/guide.md).
 
 ## When To Use It
 
-Use this project when you need an A2A adapter for `opencode serve`. It provides a thin service boundary with auth and streaming, but it is **not** a hardened multi-tenant platform.
+Use this project when:
 
-For mutually untrusted tenants, run separate instance pairs in isolated environments.
+- you want to keep OpenCode as the runtime
+- you need A2A transports and Agent Card discovery
+- you want a thin service boundary instead of building your own adapter
+
+Look elsewhere if:
+
+- you need hard multi-tenant isolation inside one shared runtime
+- you want this project to manage your process supervisor or host bootstrap
+- you want a general client integration layer rather than a server wrapper
+
+For client-side integration, prefer
+[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
 
 ## Deployment Boundary
 
-This repository focuses on the service boundary around OpenCode. For detailed security guidance, threat model, and isolation principles, see [SECURITY.md](SECURITY.md).
+This repository improves the service boundary around OpenCode, but it does not
+turn OpenCode into a hardened multi-tenant platform.
 
 - `A2A_BEARER_TOKEN` protects the A2A surface.
-- One instance pair is a single-tenant trust boundary by design.
-- Deployment supervision is BYO (e.g., `systemd`, Docker).
+- Provider auth and default model configuration remain on the OpenCode side; deployment-time
+  precedence details and HOME/XDG state impact are documented in
+  [docs/guide.md](docs/guide.md#troubleshooting-provider-auth-state).
+- `A2A_CLIENT_BEARER_TOKEN` is used for outbound peer calls initiated by the
+  server-side `a2a_call` tool.
+- Provider auth and default model configuration remain on the OpenCode side.
+- Deployment supervision is intentionally BYO. Use `systemd`, Docker,
+  Kubernetes, or another supervisor if you need long-running operation.
+- For mutually untrusted tenants, run separate instance pairs with isolated
+  users, containers, workspaces, credentials, and ports.
 
-Read [SECURITY.md](SECURITY.md) before production deployment.
+Read before deployment:
 
+- [SECURITY.md](SECURITY.md)
+- [docs/guide.md](docs/guide.md)
 
 ## Further Reading
 
