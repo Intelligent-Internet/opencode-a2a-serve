@@ -13,17 +13,28 @@ deployment boundary.
   clients.
 
 ```mermaid
-flowchart TD
-    Client["a2a-client-hub / any A2A client"]
+flowchart LR
+    External["A2A Clients / a2a-client-hub / gateways"]
 
-    subgraph ServerSide["Server-side"]
-        Adapter["opencode-a2a\nA2A adapter service"]
-        Runtime["opencode serve\nOpenCode runtime"]
-
-        Adapter <--> Runtime
+    subgraph Adapter["opencode-a2a"]
+        direction TB
+        Ingress["A2A Surface\nREST + JSON-RPC"]
+        OpenCode["OpenCode Runtime"]
+        Outbound["Embedded A2A Client\n(a2a_call path)"]
+        Ingress <--> OpenCode
+        Ingress --> Outbound
     end
 
-    Client <--> Adapter
+    subgraph Peers["Peer network"]
+        direction TB
+        ClientA["Peer A2A Agent"]
+        RuntimeB["Peer OpenCode runtime"]
+        ClientA --> RuntimeB
+    end
+
+    External --> Ingress
+    Outbound --> ClientA
+    ClientA --> Outbound
 ```
 
 ## Quick Start
