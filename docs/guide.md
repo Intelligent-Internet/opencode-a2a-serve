@@ -108,7 +108,8 @@ Current client facade API:
 
 Server-side outbound peer calls use bearer auth only for now. Configure
 `A2A_CLIENT_BEARER_TOKEN` when the remote agent protects its runtime surface.
-CLI outbound calls may pass `--token` explicitly.
+CLI outbound calls may pass `--token` explicitly or use
+`A2A_CLIENT_BEARER_TOKEN`.
 
 Execution-boundary metadata is intentionally declarative deployment metadata:
 it is published through `RuntimeProfile`, Agent Card, OpenAPI, and `/health`,

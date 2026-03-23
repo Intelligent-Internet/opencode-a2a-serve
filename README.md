@@ -99,7 +99,7 @@ The server can autonomously execute `a2a_call(url, message)` tool calls emitted 
 
 When the target peer requires bearer auth, configure `A2A_CLIENT_BEARER_TOKEN`
 for server-side outbound calls. CLI calls can continue using `--token` or
-`A2A_BEARER_TOKEN`.
+`A2A_CLIENT_BEARER_TOKEN`.
 
 Server-side outbound client settings are fully wired through runtime config:
 `A2A_CLIENT_TIMEOUT_SECONDS`, `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`,

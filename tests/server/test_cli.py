@@ -56,3 +56,29 @@ def test_cli_serve_subcommand_invokes_runtime() -> None:
         assert cli.main(["serve"]) == 0
 
     serve_mock.assert_called_once_with()
+
+
+def test_cli_call_uses_outbound_bearer_env_default() -> None:
+    with mock.patch.dict(
+        "os.environ",
+        {"A2A_CLIENT_BEARER_TOKEN": "peer-token"},
+        clear=False,
+    ):
+        parser = cli.build_parser()
+
+    namespace = parser.parse_args(["call", "http://agent.example.com", "hello"])
+
+    assert namespace.token == "peer-token"
+
+
+def test_cli_call_does_not_fall_back_to_inbound_bearer_env() -> None:
+    with mock.patch.dict(
+        "os.environ",
+        {"A2A_BEARER_TOKEN": "inbound-token"},
+        clear=True,
+    ):
+        parser = cli.build_parser()
+
+    namespace = parser.parse_args(["call", "http://agent.example.com", "hello"])
+
+    assert namespace.token is None

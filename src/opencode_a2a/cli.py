@@ -79,8 +79,8 @@ def build_parser() -> argparse.ArgumentParser:
     call_parser.add_argument("text", help="Text message to send.")
     call_parser.add_argument(
         "--token",
-        help="Bearer token for authentication (can also use A2A_BEARER_TOKEN env).",
-        default=os.environ.get("A2A_BEARER_TOKEN"),
+        help="Bearer token for authentication (can also use A2A_CLIENT_BEARER_TOKEN env).",
+        default=os.environ.get("A2A_CLIENT_BEARER_TOKEN"),
     )
 
     return parser
