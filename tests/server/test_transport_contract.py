@@ -484,11 +484,13 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
             cancel_abort_timeout_seconds: float,
             session_cache_ttl_seconds: int,
             session_cache_maxsize: int,
+            a2a_client_manager: object = None,
         ) -> None:
             captured["streaming_enabled"] = streaming_enabled
             captured["cancel_abort_timeout_seconds"] = cancel_abort_timeout_seconds
             captured["session_cache_ttl_seconds"] = session_cache_ttl_seconds
             captured["session_cache_maxsize"] = session_cache_maxsize
+            captured["a2a_client_manager"] = a2a_client_manager
 
         async def execute(self, _context, _event_queue) -> None:  # noqa: ANN001
             raise NotImplementedError
@@ -526,6 +528,30 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
     assert captured["session_cache_maxsize"] == 22
 
 
+def test_create_app_propagates_outbound_client_settings(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_client_timeout_seconds=41.0,
+            a2a_client_card_fetch_timeout_seconds=7.0,
+            a2a_client_use_client_preference=True,
+            a2a_client_bearer_token="peer-token",
+            a2a_client_supported_transports=("http-json", "json-rpc"),
+        )
+    )
+
+    client_manager = app.state.a2a_client_manager
+    settings = client_manager.client_settings
+    assert settings.default_timeout == 41.0
+    assert settings.card_fetch_timeout == 7.0
+    assert settings.use_client_preference is True
+    assert settings.bearer_token == "peer-token"
+    assert settings.supported_transports == ("HTTP+JSON", "JSONRPC")
+
+
 def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
     import opencode_a2a.server.application as app_module
 
@@ -538,12 +564,14 @@ def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
             cancel_abort_timeout_seconds: float,
             session_cache_ttl_seconds: int,
             session_cache_maxsize: int,
+            a2a_client_manager: object = None,
         ) -> None:
             del (
                 streaming_enabled,
                 cancel_abort_timeout_seconds,
                 session_cache_ttl_seconds,
                 session_cache_maxsize,
+                a2a_client_manager,
             )
             self.claim_session_for_control = None
 
