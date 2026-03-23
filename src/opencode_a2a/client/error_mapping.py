@@ -85,9 +85,7 @@ def map_http_error(operation: str, exc: A2AClientHTTPError) -> A2AClientError:
         )
     if status in {404, 405, 409, 501}:
         return _attach_http_status(
-            A2AUnsupportedOperationError(
-                f"Remote A2A peer does not support {operation}"
-            ),
+            A2AUnsupportedOperationError(f"Remote A2A peer does not support {operation}"),
             status,
         )
     if status == 408:

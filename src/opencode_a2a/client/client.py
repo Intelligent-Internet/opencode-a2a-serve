@@ -1,16 +1,14 @@
-"""A2A client initialization and facade utilities for opencode-a2a consumers."""
+"""A2A client facade for opencode-a2a consumers."""
 
 from __future__ import annotations
 
 import asyncio
-import inspect
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
 from uuid import uuid4
 
 import httpx
 from a2a.client import Client, ClientConfig, ClientFactory
-from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
@@ -28,7 +26,7 @@ from a2a.types import (
     TextPart,
 )
 
-from .agent_card import build_resolver_http_kwargs, normalize_agent_card_endpoint
+from .agent_card import build_agent_card_resolver, build_resolver_http_kwargs
 from .config import A2AClientSettings, load_settings
 from .error_mapping import (
     map_agent_card_error,
@@ -36,15 +34,8 @@ from .error_mapping import (
 )
 from .errors import A2AUnsupportedBindingError
 from .payload_text import extract_text as extract_text_from_payload
-from .request_context import (
-    HeaderInterceptor,
-    build_call_context,
-    build_client_interceptors,
-    split_request_metadata,
-)
+from .request_context import build_call_context, build_client_interceptors, split_request_metadata
 from .types import A2AClientEvent
-
-_HeaderInterceptor = HeaderInterceptor
 
 
 class A2AClient:
@@ -78,12 +69,17 @@ class A2AClient:
         if self._agent_card is not None:
             return self._agent_card
 
-        await self._get_httpx_client()
-        resolver = self._build_card_resolver()
-        if inspect.isawaitable(resolver):
-            resolver = await resolver
+        resolver = build_agent_card_resolver(
+            self.agent_url,
+            await self._get_httpx_client(),
+        )
         try:
-            card = await resolver.get_agent_card(http_kwargs=self._build_resolver_http_kwargs())
+            card = await resolver.get_agent_card(
+                http_kwargs=build_resolver_http_kwargs(
+                    bearer_token=self._settings.bearer_token,
+                    timeout=self._settings.card_fetch_timeout,
+                )
+            )
         except (
             A2AClientHTTPError,
             A2AClientJSONError,
@@ -106,7 +102,7 @@ class A2AClient:
     ) -> AsyncIterator[A2AClientEvent]:
         """Send one user message and stream protocol events."""
         client = await self._ensure_client()
-        request_metadata, extra_headers = self._split_request_metadata(metadata)
+        request_metadata, extra_headers = split_request_metadata(metadata)
         request = self._build_user_message(
             text=text,
             context_id=context_id,
@@ -116,7 +112,7 @@ class A2AClient:
         try:
             async for event in client.send_message(
                 request,
-                context=self._build_call_context(extra_headers),
+                context=build_call_context(self._settings.bearer_token, extra_headers),
                 request_metadata=request_metadata,
                 extensions=extensions,
             ):
@@ -161,7 +157,7 @@ class A2AClient:
     ) -> Task:
         """Fetch one task by id."""
         client = await self._ensure_client()
-        request_metadata, extra_headers = self._split_request_metadata(metadata)
+        request_metadata, extra_headers = split_request_metadata(metadata)
         try:
             return await client.get_task(
                 TaskQueryParams(
@@ -169,7 +165,7 @@ class A2AClient:
                     history_length=history_length,
                     metadata=request_metadata or {},
                 ),
-                context=self._build_call_context(extra_headers),
+                context=build_call_context(self._settings.bearer_token, extra_headers),
             )
         except (
             A2AClientHTTPError,
@@ -187,11 +183,11 @@ class A2AClient:
     ) -> Task:
         """Cancel one task by id."""
         client = await self._ensure_client()
-        request_metadata, extra_headers = self._split_request_metadata(metadata)
+        request_metadata, extra_headers = split_request_metadata(metadata)
         try:
             return await client.cancel_task(
                 TaskIdParams(id=task_id, metadata=request_metadata or {}),
-                context=self._build_call_context(extra_headers),
+                context=build_call_context(self._settings.bearer_token, extra_headers),
             )
         except (
             A2AClientHTTPError,
@@ -209,11 +205,11 @@ class A2AClient:
     ) -> AsyncIterator[tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None]]:
         """Resubscribe to task updates."""
         client = await self._ensure_client()
-        request_metadata, extra_headers = self._split_request_metadata(metadata)
+        request_metadata, extra_headers = split_request_metadata(metadata)
         try:
             async for event in client.resubscribe(
                 TaskIdParams(id=task_id, metadata=request_metadata or {}),
-                context=self._build_call_context(extra_headers),
+                context=build_call_context(self._settings.bearer_token, extra_headers),
             ):
                 yield event
         except (
@@ -241,7 +237,10 @@ class A2AClient:
         )
         try:
             factory = ClientFactory(config, consumers=None)
-            client = factory.create(card, interceptors=self._build_interceptors())
+            client = factory.create(
+                card,
+                interceptors=build_client_interceptors(self._settings.bearer_token),
+            )
         except ValueError as exc:
             raise A2AUnsupportedBindingError(
                 f"No supported transport found for {self.agent_url}"
@@ -254,16 +253,6 @@ class A2AClient:
             return self._httpx_client
         self._httpx_client = httpx.AsyncClient(timeout=self._settings.default_timeout)
         return self._httpx_client
-
-    def _build_card_resolver(self):
-        if self._httpx_client is None:
-            raise RuntimeError("HTTP client must be initialized before building card resolver")
-        base_url, agent_card_path = normalize_agent_card_endpoint(self.agent_url)
-        return A2ACardResolver(
-            httpx_client=self._httpx_client,
-            base_url=base_url,
-            agent_card_path=agent_card_path,
-        )
 
     def _build_user_message(
         self,
@@ -280,27 +269,6 @@ class A2AClient:
             task_id=task_id,
             parts=self._normalize_parts(text),
             metadata=None,
-        )
-
-    def _split_request_metadata(
-        self,
-        metadata: Mapping[str, Any] | None,
-    ) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
-        return split_request_metadata(metadata)
-
-    def _build_call_context(
-        self,
-        extra_headers: Mapping[str, str] | None,
-    ):
-        return build_call_context(self._settings.bearer_token, extra_headers)
-
-    def _build_interceptors(self):
-        return build_client_interceptors(self._settings.bearer_token)
-
-    def _build_resolver_http_kwargs(self) -> dict[str, Any]:
-        return build_resolver_http_kwargs(
-            bearer_token=self._settings.bearer_token,
-            timeout=self._settings.card_fetch_timeout,
         )
 
     @classmethod

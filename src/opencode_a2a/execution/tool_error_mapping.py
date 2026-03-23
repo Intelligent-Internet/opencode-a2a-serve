@@ -78,10 +78,17 @@ def map_a2a_tool_exception(exc: Exception) -> dict[str, Any]:
         return _build_client_error_payload(
             exc,
             error_code="a2a_retryable_unavailable",
-            error="Remote A2A peer is temporarily unavailable and should be retried with a fresh client",
+            error=(
+                "Remote A2A peer is temporarily unavailable and should be retried "
+                "with a fresh client"
+            ),
         )
     if isinstance(exc, A2APeerProtocolError):
-        mapped_code = "a2a_invalid_agent_card" if exc.error_code == "invalid_agent_card" else "a2a_peer_protocol_error"
+        mapped_code = (
+            "a2a_invalid_agent_card"
+            if exc.error_code == "invalid_agent_card"
+            else "a2a_peer_protocol_error"
+        )
         mapped_error = (
             "Remote A2A peer returned an invalid agent card payload"
             if exc.error_code == "invalid_agent_card"
