@@ -7,7 +7,7 @@ import secrets
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import uvicorn
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPI
@@ -29,6 +29,7 @@ from a2a.types import (
 from a2a.utils.errors import ServerError
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from pydantic_settings import BaseSettings
 from starlette.responses import StreamingResponse
 
 from ..client import A2AClient
@@ -788,7 +789,8 @@ def _configure_logging(level: str) -> None:
 
 
 def main() -> None:
-    settings = Settings.from_env()
+    settings_cls: type[BaseSettings] = Settings
+    settings = cast(Settings, settings_cls())
     app = create_app(settings)
     log_level = _normalize_log_level(settings.a2a_log_level)
     _configure_logging(log_level)

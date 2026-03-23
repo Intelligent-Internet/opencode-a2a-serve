@@ -35,7 +35,6 @@ from .error_mapping import (
 from .errors import A2AUnsupportedBindingError
 from .payload_text import extract_text as extract_text_from_payload
 from .request_context import build_call_context, build_client_interceptors, split_request_metadata
-from .types import A2AClientEvent
 
 
 class A2AClient:
@@ -105,7 +104,9 @@ class A2AClient:
         message_id: str | None = None,
         metadata: Mapping[str, Any] | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncIterator[A2AClientEvent]:
+    ) -> AsyncIterator[
+        Message | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None] | None
+    ]:
         """Send one user message and stream protocol events."""
         await self._acquire_operation()
         try:
@@ -144,9 +145,11 @@ class A2AClient:
         message_id: str | None = None,
         metadata: Mapping[str, Any] | None = None,
         extensions: list[str] | None = None,
-    ) -> A2AClientEvent:
+    ) -> Message | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None] | None:
         """Send a message and return the terminal response/event."""
-        last_event: A2AClientEvent = None
+        last_event: (
+            Message | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None] | None
+        ) = None
         async for event in self.send_message(
             text,
             context_id=context_id,

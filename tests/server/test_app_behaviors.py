@@ -602,7 +602,7 @@ def test_normalize_log_level_configure_logging_and_main(monkeypatch) -> None:
     )
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(app_module.Settings, "from_env", lambda: settings)
+    monkeypatch.setattr(app_module, "Settings", lambda: settings)
     monkeypatch.setattr(app_module, "create_app", lambda _settings: "app-object")
     monkeypatch.setattr(
         app_module,
