@@ -53,7 +53,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="opencode-a2a",
         description=(
-            "OpenCode A2A runtime. Deployment supervision is intentionally left to the operator."
+            "OpenCode A2A runtime. Run without a subcommand to start the service."
+            " Deployment supervision is intentionally left to the operator."
+        ),
+        epilog=(
+            "Running `opencode-a2a` with no subcommand starts the runtime."
+            " `serve` is kept as a backward-compatible alias."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -66,8 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser(
         "serve",
-        help="Start the OpenCode A2A runtime using environment-based settings.",
-        description="Start the OpenCode A2A runtime using environment-based settings.",
+        help="Backward-compatible alias for starting the OpenCode A2A runtime.",
+        description=(
+            "Backward-compatible alias for starting the OpenCode A2A runtime"
+            " using environment-based settings."
+        ),
     )
 
     call_parser = subparsers.add_parser(

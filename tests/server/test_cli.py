@@ -15,6 +15,8 @@ def test_cli_help_does_not_require_runtime_settings(capsys: pytest.CaptureFixtur
     assert excinfo.value.code == 0
     help_text = capsys.readouterr().out
     assert "serve" in help_text
+    assert "Run without a subcommand to start the service." in help_text
+    assert "backward-compatible alias" in help_text
     assert "deploy-release" not in help_text
     assert "init-release-system" not in help_text
     assert "uninstall-instance" not in help_text
@@ -29,7 +31,7 @@ def test_cli_serve_help_exposes_runtime_contract(
 
     assert excinfo.value.code == 0
     help_text = capsys.readouterr().out
-    assert "Start the OpenCode A2A runtime using environment-based settings." in help_text
+    assert "Backward-compatible alias for starting the OpenCode A2A runtime" in help_text
 
 
 def test_cli_version_does_not_require_runtime_settings(
