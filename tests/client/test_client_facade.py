@@ -219,10 +219,7 @@ async def test_send_message_adds_bearer_token_from_settings(
     _, _, kwargs = fake_client.send_message_inputs[0]
     assert kwargs["request_metadata"] is None
     assert kwargs["context"] is not None
-    assert (
-        kwargs["context"].state["headers"]["Authorization"]
-        == "Bearer peer-token"
-    )
+    assert kwargs["context"].state["headers"]["Authorization"] == "Bearer peer-token"
 
 
 @pytest.mark.asyncio
