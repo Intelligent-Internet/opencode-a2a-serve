@@ -10,7 +10,6 @@ from .errors import (
     A2AUnsupportedBindingError,
     A2AUnsupportedOperationError,
 )
-from .types import A2AClientEvent, A2AClientEventStream, A2AClientMetadata
 
 __all__ = [
     "A2AClient",
@@ -21,8 +20,5 @@ __all__ = [
     "A2AUnsupportedBindingError",
     "A2AUnsupportedOperationError",
     "A2AClientSettings",
-    "A2AClientEvent",
-    "A2AClientEventStream",
-    "A2AClientMetadata",
     "load_settings",
 ]

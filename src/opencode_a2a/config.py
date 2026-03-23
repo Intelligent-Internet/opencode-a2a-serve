@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator, Field, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -180,8 +180,3 @@ class Settings(BaseSettings):
     def _validate_sandbox_policy(self) -> Settings:
         SandboxPolicy.from_settings(self).validate_configuration()
         return self
-
-    @classmethod
-    def from_env(cls) -> Settings:
-        settings_cls: type[BaseSettings] = cls
-        return cast(Settings, settings_cls())
