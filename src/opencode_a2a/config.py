@@ -148,7 +148,27 @@ class Settings(BaseSettings):
         alias="A2A_CANCEL_ABORT_TIMEOUT_SECONDS",
     )
 
-    @field_validator("a2a_sandbox_writable_roots", "a2a_network_allowed_domains", mode="before")
+    # Outbound A2A Client settings
+    a2a_client_timeout_seconds: float = Field(default=30.0, alias="A2A_CLIENT_TIMEOUT_SECONDS")
+    a2a_client_card_fetch_timeout_seconds: float = Field(
+        default=5.0,
+        alias="A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS",
+    )
+    a2a_client_use_client_preference: bool = Field(
+        default=False, alias="A2A_CLIENT_USE_CLIENT_PREFERENCE"
+    )
+    a2a_client_bearer_token: str | None = Field(default=None, alias="A2A_CLIENT_BEARER_TOKEN")
+    a2a_client_supported_transports: DeclaredStringList = Field(
+        default=("JSONRPC", "HTTP+JSON"),
+        alias="A2A_CLIENT_SUPPORTED_TRANSPORTS",
+    )
+
+    @field_validator(
+        "a2a_sandbox_writable_roots",
+        "a2a_network_allowed_domains",
+        "a2a_client_supported_transports",
+        mode="before",
+    )
     @classmethod
     def _normalize_declared_lists(cls, value: Any) -> tuple[str, ...]:
         return _parse_declared_list(value)
