@@ -12,7 +12,7 @@ remaining repository-maintenance helpers.
 
 ## Other Scripts
 
-- [`doctor.sh`](./doctor.sh): local development regression entrypoint (`sync`/`pip check` + lint + tests + coverage policy)
+- [`doctor.sh`](./doctor.sh): primary local development regression entrypoint (uv sync + lint + tests + coverage)
 - [`dependency_health.sh`](./dependency_health.sh): dependency review entrypoint (`sync`/`pip check` + outdated + audit)
 - [`check_coverage.py`](./check_coverage.py): enforces the overall coverage floor and per-file minimums for critical modules
 - [`lint.sh`](./lint.sh): lint helper

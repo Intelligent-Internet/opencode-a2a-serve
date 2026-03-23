@@ -8,22 +8,36 @@ deployment boundary.
 
 ## What This Is
 
-- An A2A adapter service for `opencode serve`.
-- Use it when you need a stable A2A endpoint for apps, gateways, or A2A
-  clients.
+- An A2A adapter service built on `opencode serve`, with inbound runtime
+  exposure plus outbound peer calling.
+- It supports both roles in one process: serving as an A2A Server and hosting an
+  embedded A2A Client for `a2a_call`.
+
+## Architecture
 
 ```mermaid
 flowchart TD
-    Client["a2a-client-hub / any A2A client"]
+    External["A2A Clients / a2a-client-hub / Gateways"]
 
-    subgraph ServerSide["Server-side"]
-        Adapter["opencode-a2a\nA2A adapter service"]
-        Runtime["opencode serve\nOpenCode runtime"]
-
-        Adapter <--> Runtime
+    subgraph Adapter["opencode-a2a Runtime"]
+        Ingress["Inbound A2A Surface\nREST + JSON-RPC"]
+        OpenCode["OpenCode Runtime"]
+        Outbound["Embedded A2A Client\na2a_call"]
     end
 
-    Client <--> Adapter
+    subgraph Peers["Peer A2A services"]
+        PeerA2A["Peer A2A Agent"]
+        PeerRuntime["Peer OpenCode Runtime"]
+        PeerA2A --> PeerRuntime
+    end
+
+    External -->|message/send,\nmessage:stream| Ingress
+    Ingress -->|tool call| OpenCode
+    OpenCode -->|model/tool result events| Ingress
+    Ingress -->|a2a_call| Outbound
+    Outbound -->|message/send,\nmessage:stream| PeerA2A
+    PeerA2A -->|tool result| Outbound
+    PeerRuntime -->|task session\nexecution| PeerA2A
 ```
 
 ## Quick Start
@@ -62,7 +76,6 @@ OPENCODE_BASE_URL=http://127.0.0.1:4096 \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
-A2A_STREAM_SSE_PING_SECONDS=15 \
 OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
 opencode-a2a serve
 ```
@@ -73,9 +86,7 @@ Verify that the service is up:
 curl http://127.0.0.1:8000/.well-known/agent-card.json
 ```
 
-Default local address: `http://127.0.0.1:8000`
-
-## What You Get
+## Capabilities
 
 - A2A HTTP+JSON endpoints such as `/v1/message:send` and
   `/v1/message:stream`
@@ -83,12 +94,11 @@ Default local address: `http://127.0.0.1:8000`
 - Peering capabilities: can act as a client via `opencode-a2a call`
 - Autonomous tool execution: supports `a2a_call` tool for outbound agent-to-agent communication
 - SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
-- Explicit REST SSE keepalive configurable through `A2A_STREAM_SSE_PING_SECONDS`
 - Session continuity through `metadata.shared.session.id`
 - Request-scoped model selection through `metadata.shared.model`
 - OpenCode-oriented JSON-RPC extensions for session and model/provider queries
 
-## Peering Node
+## Peering Node / Outbound Access
 
 `opencode-a2a` supports a "Peering Node" architecture where a single process handles both inbound (Server) and outbound (Client) A2A traffic.
 
@@ -140,9 +150,8 @@ turn OpenCode into a hardened multi-tenant platform.
 - Provider auth and default model configuration remain on the OpenCode side; deployment-time
   precedence details and HOME/XDG state impact are documented in
   [docs/guide.md](docs/guide.md#troubleshooting-provider-auth-state).
-- `A2A_CLIENT_BEARER_TOKEN` is used for outbound peer calls initiated by the
-  server-side `a2a_call` tool.
-- Provider auth and default model configuration remain on the OpenCode side.
+- Use `A2A_CLIENT_BEARER_TOKEN` for server-side outbound peer calls initiated by
+  `a2a_call`.
 - Deployment supervision is intentionally BYO. Use `systemd`, Docker,
   Kubernetes, or another supervisor if you need long-running operation.
 - For mutually untrusted tenants, run separate instance pairs with isolated

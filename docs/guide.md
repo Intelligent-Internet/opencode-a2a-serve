@@ -188,9 +188,7 @@ comes from the `opencode-a2a` package itself.
     URI.
   - `DataPart` is currently rejected explicitly; it is not silently downgraded.
 - Task state defaults to `completed` for successful turns.
-- The deployment profile is single-tenant and shared-workspace: one server
-  instance exposes one OpenCode workspace/environment to all consumers bound to
-  that instance.
+- The deployment profile is single-tenant and shared-workspace. For detailed isolation principles and security boundaries, see [SECURITY.md](../SECURITY.md).
 
 ## Streaming Contract
 
