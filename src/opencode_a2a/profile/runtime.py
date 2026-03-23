@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..config import Settings
+from ..sandbox_policy import SandboxPolicy
 
 PROFILE_ID = "opencode-a2a-single-tenant-coding-v1"
 DEPLOYMENT_ID = "single_tenant_shared_workspace"
@@ -206,6 +207,10 @@ class RuntimeProfile:
 
 
 def build_runtime_profile(settings: Settings) -> RuntimeProfile:
+    sandbox_policy = SandboxPolicy.from_settings(settings)
+    shell_availability = sandbox_policy.session_shell_availability(
+        enabled_by_config=settings.a2a_enable_session_shell,
+    )
     directory_scope = (
         "workspace_root_or_descendant"
         if settings.a2a_allow_directory_override
@@ -219,8 +224,8 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
             scope=directory_scope,
         ),
         session_shell=SessionShellProfile(
-            enabled=settings.a2a_enable_session_shell,
-            availability="enabled" if settings.a2a_enable_session_shell else "disabled",
+            enabled=shell_availability.enabled,
+            availability=shell_availability.availability,
         ),
         execution_environment=ExecutionEnvironmentProfile(
             sandbox=SandboxProfile(
