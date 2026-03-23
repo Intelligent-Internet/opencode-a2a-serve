@@ -166,10 +166,6 @@ class RuntimeProfile:
     service_features: ServiceFeaturesProfile
     runtime_context: RuntimeContext
 
-    @property
-    def session_shell_enabled(self) -> bool:
-        return self.session_shell.enabled
-
     def runtime_features_dict(self) -> dict[str, Any]:
         return {
             "directory_binding": self.directory_binding.as_dict(),

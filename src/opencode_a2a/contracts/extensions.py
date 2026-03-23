@@ -411,7 +411,7 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> JsonRpcCapa
         conditional_methods={
             SESSION_CONTROL_METHODS["shell"]: DeploymentConditionalMethod(
                 method=SESSION_CONTROL_METHODS["shell"],
-                enabled=runtime_profile.session_shell_enabled,
+                enabled=runtime_profile.session_shell.enabled,
                 extension_uri=SESSION_QUERY_EXTENSION_URI,
                 toggle=SESSION_SHELL_TOGGLE,
             )

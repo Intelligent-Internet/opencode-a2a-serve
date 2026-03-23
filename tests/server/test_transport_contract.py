@@ -547,8 +547,8 @@ def test_create_app_propagates_outbound_client_settings(monkeypatch) -> None:
     assert settings.use_client_preference is True
     assert settings.bearer_token == "peer-token"
     assert settings.supported_transports == ("HTTP+JSON", "JSONRPC")
-    assert client_manager.cache_ttl_seconds == 321.0
-    assert client_manager.cache_maxsize == 12
+    assert client_manager._cache_ttl_seconds == 321.0  # noqa: SLF001
+    assert client_manager._cache_maxsize == 12  # noqa: SLF001
 
 
 def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:

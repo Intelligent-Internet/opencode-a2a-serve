@@ -362,14 +362,6 @@ class A2AClientManager:
         self.clients: dict[str, _ClientCacheEntry] = {}
         self._lock = asyncio.Lock()
 
-    @property
-    def cache_ttl_seconds(self) -> float:
-        return self._cache_ttl_seconds
-
-    @property
-    def cache_maxsize(self) -> int:
-        return self._cache_maxsize
-
     @asynccontextmanager
     async def borrow_client(self, agent_url: str):
         url = agent_url.rstrip("/")
