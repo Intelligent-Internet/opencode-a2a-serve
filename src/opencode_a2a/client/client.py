@@ -301,6 +301,179 @@ class A2AClient:
             request_metadata["authorization"] = f"Bearer {bearer_token}"
         return request_metadata or None
 
+    @classmethod
+    def extract_text(cls, payload: Any) -> str | None:
+        return cls._extract_text_from_payload(payload)
+
+    @classmethod
+    def _extract_text_from_payload(cls, payload: Any) -> str | None:
+        def extract_from_iterable(items: Any) -> str | None:
+            if not isinstance(items, (list, tuple)):
+                return None
+            for item in items:
+                extracted = cls._extract_text_from_payload(item)
+                if extracted:
+                    return extracted
+            return None
+
+        def extract_from_parts(parts: Any) -> str | None:
+            if not isinstance(parts, (list, tuple)):
+                return None
+            collected: list[str] = []
+            for part in parts:
+                text_part = None
+                if isinstance(part, TextPart):
+                    text_part = part
+                else:
+                    root = getattr(part, "root", None)
+                    if isinstance(root, TextPart):
+                        text_part = root
+                    elif isinstance(part, Mapping):
+                        text_value = part.get("text")
+                        if isinstance(text_value, str) and text_value.strip():
+                            collected.append(text_value)
+                            continue
+                        mapped_root = part.get("root")
+                        if isinstance(mapped_root, TextPart):
+                            text_part = mapped_root
+                        elif isinstance(part.get("role"), str):
+                            nested = cls._extract_text_from_payload(part)
+                            if nested:
+                                collected.append(nested)
+                                continue
+                if text_part and getattr(text_part, "text", None):
+                    collected.append(text_part.text)
+            if collected:
+                return "\n".join(collected)
+            return None
+
+        def extract_from_mapping(payload_map: Mapping[str, Any]) -> str | None:
+            for key in (
+                "content",
+                "message",
+                "messages",
+                "result",
+                "status",
+                "text",
+                "parts",
+                "artifact",
+                "artifacts",
+                "history",
+                "events",
+                "root",
+            ):
+                if key not in payload_map:
+                    continue
+                value = payload_map[key]
+                if value in (None, ""):
+                    continue
+                if key == "text" and isinstance(value, (str, int, float, bool)):
+                    text = str(value).strip()
+                    if text:
+                        return text
+                if key == "parts":
+                    text = extract_from_parts(value)
+                    if text:
+                        return text
+                if key == "artifact":
+                    text = cls._extract_text_from_payload(value)
+                    if text:
+                        return text
+                if isinstance(value, (list, tuple)) and key in (
+                    "messages",
+                    "artifacts",
+                    "history",
+                    "events",
+                ):
+                    text = extract_from_iterable(value)
+                    if text:
+                        return text
+                text = cls._extract_text_from_payload(value)
+                if text:
+                    return text
+            return None
+
+        if isinstance(payload, (list, tuple)):
+            return extract_from_iterable(payload)
+
+        if isinstance(payload, Message):
+            return extract_from_parts(payload.parts)
+
+        if isinstance(payload, str):
+            return payload.strip() or None
+
+        status_payload = getattr(payload, "status", None)
+        if status_payload is not None:
+            text = cls._extract_text_from_payload(status_payload)
+            if text:
+                return text
+
+        message_payload = getattr(payload, "message", None)
+        if message_payload is not None:
+            text = cls._extract_text_from_payload(message_payload)
+            if text:
+                return text
+
+        artifact_payload = getattr(payload, "artifact", None)
+        if artifact_payload is not None:
+            text = cls._extract_text_from_payload(artifact_payload)
+            if text:
+                return text
+
+        result_payload = getattr(payload, "result", None)
+        if result_payload is not None:
+            text = cls._extract_text_from_payload(result_payload)
+            if text:
+                return text
+
+        history = getattr(payload, "history", None)
+        if isinstance(history, (list, tuple)) and history:
+            for item in reversed(history):
+                text = cls._extract_text_from_payload(item)
+                if text:
+                    return text
+
+        artifacts = getattr(payload, "artifacts", None)
+        if isinstance(artifacts, (list, tuple)):
+            for artifact in artifacts:
+                artifact_parts = getattr(artifact, "parts", None)
+                if isinstance(artifact_parts, (list, tuple)):
+                    text = extract_from_parts(artifact_parts)
+                    if text:
+                        return text
+
+        text = extract_from_parts(getattr(payload, "parts", None))
+        if text:
+            return text
+
+        event_text = extract_from_iterable(getattr(payload, "events", None))
+        if event_text:
+            return event_text
+
+        if isinstance(payload, Mapping):
+            mapped_text = extract_from_mapping(payload)
+            if mapped_text:
+                return mapped_text
+
+        mapping_payload = None
+        if hasattr(payload, "dict") and callable(getattr(payload, "dict")):
+            payload_dict = payload.dict()
+            if isinstance(payload_dict, Mapping):
+                mapping_payload = payload_dict
+        elif hasattr(payload, "model_dump") and callable(getattr(payload, "model_dump")):
+            payload_dict = payload.model_dump()
+            if isinstance(payload_dict, Mapping):
+                mapping_payload = payload_dict
+        elif isinstance(getattr(payload, "__dict__", None), Mapping):
+            mapping_payload = dict(payload.__dict__)
+
+        if mapping_payload is not None:
+            mapped_text = extract_from_mapping(mapping_payload)
+            if mapped_text:
+                return mapped_text
+
+        return None
+
     @staticmethod
     def _extract_jsonrpc_error_payload(
         exc: A2AClientJSONRPCError,

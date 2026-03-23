@@ -215,18 +215,31 @@ async def test_agent_includes_usage_in_non_stream_task_metadata() -> None:
 
 @pytest.mark.asyncio
 async def test_agent_handles_a2a_call_tool(monkeypatch) -> None:
-    from a2a.types import Message, Part, Role, Task, TaskState, TaskStatus, TextPart
+    from a2a.types import (
+        Artifact,
+        Part,
+        Task,
+        TaskArtifactUpdateEvent,
+        TaskState,
+        TaskStatus,
+        TextPart,
+    )
 
     class MockA2AClient:
-        async def send(self, text: str) -> Task:
-            return Task(
+        async def send_message(self, text: str):
+            task = Task(
                 id="remote-task",
                 context_id="remote-ctx",
-                status=TaskStatus(
-                    state=TaskState.completed,
-                    message=Message(
-                        role=Role.agent,
-                        message_id="m1",
+                status=TaskStatus(state=TaskState.working),
+            )
+            yield (
+                task,
+                TaskArtifactUpdateEvent(
+                    task_id="remote-task",
+                    context_id="remote-ctx",
+                    artifact=Artifact(
+                        artifact_id="artifact-1",
+                        name="response",
                         parts=[Part(root=TextPart(text=f"remote response to {text}"))],
                     ),
                 ),
@@ -297,15 +310,28 @@ async def test_execution_coordinator_handles_tool_loop() -> None:
     class MockManager:
         async def get_client(self, url: str):
             mock_client = MagicMock()
-            mock_client.send = AsyncMock(
-                return_value=Task(
-                    id="t", context_id="c", status=TaskStatus(state=TaskState.completed)
+            async def _send_message(_text: str):
+                task = Task(id="t", context_id="c", status=TaskStatus(state=TaskState.working))
+                yield (
+                    task,
+                    TaskArtifactUpdateEvent(
+                        task_id="t",
+                        context_id="c",
+                        artifact=Artifact(
+                            artifact_id="artifact-1",
+                            name="response",
+                            parts=[Part(root=TextPart(text="streamed tool output"))],
+                        ),
+                    ),
                 )
-            )
+
+            mock_client.send_message = _send_message
+            mock_client.extract_text = A2AClient.extract_text
             return mock_client
 
-    from unittest.mock import AsyncMock, MagicMock
-    from a2a.types import Task, TaskStatus, TaskState
+    from unittest.mock import MagicMock
+    from a2a.types import Artifact, Part, Task, TaskArtifactUpdateEvent, TaskStatus, TaskState, TextPart
+    from opencode_a2a.client import A2AClient
 
     client = ToolLoopClient()
     manager = MockManager()

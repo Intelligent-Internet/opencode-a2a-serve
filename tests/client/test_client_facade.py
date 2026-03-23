@@ -7,7 +7,19 @@ import httpx
 import pytest
 from a2a.client import ClientConfig
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONRPCError
-from a2a.types import JSONRPCError, JSONRPCErrorResponse
+from a2a.types import (
+    Artifact,
+    JSONRPCError,
+    JSONRPCErrorResponse,
+    Message,
+    Part,
+    Role,
+    Task,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatus,
+    TextPart,
+)
 
 from opencode_a2a.client import A2AClient
 from opencode_a2a.client import client as client_module
@@ -242,6 +254,42 @@ async def test_send_message_maps_jsonrpc_not_supported(
     ):
         async for _event in client.send_message("hello"):
             raise AssertionError
+
+
+def test_extract_text_prefers_stream_artifact_payload() -> None:
+    task = Task(
+        id="remote-task",
+        context_id="remote-context",
+        status=TaskStatus(state=TaskState.working),
+    )
+    update = TaskArtifactUpdateEvent(
+        task_id="remote-task",
+        context_id="remote-context",
+        artifact=Artifact(
+            artifact_id="artifact-1",
+            name="response",
+            parts=[Part(root=TextPart(text="streamed remote text"))],
+        ),
+    )
+
+    assert A2AClient.extract_text((task, update)) == "streamed remote text"
+
+
+def test_extract_text_reads_task_status_message() -> None:
+    task = Task(
+        id="remote-task",
+        context_id="remote-context",
+        status=TaskStatus(
+            state=TaskState.completed,
+            message=Message(
+                role=Role.agent,
+                message_id="m1",
+                parts=[Part(root=TextPart(text="status message text"))],
+            ),
+        ),
+    )
+
+    assert A2AClient.extract_text(task) == "status message text"
 
 
 @pytest.mark.asyncio

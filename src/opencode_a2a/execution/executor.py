@@ -704,9 +704,22 @@ class OpencodeAgentExecutor(AgentExecutor):
 
         try:
             client = await mgr.get_client(agent_url)
-            event = await client.send(message)
+            event = None
+            result_text = None
+            async for current_event in client.send_message(message):
+                event = current_event
+                extracted = client.extract_text(current_event)
+                if extracted:
+                    result_text = extracted
 
             from a2a.types import Task
+
+            if result_text:
+                return {
+                    "call_id": call_id,
+                    "tool": tool_name,
+                    "output": result_text,
+                }
 
             if isinstance(event, Task):
                 result_text = ""
