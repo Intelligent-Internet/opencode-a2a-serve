@@ -49,6 +49,11 @@ opencode models
 opencode serve --hostname 127.0.0.1 --port 4096
 ```
 
+Treat the deployed OpenCode user's HOME/XDG config directories as part of the
+runtime state. If a packaged or service-managed deployment appears to ignore
+fresh provider env vars, inspect that user's persisted OpenCode auth/config
+files before assuming the A2A adapter layer is overriding credentials.
+
 Then start `opencode-a2a` against that upstream:
 
 ```bash
@@ -132,6 +137,9 @@ This repository improves the service boundary around OpenCode, but it does not
 turn OpenCode into a hardened multi-tenant platform.
 
 - `A2A_BEARER_TOKEN` protects the A2A surface.
+- Provider auth and default model configuration remain on the OpenCode side; deployment-time
+  precedence details and HOME/XDG state impact are documented in
+  [docs/guide.md](docs/guide.md#troubleshooting-provider-auth-state).
 - `A2A_CLIENT_BEARER_TOKEN` is used for outbound peer calls initiated by the
   server-side `a2a_call` tool.
 - Provider auth and default model configuration remain on the OpenCode side.
