@@ -154,7 +154,7 @@ A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
-opencode-a2a serve
+opencode-a2a
 ```
 
 ## Troubleshooting Provider Auth State

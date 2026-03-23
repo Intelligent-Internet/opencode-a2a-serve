@@ -53,7 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="opencode-a2a",
         description=(
-            "OpenCode A2A runtime. Deployment supervision is intentionally left to the operator."
+            "OpenCode A2A runtime. Run without a subcommand to start the service."
+            " Deployment supervision is intentionally left to the operator."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -64,11 +65,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser(
-        "serve",
-        help="Start the OpenCode A2A runtime using environment-based settings.",
-        description="Start the OpenCode A2A runtime using environment-based settings.",
-    )
 
     call_parser = subparsers.add_parser(
         "call",
@@ -95,10 +91,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     namespace = parser.parse_args(args)
-    if namespace.command == "serve":
-        serve_main()
-        return 0
-
     if namespace.command == "call":
         return asyncio.run(run_call(namespace.agent_url, namespace.text, namespace.token))
 
