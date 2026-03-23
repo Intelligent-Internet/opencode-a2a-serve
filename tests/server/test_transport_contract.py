@@ -499,9 +499,7 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
         async def cancel(self, _context, _event_queue) -> None:  # noqa: ANN001
             raise NotImplementedError
 
-        def resolve_directory(self, requested: str | None) -> str | None:
-            return requested
-
+        _sandbox_policy = types.SimpleNamespace(resolve_directory=lambda requested, **_: requested)
         _session_manager = types.SimpleNamespace(
             claim_preferred_session=AsyncMock(return_value=False),
             finalize_session_claim=AsyncMock(),
@@ -578,15 +576,15 @@ def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
                 finalize_session_claim=AsyncMock(),
                 release_preferred_session_claim=AsyncMock(),
             )
+            self._sandbox_policy = types.SimpleNamespace(
+                resolve_directory=lambda requested, **_: requested
+            )
 
         async def execute(self, _context, _event_queue) -> None:  # noqa: ANN001
             raise NotImplementedError
 
         async def cancel(self, _context, _event_queue) -> None:  # noqa: ANN001
             raise NotImplementedError
-
-        def resolve_directory(self, requested: str | None) -> str | None:
-            return requested
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     monkeypatch.setattr(app_module, "OpencodeAgentExecutor", _BrokenExecutor)

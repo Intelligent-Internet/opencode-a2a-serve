@@ -6,6 +6,7 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
+from functools import partial
 from typing import TYPE_CHECKING
 
 import uvicorn
@@ -535,7 +536,14 @@ def create_app(settings: Settings) -> FastAPI:
         upstream_client=upstream_client,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=capability_snapshot.supported_jsonrpc_methods(),
-        directory_resolver=getattr(executor, "resolve_directory", None),
+        directory_resolver=(
+            partial(
+                executor._sandbox_policy.resolve_directory,
+                default_directory=upstream_client.directory,
+            )
+            if hasattr(executor, "_sandbox_policy")
+            else None
+        ),
         session_claim=getattr(executor._session_manager, "claim_preferred_session", None),
         session_claim_finalize=getattr(executor._session_manager, "finalize_session_claim", None),
         session_claim_release=getattr(

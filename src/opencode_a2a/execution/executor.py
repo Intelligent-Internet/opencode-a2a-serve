@@ -565,12 +565,6 @@ class OpencodeAgentExecutor(AgentExecutor):
     ) -> None:
         _emit_metric(name, value, **labels)
 
-    def resolve_directory(self, requested: str | None) -> str | None:
-        return self._sandbox_policy.resolve_directory(
-            requested,
-            default_directory=self._client.directory,
-        )
-
     async def _maybe_handle_tools(
         self, raw_response: dict[str, Any]
     ) -> list[dict[str, Any]] | None:
@@ -771,7 +765,10 @@ class OpencodeAgentExecutor(AgentExecutor):
         requested_dir = _extract_opencode_directory(context)
 
         try:
-            directory = self.resolve_directory(requested_dir)
+            directory = self._sandbox_policy.resolve_directory(
+                requested_dir,
+                default_directory=self._client.directory,
+            )
         except ValueError as e:
             logger.warning("Directory validation failed: %s", e)
             await self._emit_error(
