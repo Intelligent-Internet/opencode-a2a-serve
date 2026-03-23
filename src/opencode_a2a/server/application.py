@@ -535,10 +535,14 @@ def create_app(settings: Settings) -> FastAPI:
         upstream_client=upstream_client,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=capability_snapshot.supported_jsonrpc_methods(),
-        directory_resolver=executor.resolve_directory_for_control,
-        session_claim=executor.claim_session_for_control,
-        session_claim_finalize=executor.finalize_session_for_control,
-        session_claim_release=executor.release_session_for_control,
+        directory_resolver=getattr(executor, "resolve_directory", None),
+        session_claim=getattr(executor._session_manager, "claim_preferred_session", None),
+        session_claim_finalize=getattr(executor._session_manager, "finalize_session_claim", None),
+        session_claim_release=getattr(
+            executor._session_manager,
+            "release_preferred_session_claim",
+            None,
+        ),
         methods=jsonrpc_methods,
     )
     rest_adapter = RESTAdapter(

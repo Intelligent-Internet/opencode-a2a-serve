@@ -1,5 +1,6 @@
 import logging
-from unittest.mock import MagicMock
+import types
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -498,18 +499,14 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
         async def cancel(self, _context, _event_queue) -> None:  # noqa: ANN001
             raise NotImplementedError
 
-        def resolve_directory_for_control(self, requested: str | None) -> str | None:
+        def resolve_directory(self, requested: str | None) -> str | None:
             return requested
 
-        async def claim_session_for_control(self, *, identity: str, session_id: str) -> bool:
-            del identity, session_id
-            return False
-
-        async def finalize_session_for_control(self, *, identity: str, session_id: str) -> None:
-            del identity, session_id
-
-        async def release_session_for_control(self, *, identity: str, session_id: str) -> None:
-            del identity, session_id
+        _session_manager = types.SimpleNamespace(
+            claim_preferred_session=AsyncMock(return_value=False),
+            finalize_session_claim=AsyncMock(),
+            release_preferred_session_claim=AsyncMock(),
+        )
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     monkeypatch.setattr(app_module, "OpencodeAgentExecutor", _CapturingExecutor)
@@ -577,7 +574,10 @@ def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
                 session_cache_maxsize,
                 a2a_client_manager,
             )
-            self.claim_session_for_control = None
+            self._session_manager = types.SimpleNamespace(
+                finalize_session_claim=AsyncMock(),
+                release_preferred_session_claim=AsyncMock(),
+            )
 
         async def execute(self, _context, _event_queue) -> None:  # noqa: ANN001
             raise NotImplementedError
@@ -585,14 +585,8 @@ def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
         async def cancel(self, _context, _event_queue) -> None:  # noqa: ANN001
             raise NotImplementedError
 
-        def resolve_directory_for_control(self, requested: str | None) -> str | None:
+        def resolve_directory(self, requested: str | None) -> str | None:
             return requested
-
-        async def finalize_session_for_control(self, *, identity: str, session_id: str) -> None:
-            del identity, session_id
-
-        async def release_session_for_control(self, *, identity: str, session_id: str) -> None:
-            del identity, session_id
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
     monkeypatch.setattr(app_module, "OpencodeAgentExecutor", _BrokenExecutor)

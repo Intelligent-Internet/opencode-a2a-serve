@@ -30,15 +30,15 @@ def test_resolve_and_validate_directory_valid(mock_client):
 
     # Valid subpath
     requested = "/tmp/workspace/project1"
-    resolved = executor._resolve_and_validate_directory(requested)
+    resolved = executor.resolve_directory(requested)
     assert resolved == str(Path(requested).resolve())
 
     # Valid base path
-    resolved = executor._resolve_and_validate_directory("/tmp/workspace")
+    resolved = executor.resolve_directory("/tmp/workspace")
     assert resolved == str(base_dir)
 
     # Relative path should be resolved against workspace root, not process cwd.
-    resolved = executor._resolve_and_validate_directory("project2/sub")
+    resolved = executor.resolve_directory("project2/sub")
     assert resolved == str((base_dir / "project2/sub").resolve())
 
 
@@ -47,13 +47,13 @@ def test_resolve_and_validate_directory_traversal(mock_client):
 
     # Attempt traversal
     with pytest.raises(ValueError, match="outside the allowed workspace"):
-        executor._resolve_and_validate_directory("/tmp/workspace/../secret")
+        executor.resolve_directory("/tmp/workspace/../secret")
 
     with pytest.raises(ValueError, match="outside the allowed workspace"):
-        executor._resolve_and_validate_directory("/etc/passwd")
+        executor.resolve_directory("/etc/passwd")
 
     with pytest.raises(ValueError, match="outside the allowed workspace"):
-        executor._resolve_and_validate_directory("../secret")
+        executor.resolve_directory("../secret")
 
 
 def test_resolve_and_validate_directory_override_disabled(mock_client):
@@ -63,10 +63,10 @@ def test_resolve_and_validate_directory_override_disabled(mock_client):
 
     # Deny different path
     with pytest.raises(ValueError, match="override is disabled"):
-        executor._resolve_and_validate_directory("/tmp/workspace/other")
+        executor.resolve_directory("/tmp/workspace/other")
 
     # Allow same path (resolved)
-    resolved = executor._resolve_and_validate_directory("/tmp/workspace/./")
+    resolved = executor.resolve_directory("/tmp/workspace/./")
     assert resolved == str(Path("/tmp/workspace").resolve())
 
 

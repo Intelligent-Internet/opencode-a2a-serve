@@ -207,7 +207,7 @@ class _ExecutionCoordinator:
                     )
 
                 if self._pending_preferred_claim:
-                    await self._executor._finalize_preferred_session_binding(
+                    await self._executor._session_manager.finalize_preferred_session_binding(
                         identity=self._prepared.identity,
                         context_id=self._context_id,
                         session_id=self._session_id,
@@ -296,14 +296,16 @@ class _ExecutionCoordinator:
         (
             self._session_id,
             self._pending_preferred_claim,
-        ) = await self._executor._get_or_create_session(
+        ) = await self._executor._session_manager.get_or_create_session(
             self._prepared.identity,
             self._context_id,
             self._prepared.session_title or self._prepared.user_text,
             preferred_session_id=self._prepared.bound_session_id,
             directory=self._prepared.directory,
         )
-        self._session_lock = await self._executor._get_session_lock(self._session_id)
+        self._session_lock = await self._executor._session_manager.get_session_lock(
+            self._session_id
+        )
         await self._session_lock.acquire()
         async with self._executor._lock:
             self._executor._running_session_ids[self._execution_key] = self._session_id
@@ -500,7 +502,7 @@ class _ExecutionCoordinator:
     async def _cleanup(self) -> None:
         if self._pending_preferred_claim and self._session_id:
             with suppress(Exception):
-                await self._executor._release_preferred_session_claim(
+                await self._executor._session_manager.release_preferred_session_claim(
                     identity=self._prepared.identity,
                     session_id=self._session_id,
                 )
@@ -563,25 +565,11 @@ class OpencodeAgentExecutor(AgentExecutor):
     ) -> None:
         _emit_metric(name, value, **labels)
 
-    def _resolve_and_validate_directory(self, requested: str | None) -> str | None:
+    def resolve_directory(self, requested: str | None) -> str | None:
         return self._sandbox_policy.resolve_directory(
             requested,
             default_directory=self._client.directory,
         )
-
-    def resolve_directory_for_control(self, requested: str | None) -> str | None:
-        return self._resolve_and_validate_directory(requested)
-
-    async def claim_session_for_control(self, *, identity: str, session_id: str) -> bool:
-        return await self._claim_preferred_session(identity=identity, session_id=session_id)
-
-    async def finalize_session_for_control(self, *, identity: str, session_id: str) -> None:
-        """Finalize control-session ownership after upstream call succeeds."""
-        await self._finalize_session_claim(identity=identity, session_id=session_id)
-
-    async def release_session_for_control(self, *, identity: str, session_id: str) -> None:
-        """Release pending control-session ownership on failure."""
-        await self._release_preferred_session_claim(identity=identity, session_id=session_id)
 
     async def _maybe_handle_tools(
         self, raw_response: dict[str, Any]
@@ -783,7 +771,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         requested_dir = _extract_opencode_directory(context)
 
         try:
-            directory = self._resolve_and_validate_directory(requested_dir)
+            directory = self.resolve_directory(requested_dir)
         except ValueError as e:
             logger.warning("Directory validation failed: %s", e)
             await self._emit_error(
@@ -957,57 +945,6 @@ class OpencodeAgentExecutor(AgentExecutor):
                 (time.monotonic() - started_at) * 1000.0,
                 abort_outcome=abort_outcome,
             )
-
-    async def _get_or_create_session(
-        self,
-        identity: str,
-        context_id: str,
-        title: str,
-        *,
-        preferred_session_id: str | None = None,
-        directory: str | None = None,
-    ) -> tuple[str, bool]:
-        return await self._session_manager.get_or_create_session(
-            identity,
-            context_id,
-            title,
-            preferred_session_id=preferred_session_id,
-            directory=directory,
-        )
-
-    async def _finalize_preferred_session_binding(
-        self,
-        *,
-        identity: str,
-        context_id: str,
-        session_id: str,
-    ) -> None:
-        await self._session_manager.finalize_preferred_session_binding(
-            identity=identity,
-            context_id=context_id,
-            session_id=session_id,
-        )
-
-    async def _claim_preferred_session(self, *, identity: str, session_id: str) -> bool:
-        return await self._session_manager.claim_preferred_session(
-            identity=identity,
-            session_id=session_id,
-        )
-
-    async def _finalize_session_claim(self, *, identity: str, session_id: str) -> None:
-        await self._session_manager.finalize_session_claim(
-            identity=identity,
-            session_id=session_id,
-        )
-
-    async def _release_preferred_session_claim(self, *, identity: str, session_id: str) -> None:
-        await self._session_manager.release_preferred_session_claim(
-            identity=identity,
-            session_id=session_id,
-        )
-
-    async def _get_session_lock(self, session_id: str) -> asyncio.Lock:
-        return await self._session_manager.get_session_lock(session_id)
 
     async def _emit_error(
         self,
