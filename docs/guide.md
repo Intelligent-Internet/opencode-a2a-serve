@@ -82,7 +82,7 @@ Key variables to understand protocol behavior:
   `A2A_TASK_STORE_BACKEND=database`. For local persistence, prefer
   `sqlite+aiosqlite:///./opencode-a2a.db`.
 - `A2A_TASK_STORE_TABLE_NAME` / `A2A_TASK_STORE_CREATE_TABLE`: database task
-  store table name and whether to auto-create it on startup.
+  store table name and whether to auto-create database tables on startup.
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
 - The same outbound client flags are also honored by the server-side embedded
   A2A client used for peer calls and `a2a_call` tool execution:

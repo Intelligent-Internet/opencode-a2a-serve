@@ -8,7 +8,6 @@ from a2a.types import Task, TaskState, TaskStatus
 
 from opencode_a2a.server.task_store import (
     build_task_store,
-    close_task_store,
     initialize_task_store,
 )
 from tests.support.helpers import make_settings
@@ -42,7 +41,7 @@ async def test_database_task_store_persists_tasks_across_rebuilds(tmp_path: Path
     writer = build_task_store(settings)
     await initialize_task_store(writer)
     await writer.save(_task("task-1"))
-    await close_task_store(writer)
+    await writer.engine.dispose()
 
     reader = build_task_store(settings)
     await initialize_task_store(reader)
@@ -53,4 +52,4 @@ async def test_database_task_store_persists_tasks_across_rebuilds(tmp_path: Path
     assert restored.context_id == "ctx-1"
     assert restored.status.state == TaskState.working
 
-    await close_task_store(reader)
+    await reader.engine.dispose()

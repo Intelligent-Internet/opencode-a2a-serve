@@ -87,9 +87,3 @@ async def initialize_task_store(task_store: TaskStore) -> None:
     initialize = getattr(task_store, "initialize", None)
     if callable(initialize):
         await initialize()
-
-
-async def close_task_store(task_store: TaskStore) -> None:
-    engine = cast("AsyncEngine | None", getattr(task_store, "engine", None))
-    if engine is not None:
-        await engine.dispose()
