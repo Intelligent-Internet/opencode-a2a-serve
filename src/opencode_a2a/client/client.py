@@ -294,8 +294,7 @@ class A2AClient:
         request_metadata = dict(metadata or {})
         bearer_token = self._settings.bearer_token
         has_authorization = any(
-            isinstance(key, str) and key.lower() == "authorization"
-            for key in request_metadata
+            isinstance(key, str) and key.lower() == "authorization" for key in request_metadata
         )
         if bearer_token and not has_authorization:
             request_metadata["authorization"] = f"Bearer {bearer_token}"
@@ -368,29 +367,29 @@ class A2AClient:
                 if value in (None, ""):
                     continue
                 if key == "text" and isinstance(value, (str, int, float, bool)):
-                    text = str(value).strip()
-                    if text:
-                        return text
+                    text_value = str(value).strip()
+                    if text_value:
+                        return text_value
                 if key == "parts":
-                    text = extract_from_parts(value)
-                    if text:
-                        return text
+                    parts_text = extract_from_parts(value)
+                    if parts_text:
+                        return parts_text
                 if key == "artifact":
-                    text = cls._extract_text_from_payload(value)
-                    if text:
-                        return text
+                    artifact_text = cls._extract_text_from_payload(value)
+                    if artifact_text:
+                        return artifact_text
                 if isinstance(value, (list, tuple)) and key in (
                     "messages",
                     "artifacts",
                     "history",
                     "events",
                 ):
-                    text = extract_from_iterable(value)
-                    if text:
-                        return text
-                text = cls._extract_text_from_payload(value)
-                if text:
-                    return text
+                    iterable_text = extract_from_iterable(value)
+                    if iterable_text:
+                        return iterable_text
+                nested_text = cls._extract_text_from_payload(value)
+                if nested_text:
+                    return nested_text
             return None
 
         if isinstance(payload, (list, tuple)):
@@ -456,11 +455,11 @@ class A2AClient:
                 return mapped_text
 
         mapping_payload = None
-        if hasattr(payload, "dict") and callable(getattr(payload, "dict")):
+        if hasattr(payload, "dict") and callable(payload.dict):
             payload_dict = payload.dict()
             if isinstance(payload_dict, Mapping):
                 mapping_payload = payload_dict
-        elif hasattr(payload, "model_dump") and callable(getattr(payload, "model_dump")):
+        elif hasattr(payload, "model_dump") and callable(payload.model_dump):
             payload_dict = payload.model_dump()
             if isinstance(payload_dict, Mapping):
                 mapping_payload = payload_dict

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from a2a.client import ClientConfig
-from a2a.client.errors import A2AClientHTTPError, A2AClientJSONRPCError
+from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError, A2AClientJSONRPCError
 from a2a.types import (
     Artifact,
     JSONRPCError,
@@ -24,7 +24,12 @@ from a2a.types import (
 from opencode_a2a.client import A2AClient
 from opencode_a2a.client import client as client_module
 from opencode_a2a.client.config import A2AClientSettings
-from opencode_a2a.client.errors import A2AUnsupportedOperationError
+from opencode_a2a.client.errors import (
+    A2AAgentUnavailableError,
+    A2AClientResetRequiredError,
+    A2APeerProtocolError,
+    A2AUnsupportedOperationError,
+)
 
 
 class _FakeCardResolver:
@@ -290,6 +295,152 @@ def test_extract_text_reads_task_status_message() -> None:
     )
 
     assert A2AClient.extract_text(task) == "status message text"
+
+
+def test_extract_text_reads_nested_mapping_payload() -> None:
+    payload = {
+        "result": {
+            "history": [
+                {"parts": [{"text": "mapped nested text"}]},
+            ]
+        }
+    }
+
+    assert A2AClient.extract_text(payload) == "mapped nested text"
+
+
+def test_extract_text_reads_model_dump_payload() -> None:
+    class _Payload:
+        def model_dump(self) -> dict[str, object]:
+            return {"artifacts": [{"parts": [{"text": "model dump text"}]}]}
+
+    assert A2AClient.extract_text(_Payload()) == "model dump text"
+
+
+def test_extract_text_reads_direct_string_payload() -> None:
+    assert A2AClient.extract_text("  string payload  ") == "string payload"
+
+
+def test_extract_text_reads_message_and_artifact_attributes() -> None:
+    class _ArtifactHolder:
+        artifact = {"parts": [{"text": "artifact attribute text"}]}
+
+    class _MessageHolder:
+        message = {"parts": [{"text": "message attribute text"}]}
+
+    assert A2AClient.extract_text(_ArtifactHolder()) == "artifact attribute text"
+    assert A2AClient.extract_text(_MessageHolder()) == "message attribute text"
+
+
+def test_extract_text_reads_result_history_and_artifacts_attributes() -> None:
+    class _ResultHolder:
+        result = {"parts": [{"text": "result attribute text"}]}
+
+    class _HistoryHolder:
+        history = [{"parts": [{"text": "history attribute text"}]}]
+
+    class _Artifact:
+        parts = [{"text": "artifacts attribute text"}]
+
+    class _ArtifactsHolder:
+        artifacts = [_Artifact()]
+
+    assert A2AClient.extract_text(_ResultHolder()) == "result attribute text"
+    assert A2AClient.extract_text(_HistoryHolder()) == "history attribute text"
+    assert A2AClient.extract_text(_ArtifactsHolder()) == "artifacts attribute text"
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_maps_json_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _BrokenResolver:
+        async def get_agent_card(self, **_kwargs: object) -> object:
+            raise A2AClientJSONError("invalid json")
+
+    async def _build_card_resolver(self: A2AClient) -> _BrokenResolver:
+        return _BrokenResolver()
+
+    client = A2AClient("http://agent.example.com")
+    monkeypatch.setattr(A2AClient, "_build_card_resolver", _build_card_resolver)
+
+    with pytest.raises(A2APeerProtocolError, match="invalid json"):
+        await client.get_agent_card()
+
+
+@pytest.mark.asyncio
+async def test_cancel_task_adds_bearer_token_from_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = A2AClient(
+        "http://agent.example.com",
+        settings=A2AClientSettings(bearer_token="peer-token"),
+    )
+    fake_client = _FakeClient()
+    monkeypatch.setattr(A2AClient, "_build_client", AsyncMock(return_value=fake_client))
+    monkeypatch.setattr(
+        A2AClient,
+        "_build_card_resolver",
+        AsyncMock(return_value=_FakeCardResolver("card")),
+    )
+
+    await client.cancel_task("task-id")
+
+    params, _ = fake_client.cancel_inputs[0]
+    assert params.metadata["authorization"] == "Bearer peer-token"
+
+
+def test_map_jsonrpc_error_variants() -> None:
+    client = A2AClient("http://agent.example.com")
+
+    invalid_params_error = A2AClientJSONRPCError(
+        JSONRPCErrorResponse(
+            error=JSONRPCError(code=-32602, message="bad params"),
+            id="req-1",
+        )
+    )
+    internal_error = A2AClientJSONRPCError(
+        JSONRPCErrorResponse(
+            error=JSONRPCError(code=-32603, message="internal"),
+            id="req-2",
+        )
+    )
+    generic_error = A2AClientJSONRPCError(
+        JSONRPCErrorResponse(
+            error=JSONRPCError(code=-32000, message="generic"),
+            id="req-3",
+        )
+    )
+
+    mapped_invalid = client._map_jsonrpc_error(invalid_params_error)
+    mapped_internal = client._map_jsonrpc_error(internal_error)
+    mapped_generic = client._map_jsonrpc_error(generic_error)
+
+    assert isinstance(mapped_invalid, A2APeerProtocolError)
+    assert mapped_invalid.error_code == "invalid_params"
+    assert isinstance(mapped_internal, A2AClientResetRequiredError)
+    assert isinstance(mapped_generic, A2APeerProtocolError)
+    assert mapped_generic.error_code == "peer_protocol_error"
+
+
+def test_map_http_error_variants() -> None:
+    client = A2AClient("http://agent.example.com")
+
+    unsupported = client._map_http_error("message/send", A2AClientHTTPError(405, "nope"))
+    reset = client._map_http_error("message/send", A2AClientHTTPError(503, "busy"))
+    unavailable = client._map_http_error("message/send", A2AClientHTTPError(500, "boom"))
+
+    assert isinstance(unsupported, A2AUnsupportedOperationError)
+    assert unsupported.http_status == 405
+    assert isinstance(reset, A2AClientResetRequiredError)
+    assert reset.http_status == 503
+    assert isinstance(unavailable, A2AAgentUnavailableError)
+
+
+@pytest.mark.asyncio
+async def test_build_card_resolver_requires_absolute_url() -> None:
+    client = A2AClient("/relative/path")
+
+    with pytest.raises(ValueError, match="absolute URL"):
+        await client._build_card_resolver()
 
 
 @pytest.mark.asyncio

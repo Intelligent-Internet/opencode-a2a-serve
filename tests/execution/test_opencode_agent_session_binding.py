@@ -225,7 +225,11 @@ async def test_agent_handles_a2a_call_tool(monkeypatch) -> None:
         TextPart,
     )
 
+    from opencode_a2a.client import A2AClient
+
     class MockA2AClient:
+        extract_text = staticmethod(A2AClient.extract_text)
+
         async def send_message(self, text: str):
             task = Task(
                 id="remote-task",
@@ -310,6 +314,7 @@ async def test_execution_coordinator_handles_tool_loop() -> None:
     class MockManager:
         async def get_client(self, url: str):
             mock_client = MagicMock()
+
             async def _send_message(_text: str):
                 task = Task(id="t", context_id="c", status=TaskStatus(state=TaskState.working))
                 yield (
@@ -330,7 +335,17 @@ async def test_execution_coordinator_handles_tool_loop() -> None:
             return mock_client
 
     from unittest.mock import MagicMock
-    from a2a.types import Artifact, Part, Task, TaskArtifactUpdateEvent, TaskStatus, TaskState, TextPart
+
+    from a2a.types import (
+        Artifact,
+        Part,
+        Task,
+        TaskArtifactUpdateEvent,
+        TaskState,
+        TaskStatus,
+        TextPart,
+    )
+
     from opencode_a2a.client import A2AClient
 
     client = ToolLoopClient()
