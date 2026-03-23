@@ -101,6 +101,11 @@ When the target peer requires bearer auth, configure `A2A_CLIENT_BEARER_TOKEN`
 for server-side outbound calls. CLI calls can continue using `--token` or
 `A2A_BEARER_TOKEN`.
 
+Server-side outbound client settings are fully wired through runtime config:
+`A2A_CLIENT_TIMEOUT_SECONDS`, `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`,
+`A2A_CLIENT_USE_CLIENT_PREFERENCE`, `A2A_CLIENT_BEARER_TOKEN`, and
+`A2A_CLIENT_SUPPORTED_TRANSPORTS`.
+
 Detailed protocol contracts, examples, and extension docs live in
 [`docs/guide.md`](docs/guide.md).
 

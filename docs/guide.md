@@ -69,13 +69,16 @@ Key variables to understand protocol behavior:
   `session.abort` in cancel flow.
 - `OPENCODE_TIMEOUT` / `OPENCODE_TIMEOUT_STREAM`: upstream request timeout and
   optional stream timeout override.
-- `A2A_CLIENT_TIMEOUT_SECONDS`: outbound client timeout. Default: matches `OPENCODE_TIMEOUT`.
+- `A2A_CLIENT_TIMEOUT_SECONDS`: outbound client timeout. Default: `30` seconds.
+- `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`: outbound Agent Card fetch timeout.
+  Default: `5` seconds.
 - `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether the outbound client prefers its own transport choices.
 - `A2A_CLIENT_BEARER_TOKEN`: optional bearer token attached to outbound peer
   calls made by the embedded A2A client and `a2a_call` tool path.
+- `A2A_CLIENT_SUPPORTED_TRANSPORTS`: ordered outbound transport preference list.
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
-- Client-side bootstrap flags are not part of the core server runtime contract, but
-  are available for consumer-side integration under `src/opencode_a2a/client/`:
+- The same outbound client flags are also honored by the server-side embedded
+  A2A client used for peer calls and `a2a_call` tool execution:
   - `A2A_CLIENT_TIMEOUT_SECONDS`
   - `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`
   - `A2A_CLIENT_USE_CLIENT_PREFERENCE`

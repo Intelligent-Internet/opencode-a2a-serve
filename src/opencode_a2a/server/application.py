@@ -345,8 +345,12 @@ class A2AClientManager:
         self.client_settings = load_client_settings(
             {
                 "A2A_CLIENT_TIMEOUT_SECONDS": settings.a2a_client_timeout_seconds,
+                "A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS": (
+                    settings.a2a_client_card_fetch_timeout_seconds
+                ),
                 "A2A_CLIENT_USE_CLIENT_PREFERENCE": settings.a2a_client_use_client_preference,
                 "A2A_CLIENT_BEARER_TOKEN": settings.a2a_client_bearer_token,
+                "A2A_CLIENT_SUPPORTED_TRANSPORTS": settings.a2a_client_supported_transports,
             }
         )
         self.clients: dict[str, A2AClient] = {}
