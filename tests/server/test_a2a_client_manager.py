@@ -92,6 +92,40 @@ async def test_client_manager_defers_busy_client_eviction(monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
+async def test_client_manager_preserves_borrowed_client_before_operation_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[_FakeClient] = []
+
+    class _FakeClient:
+        def __init__(self, agent_url: str, *, settings) -> None:
+            del settings
+            self.agent_url = agent_url
+            self.closed = False
+            created.append(self)
+
+        def is_busy(self) -> bool:
+            return False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(app_module, "A2AClient", _FakeClient)
+
+    manager = app_module.A2AClientManager(_make_settings(a2a_client_cache_maxsize=1))
+
+    async with manager.borrow_client("http://peer-1"):
+        async with manager.borrow_client("http://peer-2"):
+            pass
+        assert set(manager.clients) == {"http://peer-1", "http://peer-2"}
+        assert created[0].closed is False
+
+    assert set(manager.clients) == {"http://peer-2"}
+    assert created[0].closed is True
+    assert created[1].closed is False
+
+
+@pytest.mark.asyncio
 async def test_client_manager_evicts_expired_clients(monkeypatch: pytest.MonkeyPatch) -> None:
     created: list[_FakeClient] = []
 
@@ -123,5 +157,43 @@ async def test_client_manager_evicts_expired_clients(monkeypatch: pytest.MonkeyP
         pass
 
     assert set(manager.clients) == {"http://peer-2"}
+    assert created[0].closed is True
+    assert created[1].closed is False
+
+
+@pytest.mark.asyncio
+async def test_client_manager_rebuilds_expired_entry_for_same_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[_FakeClient] = []
+
+    class _FakeClient:
+        def __init__(self, agent_url: str, *, settings) -> None:
+            del settings
+            self.agent_url = agent_url
+            self.closed = False
+            self.busy = False
+            created.append(self)
+
+        def is_busy(self) -> bool:
+            return self.busy
+
+        async def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr(app_module, "A2AClient", _FakeClient)
+
+    now = 100.0
+    manager = app_module.A2AClientManager(_make_settings(a2a_client_cache_ttl_seconds=10.0))
+    manager._now = lambda: now
+
+    async with manager.borrow_client("http://peer-1") as first_client:
+        pass
+
+    now = 111.0
+    async with manager.borrow_client("http://peer-1") as second_client:
+        pass
+
+    assert first_client is not second_client
     assert created[0].closed is True
     assert created[1].closed is False

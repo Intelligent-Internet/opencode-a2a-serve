@@ -383,8 +383,15 @@ class A2AClientManager:
         to_close: list[A2AClient] = []
         async with self._lock:
             now = self._now()
-            to_close.extend(self._evict_locked(now=now, protected_keys={url}))
             entry = self.clients.get(url)
+            if entry is not None and self._entry_expired(entry, now=now):
+                if self._entry_in_use(entry):
+                    entry.pending_eviction = True
+                else:
+                    self.clients.pop(url, None)
+                    to_close.append(entry.client)
+                    entry = None
+            to_close.extend(self._evict_locked(now=now, protected_keys={url}))
             if entry is None:
                 entry = _ClientCacheEntry(
                     client=A2AClient(url, settings=self.client_settings),
@@ -396,6 +403,7 @@ class A2AClientManager:
                 entry.last_used = now
                 entry.expires_at = self._expires_at_for(now)
                 entry.pending_eviction = False
+            entry.borrow_count += 1
             to_close.extend(self._evict_locked(now=now, protected_keys={url}))
         await self._close_clients(to_close)
 
@@ -406,6 +414,8 @@ class A2AClientManager:
                 now = self._now()
                 current = self.clients.get(url)
                 if current is entry:
+                    if current.borrow_count > 0:
+                        current.borrow_count -= 1
                     current.last_used = now
                     current.expires_at = self._expires_at_for(now)
                 to_close = self._evict_locked(now=now)
@@ -433,10 +443,10 @@ class A2AClientManager:
         to_close: list[A2AClient] = []
 
         for key, entry in list(self.clients.items()):
-            expired = entry.expires_at is not None and entry.expires_at <= now
+            expired = self._entry_expired(entry, now=now)
             if not expired and not entry.pending_eviction:
                 continue
-            if key in protected or entry.client.is_busy():
+            if key in protected or self._entry_in_use(entry):
                 entry.pending_eviction = True
                 continue
             self.clients.pop(key, None)
@@ -453,13 +463,19 @@ class A2AClientManager:
                 break
             if key in protected:
                 continue
-            if entry.client.is_busy():
+            if self._entry_in_use(entry):
                 entry.pending_eviction = True
                 continue
             self.clients.pop(key, None)
             to_close.append(entry.client)
 
         return to_close
+
+    def _entry_expired(self, entry: _ClientCacheEntry, *, now: float) -> bool:
+        return entry.expires_at is not None and entry.expires_at <= now
+
+    def _entry_in_use(self, entry: _ClientCacheEntry) -> bool:
+        return entry.borrow_count > 0 or entry.client.is_busy()
 
     async def _close_clients(self, clients: list[A2AClient]) -> None:
         for client in clients:
@@ -473,11 +489,13 @@ class _ClientCacheEntry:
         client: A2AClient,
         last_used: float,
         expires_at: float | None,
+        borrow_count: int = 0,
         pending_eviction: bool = False,
     ) -> None:
         self.client = client
         self.last_used = last_used
         self.expires_at = expires_at
+        self.borrow_count = borrow_count
         self.pending_eviction = pending_eviction
 
 
