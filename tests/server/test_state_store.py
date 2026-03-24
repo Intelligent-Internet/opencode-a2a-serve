@@ -21,7 +21,6 @@ async def test_database_session_state_repository_persists_bindings(tmp_path: Pat
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'state.db'}"
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -75,14 +74,11 @@ async def test_database_pending_session_claim_expires(tmp_path: Path) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'pending-claim.db'}"
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
     repository = DatabaseSessionStateRepository(
         engine=engine,
-        ttl_seconds=3600,
-        maxsize=128,
         pending_claim_ttl_seconds=5.0,
         clock=_now,
     )
@@ -98,13 +94,42 @@ async def test_database_pending_session_claim_expires(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_database_session_binding_and_owner_do_not_expire_with_time(tmp_path: Path) -> None:
+    now = 100.0
+
+    def _now() -> float:
+        return now
+
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'durable-state.db'}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=database_url,
+    )
+    engine = build_database_engine(settings)
+    repository = DatabaseSessionStateRepository(
+        engine=engine,
+        pending_claim_ttl_seconds=5.0,
+        clock=_now,
+    )
+    await initialize_state_repository(repository)
+
+    await repository.set_session(identity="user-1", context_id="ctx-1", session_id="ses-1")
+    await repository.set_owner(session_id="ses-1", identity="user-1")
+
+    now = 10_000.0
+    assert await repository.get_session(identity="user-1", context_id="ctx-1") == "ses-1"
+    assert await repository.get_owner(session_id="ses-1") == "user-1"
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_database_interrupt_request_repository_persists_active_binding(
     tmp_path: Path,
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'interrupt.db'}"
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -145,7 +170,6 @@ async def test_database_state_repositories_skip_auto_create_when_disabled(
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'state-no-create.db'}"
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
         a2a_task_store_database_url=database_url,
         a2a_task_store_create_table=False,
     )

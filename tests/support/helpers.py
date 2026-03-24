@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import tempfile
+import uuid
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock
 
@@ -15,6 +17,9 @@ def make_settings(**overrides: Any) -> Settings:
     base: dict[str, Any] = {
         "opencode_base_url": "http://127.0.0.1:4096",
         "a2a_bearer_token": "test-token",
+        "a2a_task_store_database_url": (
+            f"sqlite+aiosqlite:///{tempfile.gettempdir()}/opencode-a2a-test-{uuid.uuid4().hex}.db"
+        ),
     }
     base.update(overrides)
     return Settings(**base)

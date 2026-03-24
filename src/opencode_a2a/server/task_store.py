@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from typing import TYPE_CHECKING, cast
 
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
@@ -13,6 +15,31 @@ if TYPE_CHECKING:
 _CUSTOM_TASK_MODELS: dict[str, object] = {}
 
 
+def _custom_task_model_class_name(table_name: str) -> str:
+    sanitized = re.sub(r"\W+", "_", table_name).strip("_")
+    if not sanitized:
+        sanitized = "custom"
+    if sanitized[0].isdigit():
+        sanitized = f"table_{sanitized}"
+    suffix = hashlib.sha1(table_name.encode("utf-8")).hexdigest()[:10]
+    return f"TaskModel_{sanitized}_{suffix}"
+
+
+def _build_custom_task_model(table_name: str):
+    from a2a.server.models import Base, TaskMixin, TaskModel
+
+    class_name = _custom_task_model_class_name(table_name)
+    model = type(
+        class_name,
+        (TaskMixin, Base),
+        {
+            "__tablename__": table_name,
+            "__module__": __name__,
+        },
+    )
+    return cast("type[TaskModel]", model)
+
+
 class _ConfiguredDatabaseTaskStore(TaskStore):
     def __init__(
         self,
@@ -21,7 +48,7 @@ class _ConfiguredDatabaseTaskStore(TaskStore):
         create_table: bool,
         table_name: str,
     ) -> None:
-        from a2a.server.models import TaskModel, create_task_model
+        from a2a.server.models import TaskModel
         from a2a.server.tasks.database_task_store import DatabaseTaskStore
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -39,7 +66,7 @@ class _ConfiguredDatabaseTaskStore(TaskStore):
         else:
             task_model = cast("type[TaskModel] | None", _CUSTOM_TASK_MODELS.get(table_name))
             if task_model is None:
-                task_model = create_task_model(table_name)
+                task_model = _build_custom_task_model(table_name)
                 _CUSTOM_TASK_MODELS[table_name] = task_model
             self._delegate.task_model = task_model
 

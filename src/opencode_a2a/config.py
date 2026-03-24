@@ -133,9 +133,6 @@ class Settings(BaseSettings):
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
     a2a_bearer_token: str = Field(..., min_length=1, alias="A2A_BEARER_TOKEN")
 
-    # Session cache settings
-    a2a_session_cache_ttl_seconds: int = Field(default=3600, alias="A2A_SESSION_CACHE_TTL_SECONDS")
-    a2a_session_cache_maxsize: int = Field(default=10_000, alias="A2A_SESSION_CACHE_MAXSIZE")
     a2a_pending_session_claim_ttl_seconds: float = Field(
         default=30.0,
         gt=0.0,
@@ -184,11 +181,11 @@ class Settings(BaseSettings):
 
     # Task store settings
     a2a_task_store_backend: TaskStoreBackend = Field(
-        default="memory",
+        default="database",
         alias="A2A_TASK_STORE_BACKEND",
     )
     a2a_task_store_database_url: str | None = Field(
-        default=None,
+        default="sqlite+aiosqlite:///./opencode-a2a.db",
         alias="A2A_TASK_STORE_DATABASE_URL",
     )
     a2a_task_store_table_name: str = Field(

@@ -393,14 +393,11 @@ async def test_owned_preferred_session_rebinds_context_with_database_repository(
 ) -> None:
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'preferred-owned.db'}",
     )
     engine = build_database_engine(settings)
     repository = DatabaseSessionStateRepository(
         engine=engine,
-        ttl_seconds=3600,
-        maxsize=128,
         pending_claim_ttl_seconds=30.0,
     )
     await initialize_state_repository(repository)
@@ -436,14 +433,11 @@ async def test_expired_pending_claim_does_not_block_other_identity_with_database
 
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'preferred-expiry.db'}",
     )
     engine = build_database_engine(settings)
     repository = DatabaseSessionStateRepository(
         engine=engine,
-        ttl_seconds=3600,
-        maxsize=128,
         pending_claim_ttl_seconds=5.0,
         clock=_now,
     )

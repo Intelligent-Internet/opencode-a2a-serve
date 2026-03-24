@@ -34,8 +34,6 @@ _SESSION_BINDINGS = Table(
     Column("identity", String, primary_key=True),
     Column("context_id", String, primary_key=True),
     Column("session_id", String, nullable=False),
-    Column("expires_at", Float, nullable=True),
-    Column("updated_at", Float, nullable=False),
 )
 
 _SESSION_OWNERS = Table(
@@ -43,8 +41,6 @@ _SESSION_OWNERS = Table(
     _STATE_METADATA,
     Column("session_id", String, primary_key=True),
     Column("identity", String, nullable=False),
-    Column("expires_at", Float, nullable=True),
-    Column("updated_at", Float, nullable=False),
 )
 
 _PENDING_SESSION_CLAIMS = Table(
@@ -67,6 +63,9 @@ _INTERRUPT_REQUESTS = Table(
     Column("expires_at", Float, nullable=True),
     Column("tombstone_expires_at", Float, nullable=True),
 )
+
+_MEMORY_SESSION_BINDING_TTL_SECONDS = 3600
+_MEMORY_SESSION_BINDING_MAXSIZE = 10_000
 
 
 class SessionStateRepository(ABC):
@@ -194,15 +193,11 @@ class DatabaseSessionStateRepository(SessionStateRepository):
         self,
         *,
         engine: AsyncEngine,
-        ttl_seconds: int,
-        maxsize: int,
         pending_claim_ttl_seconds: float,
         create_tables: bool = True,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.engine = engine
-        self._ttl_seconds = int(ttl_seconds)
-        self._maxsize = int(maxsize)
         self._pending_claim_ttl_seconds = float(pending_claim_ttl_seconds)
         self._create_tables = bool(create_tables)
         self._clock = clock
@@ -223,58 +218,6 @@ class DatabaseSessionStateRepository(SessionStateRepository):
         if not self._initialized:
             await self.initialize()
 
-    def _expires_at(self, now: float) -> float | None:
-        if self._ttl_seconds <= 0:
-            return None
-        return now + float(self._ttl_seconds)
-
-    async def _prune_expired(
-        self,
-        session: AsyncSession,
-        *,
-        now: float,
-    ) -> None:
-        await session.execute(
-            delete(_SESSION_BINDINGS).where(
-                and_(
-                    _SESSION_BINDINGS.c.expires_at.is_not(None),
-                    _SESSION_BINDINGS.c.expires_at <= now,
-                )
-            )
-        )
-        await session.execute(
-            delete(_SESSION_OWNERS).where(
-                and_(
-                    _SESSION_OWNERS.c.expires_at.is_not(None),
-                    _SESSION_OWNERS.c.expires_at <= now,
-                )
-            )
-        )
-
-    async def _prune_overflow(self, session: AsyncSession, *, table: Table) -> None:
-        if self._maxsize <= 0:
-            return
-        count = await session.execute(select(table).order_by(table.c.updated_at.asc()))
-        rows = count.fetchall()
-        overflow = len(rows) - self._maxsize
-        if overflow <= 0:
-            return
-        if table is _SESSION_BINDINGS:
-            for row in rows[:overflow]:
-                await session.execute(
-                    delete(_SESSION_BINDINGS).where(
-                        and_(
-                            _SESSION_BINDINGS.c.identity == row.identity,
-                            _SESSION_BINDINGS.c.context_id == row.context_id,
-                        )
-                    )
-                )
-            return
-        for row in rows[:overflow]:
-            await session.execute(
-                delete(_SESSION_OWNERS).where(_SESSION_OWNERS.c.session_id == row.session_id)
-            )
-
     async def _prune_expired_pending_claims(
         self,
         session: AsyncSession,
@@ -293,9 +236,7 @@ class DatabaseSessionStateRepository(SessionStateRepository):
 
     async def get_session(self, *, identity: str, context_id: str) -> str | None:
         await self._ensure_initialized()
-        now = self._clock()
         async with self._session_maker.begin() as session:
-            await self._prune_expired(session, now=now)
             result = await session.execute(
                 select(_SESSION_BINDINGS.c.session_id).where(
                     and_(
@@ -308,10 +249,7 @@ class DatabaseSessionStateRepository(SessionStateRepository):
 
     async def set_session(self, *, identity: str, context_id: str, session_id: str) -> None:
         await self._ensure_initialized()
-        now = self._clock()
-        expires_at = self._expires_at(now)
         async with self._session_maker.begin() as session:
-            await self._prune_expired(session, now=now)
             exists = await session.execute(
                 select(_SESSION_BINDINGS.c.session_id).where(
                     and_(
@@ -320,17 +258,12 @@ class DatabaseSessionStateRepository(SessionStateRepository):
                     )
                 )
             )
-            values = {
-                "session_id": session_id,
-                "expires_at": expires_at,
-                "updated_at": now,
-            }
             if exists.scalar_one_or_none() is None:
                 await session.execute(
                     insert(_SESSION_BINDINGS).values(
                         identity=identity,
                         context_id=context_id,
-                        **values,
+                        session_id=session_id,
                     )
                 )
             else:
@@ -342,9 +275,8 @@ class DatabaseSessionStateRepository(SessionStateRepository):
                             _SESSION_BINDINGS.c.context_id == context_id,
                         )
                     )
-                    .values(**values)
+                    .values(session_id=session_id)
                 )
-            await self._prune_overflow(session, table=_SESSION_BINDINGS)
 
     async def pop_session(self, *, identity: str, context_id: str) -> None:
         await self._ensure_initialized()
@@ -360,48 +292,33 @@ class DatabaseSessionStateRepository(SessionStateRepository):
 
     async def get_owner(self, *, session_id: str) -> str | None:
         await self._ensure_initialized()
-        now = self._clock()
         async with self._session_maker.begin() as session:
-            await self._prune_expired(session, now=now)
             result = await session.execute(
                 select(_SESSION_OWNERS.c.identity).where(_SESSION_OWNERS.c.session_id == session_id)
             )
-            owner = cast("str | None", result.scalar_one_or_none())
-            if owner is not None:
-                await session.execute(
-                    update(_SESSION_OWNERS)
-                    .where(_SESSION_OWNERS.c.session_id == session_id)
-                    .values(expires_at=self._expires_at(now), updated_at=now)
-                )
-            return owner
+            return cast("str | None", result.scalar_one_or_none())
 
     async def set_owner(self, *, session_id: str, identity: str) -> None:
         await self._ensure_initialized()
-        now = self._clock()
-        expires_at = self._expires_at(now)
         async with self._session_maker.begin() as session:
-            await self._prune_expired(session, now=now)
             exists = await session.execute(
                 select(_SESSION_OWNERS.c.session_id).where(
                     _SESSION_OWNERS.c.session_id == session_id
                 )
             )
-            values = {
-                "identity": identity,
-                "expires_at": expires_at,
-                "updated_at": now,
-            }
             if exists.scalar_one_or_none() is None:
                 await session.execute(
-                    insert(_SESSION_OWNERS).values(session_id=session_id, **values)
+                    insert(_SESSION_OWNERS).values(
+                        session_id=session_id,
+                        identity=identity,
+                    )
                 )
             else:
                 await session.execute(
                     update(_SESSION_OWNERS)
                     .where(_SESSION_OWNERS.c.session_id == session_id)
-                    .values(**values)
+                    .values(identity=identity)
                 )
-            await self._prune_overflow(session, table=_SESSION_OWNERS)
 
     async def get_pending_claim(self, *, session_id: str) -> str | None:
         await self._ensure_initialized()
@@ -713,14 +630,12 @@ def build_session_state_repository(
     if settings.a2a_task_store_backend == "database":
         return DatabaseSessionStateRepository(
             engine=cast("AsyncEngine", engine),
-            ttl_seconds=settings.a2a_session_cache_ttl_seconds,
-            maxsize=settings.a2a_session_cache_maxsize,
             pending_claim_ttl_seconds=settings.a2a_pending_session_claim_ttl_seconds,
             create_tables=settings.a2a_task_store_create_table,
         )
     return MemorySessionStateRepository(
-        ttl_seconds=settings.a2a_session_cache_ttl_seconds,
-        maxsize=settings.a2a_session_cache_maxsize,
+        ttl_seconds=_MEMORY_SESSION_BINDING_TTL_SECONDS,
+        maxsize=_MEMORY_SESSION_BINDING_MAXSIZE,
         pending_claim_ttl_seconds=settings.a2a_pending_session_claim_ttl_seconds,
     )
 
