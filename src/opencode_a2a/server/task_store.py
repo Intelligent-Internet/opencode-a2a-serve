@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import TYPE_CHECKING, cast
 
@@ -20,7 +21,8 @@ def _custom_task_model_class_name(table_name: str) -> str:
         sanitized = "custom"
     if sanitized[0].isdigit():
         sanitized = f"table_{sanitized}"
-    return f"TaskModel_{sanitized}"
+    suffix = hashlib.sha1(table_name.encode("utf-8")).hexdigest()[:10]
+    return f"TaskModel_{sanitized}_{suffix}"
 
 
 def _build_custom_task_model(table_name: str):
