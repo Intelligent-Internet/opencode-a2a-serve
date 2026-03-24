@@ -59,7 +59,20 @@ def test_settings_valid():
         assert settings.a2a_approval_escalation_behavior == "unsupported"
         assert settings.a2a_write_access_scope == "unrestricted"
         assert settings.a2a_write_access_outside_workspace == "allowed"
+        assert settings.a2a_task_store_backend == "database"
+        assert settings.a2a_task_store_database_url == "sqlite+aiosqlite:///./opencode-a2a.db"
         assert settings.a2a_version == __version__
+
+
+def test_settings_allow_explicit_memory_backend() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_TASK_STORE_BACKEND": "memory",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings()
+
+    assert settings.a2a_task_store_backend == "memory"
 
 
 def test_settings_ignore_legacy_opencode_directory_env() -> None:

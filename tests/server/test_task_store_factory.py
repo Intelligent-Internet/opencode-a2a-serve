@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import Task, TaskState, TaskStatus
 
 from opencode_a2a.server.task_store import (
@@ -21,8 +20,22 @@ def _task(task_id: str, *, context_id: str = "ctx-1") -> Task:
     )
 
 
-def test_build_task_store_defaults_to_memory_backend() -> None:
-    store = build_task_store(make_settings(a2a_bearer_token="test-token"))
+def test_build_task_store_defaults_to_database_backend(tmp_path: Path) -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'default-tasks.db'}",
+    )
+    store = build_task_store(settings)
+
+    assert hasattr(store, "engine")
+
+
+def test_build_task_store_allows_explicit_memory_backend() -> None:
+    from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+
+    store = build_task_store(
+        make_settings(a2a_bearer_token="test-token", a2a_task_store_backend="memory")
+    )
 
     assert isinstance(store, InMemoryTaskStore)
 

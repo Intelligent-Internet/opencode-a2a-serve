@@ -483,16 +483,12 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
             *,
             streaming_enabled: bool,
             cancel_abort_timeout_seconds: float,
-            session_cache_ttl_seconds: int,
-            session_cache_maxsize: int,
             pending_session_claim_ttl_seconds: float,
             a2a_client_manager: object = None,
             session_state_repository: object = None,
         ) -> None:
             captured["streaming_enabled"] = streaming_enabled
             captured["cancel_abort_timeout_seconds"] = cancel_abort_timeout_seconds
-            captured["session_cache_ttl_seconds"] = session_cache_ttl_seconds
-            captured["session_cache_maxsize"] = session_cache_maxsize
             captured["pending_session_claim_ttl_seconds"] = pending_session_claim_ttl_seconds
             captured["a2a_client_manager"] = a2a_client_manager
             captured["session_state_repository"] = session_state_repository
@@ -517,15 +513,11 @@ def test_create_app_propagates_cancel_abort_timeout(monkeypatch) -> None:
         make_settings(
             a2a_bearer_token="test-token",
             a2a_cancel_abort_timeout_seconds=0.25,
-            a2a_session_cache_ttl_seconds=11,
-            a2a_session_cache_maxsize=22,
             a2a_pending_session_claim_ttl_seconds=33.0,
         )
     )
 
     assert captured["cancel_abort_timeout_seconds"] == 0.25
-    assert captured["session_cache_ttl_seconds"] == 11
-    assert captured["session_cache_maxsize"] == 22
     assert captured["pending_session_claim_ttl_seconds"] == 33.0
 
 
@@ -567,8 +559,6 @@ def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
             *,
             streaming_enabled: bool,
             cancel_abort_timeout_seconds: float,
-            session_cache_ttl_seconds: int,
-            session_cache_maxsize: int,
             pending_session_claim_ttl_seconds: float,
             a2a_client_manager: object = None,
             session_state_repository: object = None,
@@ -576,8 +566,6 @@ def test_create_app_requires_control_guard_hooks(monkeypatch) -> None:
             del (
                 streaming_enabled,
                 cancel_abort_timeout_seconds,
-                session_cache_ttl_seconds,
-                session_cache_maxsize,
                 pending_session_claim_ttl_seconds,
                 a2a_client_manager,
                 session_state_repository,

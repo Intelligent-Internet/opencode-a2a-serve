@@ -55,8 +55,6 @@ Key variables to understand protocol behavior:
   also logged with preview truncation controlled by `A2A_LOG_BODY_LIMIT`.
 - `A2A_MAX_REQUEST_BODY_BYTES`: runtime request-body limit. Oversized requests
   return HTTP `413`.
-- `A2A_SESSION_CACHE_TTL_SECONDS` / `A2A_SESSION_CACHE_MAXSIZE`: session cache
-  behavior for `(identity, contextId) -> session_id`.
 - `A2A_PENDING_SESSION_CLAIM_TTL_SECONDS`: lease duration for pending preferred
   session claims before they expire and stop blocking other identities.
 - `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: active retention window for the
@@ -78,11 +76,10 @@ Key variables to understand protocol behavior:
 - `A2A_CLIENT_BEARER_TOKEN`: optional bearer token attached to outbound peer
   calls made by the embedded A2A client and `a2a_call` tool path.
 - `A2A_CLIENT_SUPPORTED_TRANSPORTS`: ordered outbound transport preference list.
-- `A2A_TASK_STORE_BACKEND`: task store backend. Supported values: `memory`,
-  `database`. Default: `memory`.
-- `A2A_TASK_STORE_DATABASE_URL`: database URL used when
-  `A2A_TASK_STORE_BACKEND=database`. For local persistence, prefer
-  `sqlite+aiosqlite:///./opencode-a2a.db`.
+- `A2A_TASK_STORE_BACKEND`: runtime state backend. Supported values: `database`,
+  `memory`. Default: `database`.
+- `A2A_TASK_STORE_DATABASE_URL`: database URL used by the default durable
+  backend. Default: `sqlite+aiosqlite:///./opencode-a2a.db`.
 - `A2A_TASK_STORE_TABLE_NAME` / `A2A_TASK_STORE_CREATE_TABLE`: database task
   store table name and whether to auto-create database tables on startup.
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
@@ -166,18 +163,16 @@ OPENCODE_WORKSPACE_ROOT=/abs/path/to/workspace \
 opencode-a2a
 ```
 
-To persist A2A task records across restarts, switch the task store backend to
-SQLite:
+By default, the service uses a SQLite-backed durable state store:
 
 ```bash
 OPENCODE_BASE_URL=http://127.0.0.1:4096 \
 A2A_BEARER_TOKEN=dev-token \
-A2A_TASK_STORE_BACKEND=database \
 A2A_TASK_STORE_DATABASE_URL=sqlite+aiosqlite:///./opencode-a2a.db \
 opencode-a2a
 ```
 
-When `A2A_TASK_STORE_BACKEND=database`, the service now persists:
+With the default `database` backend, the service persists:
 
 - task records
 - session binding / ownership state
@@ -185,6 +180,12 @@ When `A2A_TASK_STORE_BACKEND=database`, the service now persists:
 
 In-flight asyncio locks, outbound A2A client caches, and stream-local
 aggregation buffers remain process-local runtime state.
+
+To opt into an ephemeral development profile, set:
+
+```bash
+A2A_TASK_STORE_BACKEND=memory
+```
 
 ## Troubleshooting Provider Auth State
 

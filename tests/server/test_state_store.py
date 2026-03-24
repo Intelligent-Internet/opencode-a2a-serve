@@ -81,8 +81,6 @@ async def test_database_pending_session_claim_expires(tmp_path: Path) -> None:
     engine = build_database_engine(settings)
     repository = DatabaseSessionStateRepository(
         engine=engine,
-        ttl_seconds=3600,
-        maxsize=128,
         pending_claim_ttl_seconds=5.0,
         clock=_now,
     )
@@ -93,6 +91,37 @@ async def test_database_pending_session_claim_expires(tmp_path: Path) -> None:
 
     now = 106.0
     assert await repository.get_pending_claim(session_id="ses-1") is None
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_session_binding_and_owner_do_not_expire_with_time(tmp_path: Path) -> None:
+    now = 100.0
+
+    def _now() -> float:
+        return now
+
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'durable-state.db'}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_backend="database",
+        a2a_task_store_database_url=database_url,
+    )
+    engine = build_database_engine(settings)
+    repository = DatabaseSessionStateRepository(
+        engine=engine,
+        pending_claim_ttl_seconds=5.0,
+        clock=_now,
+    )
+    await initialize_state_repository(repository)
+
+    await repository.set_session(identity="user-1", context_id="ctx-1", session_id="ses-1")
+    await repository.set_owner(session_id="ses-1", identity="user-1")
+
+    now = 10_000.0
+    assert await repository.get_session(identity="user-1", context_id="ctx-1") == "ses-1"
+    assert await repository.get_owner(session_id="ses-1") == "user-1"
 
     await engine.dispose()
 
