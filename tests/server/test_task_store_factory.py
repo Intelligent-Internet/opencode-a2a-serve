@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import pytest
 from a2a.types import Task, TaskState, TaskStatus
+from sqlalchemy.exc import SAWarning
 
 from opencode_a2a.server.task_store import (
     build_task_store,
@@ -50,7 +52,16 @@ async def test_database_task_store_persists_tasks_across_rebuilds(tmp_path: Path
         a2a_task_store_table_name="tasks_test",
     )
 
-    writer = build_task_store(settings)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        writer = build_task_store(settings)
+
+    assert not any(
+        isinstance(item.message, SAWarning)
+        and "same class name and module name" in str(item.message)
+        for item in caught
+    )
+
     await initialize_task_store(writer)
     await writer.save(_task("task-1"))
     await writer.engine.dispose()
