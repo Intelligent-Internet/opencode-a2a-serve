@@ -5,8 +5,12 @@ import asyncio
 import os
 import sys
 from collections.abc import Sequence
+from typing import Any
+
+from a2a.types import Message, TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 
 from . import __version__
+from .client import A2AClient, load_settings
 from .server.application import main as serve_main
 
 
@@ -16,12 +20,6 @@ async def run_call(
     token: str | None = None,
     basic: str | None = None,
 ) -> int:
-    from typing import Any
-
-    from a2a.types import Message, TaskArtifactUpdateEvent, TaskStatusUpdateEvent
-
-    from .client import A2AClient, load_settings
-
     settings = load_settings(
         {
             "A2A_CLIENT_BEARER_TOKEN": token,
