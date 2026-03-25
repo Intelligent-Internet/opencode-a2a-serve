@@ -106,19 +106,23 @@ curl http://127.0.0.1:8000/.well-known/agent-card.json
 Interact with other A2A agents directly from the command line:
 
 ```bash
+# Using Bearer token
 opencode-a2a call http://other-agent:8000 "How are you?" --token your-outbound-token
+
+# Using Basic auth (user:pass or base64)
+opencode-a2a call http://other-agent:8000 "How are you?" --basic "user:pass"
 ```
 
 ### Outbound Agent Calls (Tools)
 The server can autonomously execute `a2a_call(url, message)` tool calls emitted by the OpenCode runtime. Results are fetched via A2A and returned to the model as tool results, enabling multi-agent orchestration.
 
 When the target peer requires bearer auth, configure `A2A_CLIENT_BEARER_TOKEN`
-for server-side outbound calls. CLI calls can continue using `--token` or
-`A2A_CLIENT_BEARER_TOKEN`.
+for server-side outbound calls. For Basic auth, use `A2A_CLIENT_BASIC_AUTH`.
+CLI calls can continue using `--token`, `--basic`, or the corresponding environment variables.
 
 Server-side outbound client settings are fully wired through runtime config:
 `A2A_CLIENT_TIMEOUT_SECONDS`, `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`,
-`A2A_CLIENT_USE_CLIENT_PREFERENCE`, `A2A_CLIENT_BEARER_TOKEN`, and
+`A2A_CLIENT_USE_CLIENT_PREFERENCE`, `A2A_CLIENT_BEARER_TOKEN`, `A2A_CLIENT_BASIC_AUTH`, and
 `A2A_CLIENT_SUPPORTED_TRANSPORTS`.
 
 Detailed protocol contracts, examples, and extension docs live in
