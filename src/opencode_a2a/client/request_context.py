@@ -36,10 +36,21 @@ class HeaderInterceptor(ClientCallInterceptor):
         return request_payload, http_kwargs
 
 
-def build_default_headers(bearer_token: str | None) -> dict[str, str]:
-    if not bearer_token:
-        return {}
-    return {"Authorization": f"Bearer {bearer_token}"}
+def build_default_headers(
+    bearer_token: str | None,
+    basic_auth: str | None = None,
+) -> dict[str, str]:
+    if bearer_token:
+        return {"Authorization": f"Bearer {bearer_token}"}
+    if basic_auth:
+        from base64 import b64encode
+
+        if ":" in basic_auth:
+            encoded = b64encode(basic_auth.encode()).decode()
+            return {"Authorization": f"Basic {encoded}"}
+        # Assume already encoded if no colon
+        return {"Authorization": f"Basic {basic_auth}"}
+    return {}
 
 
 def split_request_metadata(
@@ -59,8 +70,9 @@ def split_request_metadata(
 def build_call_context(
     bearer_token: str | None,
     extra_headers: Mapping[str, str] | None,
+    basic_auth: str | None = None,
 ) -> ClientCallContext | None:
-    merged_headers = build_default_headers(bearer_token)
+    merged_headers = build_default_headers(bearer_token, basic_auth)
     if extra_headers:
         merged_headers.update(extra_headers)
     if not merged_headers:
@@ -73,8 +85,11 @@ def build_call_context(
     )
 
 
-def build_client_interceptors(bearer_token: str | None) -> list[ClientCallInterceptor]:
-    return [HeaderInterceptor(build_default_headers(bearer_token))]
+def build_client_interceptors(
+    bearer_token: str | None,
+    basic_auth: str | None = None,
+) -> list[ClientCallInterceptor]:
+    return [HeaderInterceptor(build_default_headers(bearer_token, basic_auth))]
 
 
 __all__ = [
