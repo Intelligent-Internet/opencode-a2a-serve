@@ -16,6 +16,8 @@ async def run_call(
     token: str | None = None,
     basic: str | None = None,
 ) -> int:
+    from typing import Any
+
     from a2a.types import Message, TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 
     from .client import A2AClient, load_settings
@@ -27,7 +29,7 @@ async def run_call(
         }
     )
     client = A2AClient(agent_url, settings=settings)
-    metadata = {}
+    metadata: dict[str, Any] = {}
 
     try:
         async for event in client.send_message(text, metadata=metadata):
@@ -88,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     call_parser.add_argument(
         "--basic",
-        help="Basic auth credentials (user:pass or base64) (can also use A2A_CLIENT_BASIC_AUTH env).",
+        help="Basic auth (user:pass or base64) (can also use A2A_CLIENT_BASIC_AUTH env).",
         default=os.environ.get("A2A_CLIENT_BASIC_AUTH"),
     )
 
