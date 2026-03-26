@@ -107,11 +107,13 @@ Interact with other A2A agents directly from the command line:
 
 ```bash
 # Using the target peer agent's Bearer token via environment injection
+A2A_TASK_STORE_DATABASE_URL=sqlite+aiosqlite:///./opencode-a2a.db \
 A2A_CLIENT_BEARER_TOKEN=your-outbound-token \
 opencode-a2a call http://other-agent:8000 "How are you?"
 
 # Using the target peer agent's Basic auth via environment injection
 # Accepts raw user:pass or its base64-encoded value
+A2A_TASK_STORE_DATABASE_URL=sqlite+aiosqlite:///./opencode-a2a.db \
 A2A_CLIENT_BASIC_AUTH="user:pass" \
 opencode-a2a call http://other-agent:8000 "How are you?"
 ```
