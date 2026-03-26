@@ -151,15 +151,17 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
     ) -> None:
         existing = await self._inner.get(task.id, context)
         decision = self._write_policy.evaluate(existing=existing, incoming=task)
-        if not decision.persist:
+        if existing is not None and existing.status.state in _TERMINAL_TASK_STATES:
             logger.warning(
-                "Skipping task persistence by policy task_id=%s reason=%s existing_state=%s "
-                "incoming_state=%s",
+                "Received task persistence after terminal state task_id=%s existing_state=%s "
+                "incoming_state=%s persist=%s reason=%s",
                 task.id,
-                decision.reason or "unspecified",
-                None if existing is None else existing.status.state,
+                existing.status.state,
                 task.status.state,
+                decision.persist,
+                decision.reason or "accepted_duplicate",
             )
+        if not decision.persist:
             return
         await self._inner.save(task, context)
 

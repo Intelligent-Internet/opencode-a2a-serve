@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import warnings
 from pathlib import Path
 
@@ -259,3 +260,35 @@ async def test_policy_aware_task_store_uses_custom_write_policy() -> None:
     await store.save(_task("task-1"))
 
     assert inner.saved == []
+
+
+@pytest.mark.asyncio
+async def test_policy_aware_task_store_logs_warning_for_late_terminal_write(caplog) -> None:
+    class _RecordingStore:
+        def __init__(self, existing: Task) -> None:
+            self.existing = existing
+            self.saved: list[Task] = []
+
+        async def get(self, task_id, context=None):  # noqa: ANN001
+            del task_id, context
+            return self.existing
+
+        async def save(self, task, context=None):  # noqa: ANN001
+            del context
+            self.saved.append(task)
+
+    completed = _task("task-1")
+    completed.status = TaskStatus(state=TaskState.completed)
+
+    inner = _RecordingStore(existing=completed)
+    store = PolicyAwareTaskStore(inner)
+
+    with caplog.at_level(logging.WARNING, logger="opencode_a2a.server.task_store"):
+        await store.save(completed)
+
+    assert inner.saved == [completed]
+    assert any(
+        "Received task persistence after terminal state" in record.message
+        and "reason=accepted_duplicate" in record.message
+        for record in caplog.records
+    )
