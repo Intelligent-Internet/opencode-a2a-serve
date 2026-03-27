@@ -84,8 +84,8 @@ def _build_session_query_skill_examples(
     capability_snapshot: JsonRpcCapabilitySnapshot,
 ) -> list[str]:
     examples = [
-        "List OpenCode sessions (method opencode.sessions.list).",
-        "List messages for a session (method opencode.sessions.messages.list).",
+        "List OpenCode sessions with filters (method opencode.sessions.list).",
+        ("List messages with cursor pagination (method opencode.sessions.messages.list)."),
         "Send async prompt to a session (method opencode.sessions.prompt_async).",
         "Send command to a session (method opencode.sessions.command).",
     ]

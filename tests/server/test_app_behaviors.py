@@ -476,9 +476,9 @@ async def test_on_message_send_returns_stable_failure_task_for_task_store_error(
 async def test_on_message_send_stream_emits_stable_failure_events_for_task_store_error() -> None:
     class _Aggregator:
         async def consume_and_emit(self, _consumer):
-            del _consumer
+            if _consumer is None:  # pragma: no cover
+                yield None
             raise TaskStoreOperationError("save", "task-1")
-            yield  # pragma: no cover
 
     class _Handler(OpencodeRequestHandler):
         def __init__(self) -> None:

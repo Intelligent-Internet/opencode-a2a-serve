@@ -649,10 +649,20 @@ No extra custom REST endpoint is introduced.
   - session list => `Task` with `status.state=completed`
   - message history => `Message`
   - limit pagination defaults to `20`; requests above `100` are rejected
+  - `opencode.sessions.messages.list` also returns `result.next_cursor`
+    when older messages are available
   - `contextId` is an A2A context key derived by the adapter
     (format: `ctx:opencode-session:<session_id>`, not raw OpenCode session ID)
   - OpenCode session identity is exposed explicitly at `metadata.shared.session.id`
   - session title is available at `metadata.shared.session.title`
+- Session list filters:
+  - optional `directory`, `roots`, `start`, `search`, `limit`
+  - `directory` is normalized through the same workspace-boundary rules used by
+    other OpenCode directory overrides before reaching upstream
+- Session message history filters:
+  - optional `limit`, `before`
+  - `before` is an opaque cursor for loading older messages and is only
+    supported on `opencode.sessions.messages.list`
 
 ### Session List (`opencode.sessions.list`)
 
@@ -664,7 +674,12 @@ curl -sS http://127.0.0.1:8000/ \
     "jsonrpc": "2.0",
     "id": 1,
     "method": "opencode.sessions.list",
-    "params": {"limit": 20}
+    "params": {
+      "directory": "services/api",
+      "roots": true,
+      "search": "planner",
+      "limit": 20
+    }
   }'
 ```
 
@@ -680,10 +695,17 @@ curl -sS http://127.0.0.1:8000/ \
     "method": "opencode.sessions.messages.list",
     "params": {
       "session_id": "<session_id>",
+      "before": "<next_cursor_from_previous_page>",
       "limit": 50
     }
   }'
 ```
+
+Message history responses include:
+
+- `result.items`: normalized A2A `Message[]`
+- `result.next_cursor`: opaque cursor for the next older page, or `null` when
+  no older page is available
 
 ### Session Prompt Async (`opencode.sessions.prompt_async`)
 

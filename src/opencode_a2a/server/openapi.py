@@ -145,7 +145,12 @@ def _build_jsonrpc_extension_openapi_examples(
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": SESSION_QUERY_METHODS["list_sessions"],
-                "params": {"limit": SESSION_QUERY_DEFAULT_LIMIT},
+                "params": {
+                    "directory": "services/api",
+                    "roots": True,
+                    "search": "planner",
+                    "limit": SESSION_QUERY_DEFAULT_LIMIT,
+                },
             },
         },
         "session_messages": {
@@ -154,7 +159,11 @@ def _build_jsonrpc_extension_openapi_examples(
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": SESSION_QUERY_METHODS["get_session_messages"],
-                "params": {"session_id": "s-1", "limit": SESSION_QUERY_DEFAULT_LIMIT},
+                "params": {
+                    "session_id": "s-1",
+                    "before": "cursor-1",
+                    "limit": SESSION_QUERY_DEFAULT_LIMIT,
+                },
             },
         },
         "session_prompt_async": {
