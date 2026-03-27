@@ -275,6 +275,7 @@ INTERRUPT_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "expected_interrupt_type",
     "actual_interrupt_type",
     "upstream_status",
+    "detail",
 )
 INTERRUPT_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "type",

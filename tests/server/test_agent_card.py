@@ -280,6 +280,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "expected_interrupt_type",
         "actual_interrupt_type",
         "upstream_status",
+        "detail",
     ]
     assert interrupt.params["errors"]["invalid_params_data_fields"] == [
         "type",
