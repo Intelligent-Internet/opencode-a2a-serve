@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import weakref
 
 from ..invocation import call_with_supported_kwargs
 from ..server.state_store import MemorySessionStateRepository, SessionStateRepository
@@ -24,7 +25,9 @@ class SessionManager:
         )
         self._lock = asyncio.Lock()
         self._inflight_session_creates: dict[tuple[str, str], asyncio.Task[str]] = {}
-        self._session_locks: dict[str, asyncio.Lock] = {}
+        self._session_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
 
     async def get_or_create_session(
         self,
