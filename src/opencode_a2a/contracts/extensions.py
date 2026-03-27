@@ -102,17 +102,28 @@ SHELL_REQUEST_ALLOWED_FIELDS: tuple[str, ...] = (
     *SHELL_REQUEST_OPTIONAL_FIELDS,
 )
 
-SESSION_QUERY_PAGINATION_MODE = "limit"
+SESSION_QUERY_PAGINATION_MODE = "limit_and_optional_cursor"
 SESSION_QUERY_PAGINATION_BEHAVIOR = "passthrough"
 SESSION_QUERY_DEFAULT_LIMIT = 20
 SESSION_QUERY_MAX_LIMIT = 100
-SESSION_QUERY_PAGINATION_PARAMS: tuple[str, ...] = ("limit",)
+SESSION_QUERY_PAGINATION_PARAMS: tuple[str, ...] = ("limit", "before")
 SESSION_QUERY_PAGINATION_UNSUPPORTED: tuple[str, ...] = ("cursor", "page", "size")
 
 SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
     "list_sessions": SessionQueryMethodContract(
         method="opencode.sessions.list",
-        optional_params=("limit", "query.limit"),
+        optional_params=(
+            "limit",
+            "directory",
+            "roots",
+            "start",
+            "search",
+            "query.limit",
+            "query.directory",
+            "query.roots",
+            "query.start",
+            "query.search",
+        ),
         unsupported_params=SESSION_QUERY_PAGINATION_UNSUPPORTED,
         result_fields=("items",),
         items_type="Task[]",
@@ -122,9 +133,9 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
     "get_session_messages": SessionQueryMethodContract(
         method="opencode.sessions.messages.list",
         required_params=("session_id",),
-        optional_params=("limit", "query.limit"),
+        optional_params=("limit", "before", "query.limit", "query.before"),
         unsupported_params=SESSION_QUERY_PAGINATION_UNSUPPORTED,
-        result_fields=("items",),
+        result_fields=("items", "next_cursor"),
         items_type="Message[]",
         notification_response_status=204,
         pagination_mode=SESSION_QUERY_PAGINATION_MODE,
@@ -660,7 +671,10 @@ def build_session_query_extension_params(
             "max_limit": SESSION_QUERY_MAX_LIMIT,
             "behavior": SESSION_QUERY_PAGINATION_BEHAVIOR,
             "params": list(SESSION_QUERY_PAGINATION_PARAMS),
+            "cursor_param": "before",
+            "result_cursor_field": "next_cursor",
             "applies_to": pagination_applies_to,
+            "cursor_applies_to": [SESSION_QUERY_METHODS["get_session_messages"]],
         },
         "method_contracts": method_contracts,
         "errors": {

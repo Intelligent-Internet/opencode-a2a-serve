@@ -6,6 +6,7 @@ import pytest
 
 from opencode_a2a.opencode_upstream_client import (
     _UNSET,
+    OpencodeMessagePage,
     OpencodeUpstreamClient,
     UpstreamConcurrencyLimitError,
     UpstreamContractError,
@@ -86,16 +87,51 @@ async def test_merge_params_does_not_allow_directory_override(monkeypatch):
 
     monkeypatch.setattr(client._client, "get", fake_get)
 
-    await client.list_sessions(params={"directory": "/evil", "limit": 1, "roots": True})
+    await client.list_sessions(
+        params={"directory": "/evil", "limit": 1, "roots": True},
+        directory="/safe/services/api",
+    )
     assert seen["path"] == "/session"
-    assert seen["params"]["directory"] == "/safe"
+    assert seen["params"]["directory"] == "/safe/services/api"
     assert seen["params"]["limit"] == "1"
     assert seen["params"]["roots"] == "True"
 
-    await client.list_messages("sess-1", params={"directory": "/evil", "limit": 10})
+    page = await client.list_messages("sess-1", params={"directory": "/evil", "limit": 10})
     assert seen["path"] == "/session/sess-1/message"
     assert seen["params"]["directory"] == "/safe"
     assert seen["params"]["limit"] == "10"
+    assert isinstance(page, OpencodeMessagePage)
+    assert page.next_cursor is None
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_list_messages_reads_next_cursor_from_headers(monkeypatch):
+    client = OpencodeUpstreamClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            opencode_workspace_root="/safe",
+            opencode_timeout=1.0,
+            a2a_log_level="DEBUG",
+            a2a_log_payloads=False,
+        )
+    )
+
+    async def fake_get(path: str, *, params=None, **_kwargs):
+        del path, params
+        return _DummyResponse(
+            payload=[{"info": {"id": "m-1", "role": "assistant"}, "parts": []}],
+            headers={"X-Next-Cursor": "cursor-2"},
+        )
+
+    monkeypatch.setattr(client._client, "get", fake_get)
+
+    page = await client.list_messages("sess-1", params={"limit": 5, "before": "cursor-1"})
+
+    assert isinstance(page, OpencodeMessagePage)
+    assert page.next_cursor == "cursor-2"
+    assert page.payload == [{"info": {"id": "m-1", "role": "assistant"}, "parts": []}]
 
     await client.close()
 

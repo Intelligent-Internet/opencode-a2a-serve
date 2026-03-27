@@ -45,6 +45,12 @@ class OpencodeMessage:
     raw: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class OpencodeMessagePage:
+    payload: Any
+    next_cursor: str | None
+
+
 class _FastFailConcurrencyBudget:
     def __init__(self, *, category: str, limit: int) -> None:
         self._category = category
@@ -410,23 +416,41 @@ class OpencodeUpstreamClient:
             params=self._query_params(directory=directory),
         )
 
-    async def list_sessions(self, *, params: dict[str, Any] | None = None) -> Any:
+    async def list_sessions(
+        self,
+        *,
+        params: dict[str, Any] | None = None,
+        directory: str | None = None,
+    ) -> Any:
         """List sessions from OpenCode."""
-        # Note: directory override is not explicitly supported by list_sessions params yet.
-        # If needed, we can add it later. For now we use the default.
         return await self._get_json(
             "/session",
             endpoint="/session",
-            params=self._merge_params(params),
+            params=self._merge_params(params, directory=directory),
         )
 
-    async def list_messages(self, session_id: str, *, params: dict[str, Any] | None = None) -> Any:
+    async def list_messages(
+        self,
+        session_id: str,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> OpencodeMessagePage:
         """List messages for a session from OpenCode."""
-        return await self._get_json(
-            f"/session/{session_id}/message",
-            endpoint="/session/{sessionID}/message",
-            params=self._merge_params(params),
-        )
+        endpoint = "/session/{sessionID}/message"
+        async with self._request_budget.reserve(operation=endpoint):
+            response = await self._client.get(
+                f"/session/{session_id}/message",
+                params=self._merge_params(params),
+            )
+            response.raise_for_status()
+            payload = self._decode_json_response(response, endpoint=endpoint)
+            raw_next_cursor = response.headers.get("X-Next-Cursor")
+            next_cursor = None
+            if isinstance(raw_next_cursor, str):
+                normalized_cursor = raw_next_cursor.strip()
+                if normalized_cursor:
+                    next_cursor = normalized_cursor
+            return OpencodeMessagePage(payload=payload, next_cursor=next_cursor)
 
     async def session_prompt_async(
         self,

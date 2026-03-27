@@ -118,9 +118,121 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         message = payload["result"]["items"][0]
         assert message["contextId"] == "ctx:opencode-session:s-1"
         assert message["parts"][0]["text"] == "SECRET_HISTORY"
+        assert payload["result"]["next_cursor"] is None
         assert _session_meta(message)["id"] == "s-1"
         assert dummy.last_messages_params is not None
         assert dummy.last_messages_params.get("limit") == 5
+
+
+@pytest.mark.asyncio
+async def test_session_query_extension_supports_session_filters_and_message_cursor(monkeypatch):
+    import opencode_a2a.server.application as app_module
+
+    dummy = DummyOpencodeUpstreamClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_workspace_root="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+    dummy._messages_next_cursor = "cursor-2"
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_workspace_root="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        sessions_resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 10,
+                "method": "opencode.sessions.list",
+                "params": {
+                    "directory": "services/api",
+                    "roots": "true",
+                    "start": "12345",
+                    "search": "planner",
+                    "limit": 3,
+                },
+            },
+        )
+        assert sessions_resp.status_code == 200
+        assert dummy.last_sessions_directory == "/workspace/services/api"
+        assert dummy.last_sessions_params == {
+            "roots": True,
+            "start": 12345,
+            "search": "planner",
+            "limit": 3,
+        }
+
+        messages_resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 11,
+                "method": "opencode.sessions.messages.list",
+                "params": {
+                    "session_id": "s-1",
+                    "before": "cursor-1",
+                    "limit": 5,
+                },
+            },
+        )
+        assert messages_resp.status_code == 200
+        payload = messages_resp.json()
+        assert payload["result"]["next_cursor"] == "cursor-2"
+        assert dummy.last_messages_params == {"before": "cursor-1", "limit": 5}
+
+
+@pytest.mark.asyncio
+async def test_session_query_extension_rejects_directory_outside_workspace(monkeypatch):
+    import opencode_a2a.server.application as app_module
+
+    dummy = DummyOpencodeUpstreamClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_workspace_root="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            opencode_workspace_root="/workspace",
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 12,
+                "method": "opencode.sessions.list",
+                "params": {"directory": "../outside", "limit": 5},
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32602
+        assert payload["error"]["data"]["field"] == "directory"
 
 
 @pytest.mark.asyncio
@@ -420,8 +532,8 @@ async def test_session_query_extension_maps_concurrency_limit_to_unreachable(mon
     import opencode_a2a.server.application as app_module
 
     class BusySessionQueryClient(DummyOpencodeUpstreamClient):
-        async def list_sessions(self, *, params=None):
-            del params
+        async def list_sessions(self, *, params=None, directory: str | None = None):
+            del params, directory
             raise UpstreamConcurrencyLimitError(
                 category="request",
                 operation="/session",

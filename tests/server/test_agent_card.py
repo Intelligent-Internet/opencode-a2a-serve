@@ -181,9 +181,14 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     }
     assert session_query.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
     assert session_query.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert session_query.params["pagination"]["cursor_param"] == "before"
+    assert session_query.params["pagination"]["result_cursor_field"] == "next_cursor"
     assert session_query.params["pagination"]["applies_to"] == [
         "opencode.sessions.list",
         "opencode.sessions.messages.list",
+    ]
+    assert session_query.params["pagination"]["cursor_applies_to"] == [
+        "opencode.sessions.messages.list"
     ]
     prompt_contract = session_query.params["method_contracts"]["opencode.sessions.prompt_async"]
     command_contract = session_query.params["method_contracts"]["opencode.sessions.command"]
@@ -197,6 +202,25 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "request.arguments",
     ]
     assert command_contract["result"]["fields"] == ["item"]
+    assert list_contract["params"]["optional"] == [
+        "limit",
+        "directory",
+        "roots",
+        "start",
+        "search",
+        "query.limit",
+        "query.directory",
+        "query.roots",
+        "query.start",
+        "query.search",
+    ]
+    assert messages_contract["params"]["optional"] == [
+        "limit",
+        "before",
+        "query.limit",
+        "query.before",
+    ]
+    assert messages_contract["result"]["fields"] == ["items", "next_cursor"]
     assert list_contract["notification_response_status"] == 204
     assert messages_contract["notification_response_status"] == 204
     assert prompt_contract["notification_response_status"] == 204

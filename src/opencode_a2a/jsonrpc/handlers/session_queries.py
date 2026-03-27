@@ -46,7 +46,6 @@ async def handle_session_query_request(
     params: dict[str, Any],
     request: Request,
 ) -> Response:
-    del request
     try:
         if base_request.method == context.method_list_sessions:
             query = parse_list_sessions_params(params)
@@ -60,9 +59,33 @@ async def handle_session_query_request(
         )
 
     limit = int(query["limit"])
+    directory = None
+    if base_request.method == context.method_list_sessions:
+        requested_directory = query.pop("directory", None)
+        if requested_directory is not None and not isinstance(requested_directory, str):
+            return context.error_response(
+                base_request.id,
+                invalid_params_error(
+                    "directory must be a string",
+                    data={"type": "INVALID_FIELD", "field": "directory"},
+                ),
+            )
+        try:
+            directory = context.directory_resolver(requested_directory)
+        except ValueError as exc:
+            return context.error_response(
+                base_request.id,
+                invalid_params_error(
+                    str(exc),
+                    data={"type": "INVALID_FIELD", "field": "directory"},
+                ),
+            )
     try:
         if base_request.method == context.method_list_sessions:
-            raw_result = await context.upstream_client.list_sessions(params=query)
+            raw_result = await context.upstream_client.list_sessions(
+                params=query,
+                directory=directory,
+            )
         else:
             assert session_id is not None
             raw_result = await context.upstream_client.list_messages(session_id, params=query)
@@ -105,7 +128,7 @@ async def handle_session_query_request(
         if base_request.method == context.method_list_sessions:
             raw_items = _extract_raw_items(raw_result, kind="sessions")
         else:
-            raw_items = _extract_raw_items(raw_result, kind="messages")
+            raw_items = _extract_raw_items(raw_result.payload, kind="messages")
     except ValueError as exc:
         logger.warning("Upstream OpenCode payload mismatch: %s", exc)
         return build_upstream_payload_error_response(
@@ -131,4 +154,7 @@ async def handle_session_query_request(
                 mapped.append(message)
         items = mapped
 
-    return build_success_response(context, base_request.id, {"items": items})
+    result: dict[str, Any] = {"items": items}
+    if base_request.method == context.method_get_session_messages:
+        result["next_cursor"] = raw_result.next_cursor
+    return build_success_response(context, base_request.id, result)

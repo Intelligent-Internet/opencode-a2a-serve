@@ -23,6 +23,24 @@ def test_parse_list_sessions_params_accepts_equivalent_query_and_top_level_limit
     }
 
 
+def test_parse_list_sessions_params_accepts_filters() -> None:
+    assert parse_list_sessions_params(
+        {
+            "directory": "services/api",
+            "roots": "true",
+            "start": "123456789",
+            "search": "planner",
+            "limit": "10",
+        }
+    ) == {
+        "directory": "services/api",
+        "roots": True,
+        "start": 123456789,
+        "search": "planner",
+        "limit": 10,
+    }
+
+
 def test_parse_list_sessions_params_rejects_limit_above_max() -> None:
     with pytest.raises(JsonRpcParamsValidationError) as exc_info:
         parse_list_sessions_params({"limit": SESSION_QUERY_MAX_LIMIT + 1})
@@ -48,6 +66,19 @@ def test_parse_get_session_messages_params_applies_default_limit() -> None:
 
     assert session_id == "s-1"
     assert query == {"limit": SESSION_QUERY_DEFAULT_LIMIT}
+
+
+def test_parse_get_session_messages_params_accepts_before_cursor() -> None:
+    session_id, query = parse_get_session_messages_params(
+        {
+            "session_id": "s-1",
+            "before": "cursor-1",
+            "limit": "5",
+        }
+    )
+
+    assert session_id == "s-1"
+    assert query == {"limit": 5, "before": "cursor-1"}
 
 
 def test_parse_get_session_messages_params_rejects_ambiguous_limit() -> None:
@@ -84,6 +115,30 @@ def test_parse_list_sessions_params_rejects_boolean_limit() -> None:
 
     assert str(exc_info.value) == "limit must be an integer"
     assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "limit"}
+
+
+def test_parse_list_sessions_params_rejects_ambiguous_directory() -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parse_list_sessions_params(
+            {
+                "directory": "services/api",
+                "query": {"directory": "services/web"},
+            }
+        )
+
+    assert (
+        str(exc_info.value)
+        == "directory is ambiguous between params.directory and params.query.directory"
+    )
+    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "directory"}
+
+
+def test_parse_get_session_messages_params_rejects_invalid_before_type() -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parse_get_session_messages_params({"session_id": "s-1", "before": 123})
+
+    assert str(exc_info.value) == "before must be a string"
+    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "before"}
 
 
 def test_parse_get_session_messages_params_trims_session_id() -> None:

@@ -10,7 +10,7 @@ from a2a.server.context import ServerCallContext
 from a2a.types import Message, MessageSendParams, Part, Role, TextPart
 
 from opencode_a2a.config import Settings
-from opencode_a2a.opencode_upstream_client import OpencodeMessage
+from opencode_a2a.opencode_upstream_client import OpencodeMessage, OpencodeMessagePage
 
 
 def make_settings(**overrides: Any) -> Settings:
@@ -212,7 +212,9 @@ class DummySessionQueryOpencodeUpstreamClient:
                 "parts": [{"type": "text", "text": "SECRET_HISTORY"}],
             }
         ]
+        self._messages_next_cursor: str | None = None
         self.last_sessions_params = None
+        self.last_sessions_directory: str | None = None
         self.last_messages_params = None
         self.prompt_async_calls: list[dict[str, Any]] = []
         self.command_calls: list[dict[str, Any]] = []
@@ -266,14 +268,18 @@ class DummySessionQueryOpencodeUpstreamClient:
     async def close(self) -> None:
         return None
 
-    async def list_sessions(self, *, params=None):
+    async def list_sessions(self, *, params=None, directory: str | None = None):
+        self.last_sessions_directory = directory
         self.last_sessions_params = params
         return self._sessions_payload
 
     async def list_messages(self, session_id: str, *, params=None):
         assert session_id
         self.last_messages_params = params
-        return self._messages_payload
+        return OpencodeMessagePage(
+            payload=self._messages_payload,
+            next_cursor=self._messages_next_cursor,
+        )
 
     async def session_prompt_async(
         self,
