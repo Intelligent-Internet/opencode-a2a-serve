@@ -63,6 +63,25 @@ def interrupt_not_found_error(
     )
 
 
+def interrupt_type_mismatch_error(
+    code: int,
+    *,
+    request_id: str,
+    expected_interrupt_type: str,
+    actual_interrupt_type: str,
+) -> JSONRPCError:
+    return JSONRPCError(
+        code=code,
+        message="Interrupt callback type mismatch",
+        data={
+            "type": "INTERRUPT_TYPE_MISMATCH",
+            "request_id": request_id,
+            "expected_interrupt_type": expected_interrupt_type,
+            "actual_interrupt_type": actual_interrupt_type,
+        },
+    )
+
+
 def upstream_http_error(
     code: int,
     *,
@@ -73,7 +92,7 @@ def upstream_http_error(
     detail: str | None = None,
 ) -> JSONRPCError:
     data: dict[str, Any] = {
-        "type": "upstream_http_error",
+        "type": "UPSTREAM_HTTP_ERROR",
         "upstream_status": upstream_status,
     }
     if method is not None:
@@ -95,7 +114,7 @@ def upstream_unreachable_error(
     request_id: str | None = None,
     detail: str | None = None,
 ) -> JSONRPCError:
-    data: dict[str, Any] = {"type": "upstream_unreachable"}
+    data: dict[str, Any] = {"type": "UPSTREAM_UNREACHABLE"}
     if method is not None:
         data["method"] = method
     if session_id is not None:
@@ -116,7 +135,7 @@ def upstream_payload_error(
     request_id: str | None = None,
 ) -> JSONRPCError:
     data: dict[str, Any] = {
-        "type": "upstream_payload_error",
+        "type": "UPSTREAM_PAYLOAD_ERROR",
         "detail": detail,
     }
     if method is not None:
@@ -130,6 +149,7 @@ def upstream_payload_error(
 
 __all__ = [
     "interrupt_not_found_error",
+    "interrupt_type_mismatch_error",
     "invalid_params_error",
     "method_not_supported_error",
     "session_forbidden_error",

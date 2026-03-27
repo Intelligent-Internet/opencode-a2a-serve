@@ -337,7 +337,7 @@ async def test_provider_discovery_extension_maps_payload_mismatch(monkeypatch):
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32005
-        assert payload["error"]["data"]["type"] == "upstream_payload_error"
+        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
 
 
 @pytest.mark.asyncio
@@ -373,7 +373,7 @@ async def test_provider_discovery_extension_maps_concurrency_limit_to_unreachabl
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32002
-        assert payload["error"]["data"]["type"] == "upstream_unreachable"
+        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
         assert "concurrency limit exceeded" in payload["error"]["data"]["detail"]
 
 
@@ -407,7 +407,7 @@ async def test_session_query_extension_rejects_non_array_upstream_payload(monkey
         assert resp.status_code == 200
         payload = resp.json()
         assert payload["error"]["code"] == -32005
-        assert payload["error"]["data"]["type"] == "upstream_payload_error"
+        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
 
 
 @pytest.mark.asyncio
@@ -438,7 +438,7 @@ async def test_session_query_extension_maps_concurrency_limit_to_unreachable(mon
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32002
-        assert payload["error"]["data"]["type"] == "upstream_unreachable"
+        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
         assert "concurrency limit exceeded" in payload["error"]["data"]["detail"]
 
 
@@ -611,7 +611,7 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32005
-        assert payload["error"]["data"]["type"] == "upstream_payload_error"
+        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
 
         resp = await client.post(
             "/",
@@ -625,7 +625,7 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32005
-        assert payload["error"]["data"]["type"] == "upstream_payload_error"
+        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
 
 
 @pytest.mark.asyncio

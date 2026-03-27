@@ -441,7 +441,7 @@ async def test_session_command_extension_maps_500_to_upstream_http_error(monkeyp
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32003
-        assert payload["error"]["data"]["type"] == "upstream_http_error"
+        assert payload["error"]["data"]["type"] == "UPSTREAM_HTTP_ERROR"
         assert payload["error"]["data"]["upstream_status"] == 500
 
 
@@ -483,4 +483,4 @@ async def test_session_shell_extension_maps_network_error_to_unreachable(monkeyp
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32002
-        assert payload["error"]["data"]["type"] == "upstream_unreachable"
+        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
