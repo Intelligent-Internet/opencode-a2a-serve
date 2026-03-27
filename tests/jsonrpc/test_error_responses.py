@@ -48,7 +48,7 @@ def test_jsonrpc_error_mapping_helpers_build_upstream_envelopes() -> None:
         session_id="s-1",
     )
     assert http_error.data == {
-        "type": "UPSTREAM_HTTP_ERROR",
+        "type": "upstream_http_error",
         "upstream_status": 503,
         "method": "opencode.sessions.command",
         "session_id": "s-1",
@@ -60,7 +60,7 @@ def test_jsonrpc_error_mapping_helpers_build_upstream_envelopes() -> None:
         detail=backpressure_detail,
     )
     assert unreachable.data == {
-        "type": "UPSTREAM_UNREACHABLE",
+        "type": "upstream_unreachable",
         "request_id": "req-1",
         "detail": backpressure_detail,
     }
@@ -71,7 +71,7 @@ def test_jsonrpc_error_mapping_helpers_build_upstream_envelopes() -> None:
         method="opencode.providers.list",
     )
     assert payload_error.data == {
-        "type": "UPSTREAM_PAYLOAD_ERROR",
+        "type": "upstream_payload_error",
         "detail": "payload mismatch",
         "method": "opencode.providers.list",
     }

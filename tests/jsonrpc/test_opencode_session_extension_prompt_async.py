@@ -366,7 +366,7 @@ async def test_session_prompt_async_extension_maps_non_204_to_payload_error(monk
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32005
-        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
+        assert payload["error"]["data"]["type"] == "upstream_payload_error"
 
 
 @pytest.mark.asyncio
@@ -403,7 +403,7 @@ async def test_session_prompt_async_extension_maps_500_to_upstream_http_error(mo
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32003
-        assert payload["error"]["data"]["type"] == "UPSTREAM_HTTP_ERROR"
+        assert payload["error"]["data"]["type"] == "upstream_http_error"
         assert payload["error"]["data"]["upstream_status"] == 500
 
 
@@ -440,7 +440,7 @@ async def test_session_prompt_async_extension_maps_network_error_to_unreachable(
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32002
-        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
+        assert payload["error"]["data"]["type"] == "upstream_unreachable"
 
 
 @pytest.mark.asyncio
@@ -483,7 +483,7 @@ async def test_session_prompt_async_release_failure_does_not_override_response(m
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32002
-        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
+        assert payload["error"]["data"]["type"] == "upstream_unreachable"
 
     assert any(
         "Failed to release pending session claim" in record.message for record in caplog.records
@@ -526,7 +526,7 @@ async def test_session_prompt_async_extension_maps_concurrency_limit_to_unreacha
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32002
-        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
+        assert payload["error"]["data"]["type"] == "upstream_unreachable"
         assert "concurrency limit exceeded" in payload["error"]["data"]["detail"]
 
 

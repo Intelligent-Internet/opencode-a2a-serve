@@ -503,5 +503,5 @@ async def test_interrupt_callback_extension_maps_concurrency_limit_to_unreachabl
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32002
-        assert payload["error"]["data"]["type"] == "UPSTREAM_UNREACHABLE"
+        assert payload["error"]["data"]["type"] == "upstream_unreachable"
         assert "concurrency limit exceeded" in payload["error"]["data"]["detail"]

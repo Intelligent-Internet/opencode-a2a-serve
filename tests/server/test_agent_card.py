@@ -209,11 +209,11 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         == "metadata.shared.session.id"
     )
     assert session_query.params["errors"]["business_codes"] == {
-        "SESSION_NOT_FOUND": -32001,
-        "SESSION_FORBIDDEN": -32006,
-        "UPSTREAM_UNREACHABLE": -32002,
-        "UPSTREAM_HTTP_ERROR": -32003,
-        "UPSTREAM_PAYLOAD_ERROR": -32005,
+        "session_not_found": -32001,
+        "session_forbidden": -32006,
+        "upstream_unreachable": -32002,
+        "upstream_http_error": -32003,
+        "upstream_payload_error": -32005,
     }
     assert session_query.params["errors"]["error_data_fields"] == [
         "type",
@@ -249,9 +249,9 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "items_type": "ModelSummary[]",
     }
     assert provider_discovery.params["errors"]["business_codes"] == {
-        "UPSTREAM_UNREACHABLE": -32002,
-        "UPSTREAM_HTTP_ERROR": -32003,
-        "UPSTREAM_PAYLOAD_ERROR": -32005,
+        "upstream_unreachable": -32002,
+        "upstream_http_error": -32003,
+        "upstream_payload_error": -32005,
     }
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
@@ -261,16 +261,16 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert interrupt.params["provider_private_metadata"] == ["opencode.directory"]
     assert interrupt.params["context_fields"]["directory"] == "metadata.opencode.directory"
     assert interrupt.params["errors"]["business_codes"] == {
-        "INTERRUPT_REQUEST_NOT_FOUND": -32004,
-        "UPSTREAM_UNREACHABLE": -32002,
-        "UPSTREAM_HTTP_ERROR": -32003,
+        "interrupt_request_not_found": -32004,
+        "upstream_unreachable": -32002,
+        "upstream_http_error": -32003,
     }
     assert interrupt.params["errors"]["error_types"] == [
         "INTERRUPT_REQUEST_NOT_FOUND",
         "INTERRUPT_REQUEST_EXPIRED",
         "INTERRUPT_TYPE_MISMATCH",
-        "UPSTREAM_UNREACHABLE",
-        "UPSTREAM_HTTP_ERROR",
+        "upstream_unreachable",
+        "upstream_http_error",
     ]
     assert interrupt.params["errors"]["invalid_params_data_fields"] == [
         "type",

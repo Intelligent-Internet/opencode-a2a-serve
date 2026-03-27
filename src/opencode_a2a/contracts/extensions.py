@@ -188,11 +188,11 @@ WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS: tuple[str, ...] = (
 )
 
 SESSION_QUERY_ERROR_BUSINESS_CODES: dict[str, int] = {
-    "SESSION_NOT_FOUND": -32001,
-    "SESSION_FORBIDDEN": -32006,
-    "UPSTREAM_UNREACHABLE": -32002,
-    "UPSTREAM_HTTP_ERROR": -32003,
-    "UPSTREAM_PAYLOAD_ERROR": -32005,
+    "session_not_found": -32001,
+    "session_forbidden": -32006,
+    "upstream_unreachable": -32002,
+    "upstream_http_error": -32003,
+    "upstream_payload_error": -32005,
 }
 SESSION_QUERY_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",
@@ -256,16 +256,16 @@ PROVIDER_DISCOVERY_METHODS: dict[str, str] = {
 
 INTERRUPT_SUCCESS_RESULT_FIELDS: tuple[str, ...] = ("ok", "request_id")
 INTERRUPT_ERROR_BUSINESS_CODES: dict[str, int] = {
-    "INTERRUPT_REQUEST_NOT_FOUND": -32004,
-    "UPSTREAM_UNREACHABLE": -32002,
-    "UPSTREAM_HTTP_ERROR": -32003,
+    "interrupt_request_not_found": -32004,
+    "upstream_unreachable": -32002,
+    "upstream_http_error": -32003,
 }
 INTERRUPT_ERROR_TYPES: tuple[str, ...] = (
     "INTERRUPT_REQUEST_NOT_FOUND",
     "INTERRUPT_REQUEST_EXPIRED",
     "INTERRUPT_TYPE_MISMATCH",
-    "UPSTREAM_UNREACHABLE",
-    "UPSTREAM_HTTP_ERROR",
+    "upstream_unreachable",
+    "upstream_http_error",
 )
 INTERRUPT_ERROR_DATA_FIELDS: tuple[str, ...] = ("type", "request_id", "upstream_status")
 INTERRUPT_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
@@ -277,9 +277,9 @@ INTERRUPT_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "actual",
 )
 PROVIDER_DISCOVERY_ERROR_BUSINESS_CODES: dict[str, int] = {
-    "UPSTREAM_UNREACHABLE": -32002,
-    "UPSTREAM_HTTP_ERROR": -32003,
-    "UPSTREAM_PAYLOAD_ERROR": -32005,
+    "upstream_unreachable": -32002,
+    "upstream_http_error": -32003,
+    "upstream_payload_error": -32005,
 }
 PROVIDER_DISCOVERY_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",

@@ -73,7 +73,7 @@ def upstream_http_error(
     detail: str | None = None,
 ) -> JSONRPCError:
     data: dict[str, Any] = {
-        "type": "UPSTREAM_HTTP_ERROR",
+        "type": "upstream_http_error",
         "upstream_status": upstream_status,
     }
     if method is not None:
@@ -95,7 +95,7 @@ def upstream_unreachable_error(
     request_id: str | None = None,
     detail: str | None = None,
 ) -> JSONRPCError:
-    data: dict[str, Any] = {"type": "UPSTREAM_UNREACHABLE"}
+    data: dict[str, Any] = {"type": "upstream_unreachable"}
     if method is not None:
         data["method"] = method
     if session_id is not None:
@@ -116,7 +116,7 @@ def upstream_payload_error(
     request_id: str | None = None,
 ) -> JSONRPCError:
     data: dict[str, Any] = {
-        "type": "UPSTREAM_PAYLOAD_ERROR",
+        "type": "upstream_payload_error",
         "detail": detail,
     }
     if method is not None:

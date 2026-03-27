@@ -722,9 +722,9 @@ Response:
   - `SESSION_NOT_FOUND`
   - `SESSION_FORBIDDEN`
   - `METHOD_DISABLED` (not applicable to prompt_async)
-  - `UPSTREAM_UNREACHABLE`
-  - `UPSTREAM_HTTP_ERROR`
-  - `UPSTREAM_PAYLOAD_ERROR`
+  - `upstream_unreachable`
+  - `upstream_http_error`
+  - `upstream_payload_error`
 
 Validation notes:
 
@@ -892,8 +892,8 @@ Notes:
   - `INTERRUPT_REQUEST_NOT_FOUND`
   - `INTERRUPT_REQUEST_EXPIRED`
   - `INTERRUPT_TYPE_MISMATCH`
-  - `UPSTREAM_UNREACHABLE`
-  - `UPSTREAM_HTTP_ERROR`
+  - `upstream_unreachable`
+  - `upstream_http_error`
 
 Permission reply example:
 
