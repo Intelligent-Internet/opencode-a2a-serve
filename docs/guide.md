@@ -802,6 +802,16 @@ Subtask stream observation:
   `artifact.parts[].data.input.command`.
 - This runtime does not yet declare a standalone subagent discovery method.
 
+Declared single-subtask invocation contract:
+
+- The current explicit orchestration contract is: one `subtask` part submitted
+  through `opencode.sessions.prompt_async`.
+- The declared stable shape is exactly one `subtask` part in `request.parts`.
+- Requests with multiple `subtask` parts, or mixed `text/file/agent/subtask`
+  payloads, may still be forwarded upstream, but they are outside the declared
+  contract surface.
+- Batch or parallel subtask submission is not declared by the current runtime.
+
 ### Session Command (`opencode.sessions.command`)
 
 ```bash

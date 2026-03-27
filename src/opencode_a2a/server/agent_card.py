@@ -23,6 +23,7 @@ from ..contracts.extensions import (
     SESSION_QUERY_METHODS,
     STREAMING_EXTENSION_URI,
     SUBTASK_CAPABILITY_EXTENSION_URI,
+    SUBTASK_INVOCATION_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     JsonRpcCapabilitySnapshot,
     build_capability_snapshot,
@@ -35,6 +36,7 @@ from ..contracts.extensions import (
     build_session_query_extension_params,
     build_streaming_extension_params,
     build_subtask_capability_extension_params,
+    build_subtask_invocation_extension_params,
     build_wire_contract_params,
 )
 from ..jsonrpc.application import SESSION_CONTEXT_PREFIX
@@ -110,6 +112,16 @@ def _build_subtask_capability_skill_examples() -> list[str]:
     ]
 
 
+def _build_subtask_invocation_skill_examples() -> list[str]:
+    return [
+        "Submit exactly one subtask part through opencode.sessions.prompt_async.",
+        (
+            "Treat batch or parallel subtask submission as unsupported unless a "
+            "future extension declares it."
+        ),
+    ]
+
+
 def build_agent_card(settings: Settings) -> AgentCard:
     public_url = settings.a2a_public_url.rstrip("/")
     base_url = public_url
@@ -138,6 +150,9 @@ def build_agent_card(settings: Settings) -> AgentCard:
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
     subtask_capability_extension_params = build_subtask_capability_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    subtask_invocation_extension_params = build_subtask_invocation_extension_params(
         runtime_profile=runtime_profile,
     )
     provider_discovery_extension_params = build_provider_discovery_extension_params(
@@ -222,6 +237,15 @@ def build_agent_card(settings: Settings) -> AgentCard:
                     params=subtask_capability_extension_params,
                 ),
                 AgentExtension(
+                    uri=SUBTASK_INVOCATION_EXTENSION_URI,
+                    required=False,
+                    description=(
+                        "Declare the stable explicit invocation contract for one subtask "
+                        "submitted through opencode.sessions.prompt_async."
+                    ),
+                    params=subtask_invocation_extension_params,
+                ),
+                AgentExtension(
                     uri=PROVIDER_DISCOVERY_EXTENSION_URI,
                     required=False,
                     description=(
@@ -303,6 +327,16 @@ def build_agent_card(settings: Settings) -> AgentCard:
                 ),
                 tags=["opencode", "subtask", "subagent", "provider-private"],
                 examples=_build_subtask_capability_skill_examples(),
+            ),
+            AgentSkill(
+                id="opencode.subtask.invocation",
+                name="OpenCode Subtask Invocation",
+                description=(
+                    "provider-private explicit invocation contract for single-subtask "
+                    "prompt_async requests."
+                ),
+                tags=["opencode", "subtask", "orchestration", "provider-private"],
+                examples=_build_subtask_invocation_skill_examples(),
             ),
             AgentSkill(
                 id="opencode.providers.query",

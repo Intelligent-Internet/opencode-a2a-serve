@@ -19,6 +19,7 @@ MODEL_SELECTION_EXTENSION_URI = "urn:a2a:model-selection/v1"
 STREAMING_EXTENSION_URI = "urn:a2a:stream-hints/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:opencode-a2a:session-query/v1"
 SUBTASK_CAPABILITY_EXTENSION_URI = "urn:opencode-a2a:subtask-capability/v1"
+SUBTASK_INVOCATION_EXTENSION_URI = "urn:opencode-a2a:subtask-invocation/v1"
 PROVIDER_DISCOVERY_EXTENSION_URI = "urn:opencode-a2a:provider-discovery/v1"
 INTERRUPT_CALLBACK_EXTENSION_URI = "urn:a2a:interactive-interrupt/v1"
 INTERRUPT_RECOVERY_EXTENSION_URI = "urn:opencode-a2a:interrupt-recovery/v1"
@@ -766,6 +767,75 @@ def build_subtask_capability_extension_params(
     }
 
 
+def build_subtask_invocation_extension_params(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    return {
+        "methods": {
+            "submit_single_subtask": SESSION_QUERY_METHODS["prompt_async"],
+        },
+        "submission_model": {
+            "kind": "single_subtask_prompt_async",
+            "session_scope": "existing_upstream_session",
+            "declared_part_cardinality": "exactly_one_subtask_part",
+            "mixed_part_payload_contract": "not_declared",
+            "batch_parallel_submission_contract": "not_declared",
+        },
+        "single_subtask_contract": {
+            "required_params": [
+                "session_id",
+                "request.parts",
+                "request.parts[0].type",
+                "request.parts[0].prompt",
+                "request.parts[0].description",
+                "request.parts[0].agent",
+            ],
+            "optional_params": [
+                "request.parts[0].model.providerID",
+                "request.parts[0].model.modelID",
+                "request.parts[0].command",
+                "request.messageID",
+                "request.model",
+                "request.noReply",
+                "request.tools",
+                "request.format",
+                "request.system",
+                "request.variant",
+                OPENCODE_DIRECTORY_METADATA_FIELD,
+            ],
+            "result_fields": ["ok", "session_id"],
+            "notification_response_status": 204,
+        },
+        "supported_metadata": ["opencode.directory"],
+        "provider_private_metadata": ["opencode.directory"],
+        "context_fields": {
+            "directory": OPENCODE_DIRECTORY_METADATA_FIELD,
+        },
+        "errors": {
+            "business_codes": dict(SESSION_QUERY_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(SESSION_QUERY_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(SESSION_QUERY_INVALID_PARAMS_DATA_FIELDS),
+        },
+        "profile": runtime_profile.summary_dict(),
+        "notes": [
+            (
+                "This extension declares a stable explicit invocation contract for one "
+                "provider-private subtask part submitted through opencode.sessions.prompt_async."
+            ),
+            (
+                "Requests containing multiple subtask parts or mixed text/file/agent/subtask "
+                "parts may still be forwarded upstream, but they are outside this declared "
+                "single-subtask contract."
+            ),
+            (
+                "The runtime does not yet declare a stable batch or parallel subtask "
+                "submission API. Clients should treat those shapes as unsupported."
+            ),
+        ],
+    }
+
+
 def build_interrupt_callback_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -1044,6 +1114,11 @@ def build_compatibility_profile_params(
                 "availability": "always",
                 "retention": "stable",
             },
+            SUBTASK_INVOCATION_EXTENSION_URI: {
+                "surface": "jsonrpc-extension",
+                "availability": "always",
+                "retention": "stable",
+            },
             PROVIDER_DISCOVERY_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
                 "availability": "always",
@@ -1122,6 +1197,7 @@ def build_wire_contract_params(
                 STREAMING_EXTENSION_URI,
                 SESSION_QUERY_EXTENSION_URI,
                 SUBTASK_CAPABILITY_EXTENSION_URI,
+                SUBTASK_INVOCATION_EXTENSION_URI,
                 PROVIDER_DISCOVERY_EXTENSION_URI,
                 INTERRUPT_RECOVERY_EXTENSION_URI,
                 INTERRUPT_CALLBACK_EXTENSION_URI,

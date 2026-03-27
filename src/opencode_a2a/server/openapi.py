@@ -22,6 +22,7 @@ from ..contracts.extensions import (
     build_session_query_extension_params,
     build_streaming_extension_params,
     build_subtask_capability_extension_params,
+    build_subtask_invocation_extension_params,
     build_wire_contract_params,
 )
 from ..jsonrpc.application import SESSION_CONTEXT_PREFIX
@@ -40,7 +41,7 @@ def _build_jsonrpc_extension_openapi_description(
         "A2A JSON-RPC entrypoint. Supports core A2A methods "
         "(message/send, message/stream, tasks/get, tasks/cancel, tasks/resubscribe) "
         "plus shared model-selection metadata, OpenCode session/provider extensions, "
-        "OpenCode subtask capability contracts, interrupt recovery extensions, and "
+        "OpenCode subtask capability/invocation contracts, interrupt recovery extensions, and "
         "shared interrupt callback methods.\n\n"
         f"OpenCode session query/control methods: {', '.join(session_methods)}.\n"
         f"OpenCode provider/model discovery methods: {provider_methods}.\n"
@@ -204,6 +205,28 @@ def _build_jsonrpc_extension_openapi_examples(
                                 },
                             }
                         ]
+                    },
+                },
+            },
+        },
+        "session_prompt_async_single_subtask_contract": {
+            "summary": "Invoke the declared single-subtask contract",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 24,
+                "method": SESSION_QUERY_METHODS["prompt_async"],
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "parts": [
+                            {
+                                "type": "subtask",
+                                "prompt": "Review the auth diff for security regressions.",
+                                "description": "Focus on privilege checks and token handling.",
+                                "agent": "general",
+                            }
+                        ],
+                        "noReply": True,
                     },
                 },
             },
@@ -393,6 +416,9 @@ def _patch_jsonrpc_openapi_contract(
     subtask_capability = build_subtask_capability_extension_params(
         runtime_profile=runtime_profile,
     )
+    subtask_invocation = build_subtask_invocation_extension_params(
+        runtime_profile=runtime_profile,
+    )
     provider_discovery = build_provider_discovery_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -434,6 +460,7 @@ def _patch_jsonrpc_openapi_contract(
                         "streaming": streaming,
                         "session_query": session_query,
                         "subtask_capability": subtask_capability,
+                        "subtask_invocation": subtask_invocation,
                         "provider_discovery": provider_discovery,
                         "interrupt_recovery": interrupt_recovery,
                         "interrupt_callback": interrupt_callback,

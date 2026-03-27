@@ -15,6 +15,7 @@ from opencode_a2a.contracts.extensions import (
     build_session_query_extension_params,
     build_streaming_extension_params,
     build_subtask_capability_extension_params,
+    build_subtask_invocation_extension_params,
     build_wire_contract_params,
 )
 from opencode_a2a.jsonrpc.application import SESSION_CONTEXT_PREFIX
@@ -29,6 +30,7 @@ from opencode_a2a.server.application import (
     SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
     SUBTASK_CAPABILITY_EXTENSION_URI,
+    SUBTASK_INVOCATION_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     build_agent_card,
     create_app,
@@ -48,6 +50,7 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
     subtask_capability = ext_by_uri[SUBTASK_CAPABILITY_EXTENSION_URI]
+    subtask_invocation = ext_by_uri[SUBTASK_INVOCATION_EXTENSION_URI]
     provider_discovery = ext_by_uri[PROVIDER_DISCOVERY_EXTENSION_URI]
     interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
     interrupt_callback = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
@@ -67,6 +70,9 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
     expected_subtask_capability = build_subtask_capability_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    expected_subtask_invocation = build_subtask_invocation_extension_params(
         runtime_profile=runtime_profile,
     )
     expected_provider_discovery = build_provider_discovery_extension_params(
@@ -104,6 +110,9 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     assert subtask_capability.params == expected_subtask_capability, (
         "Subtask capability extension drifted from contracts.extensions SSOT."
     )
+    assert subtask_invocation.params == expected_subtask_invocation, (
+        "Subtask invocation extension drifted from contracts.extensions SSOT."
+    )
     assert provider_discovery.params == expected_provider_discovery, (
         "Provider discovery extension drifted from contracts.extensions SSOT."
     )
@@ -136,6 +145,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     streaming = contract["streaming"]
     session_query = contract["session_query"]
     subtask_capability = contract["subtask_capability"]
+    subtask_invocation = contract["subtask_invocation"]
     provider_discovery = contract["provider_discovery"]
     interrupt_recovery = contract["interrupt_recovery"]
     interrupt_callback = contract["interrupt_callback"]
@@ -155,6 +165,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
     expected_subtask_capability = build_subtask_capability_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    expected_subtask_invocation = build_subtask_invocation_extension_params(
         runtime_profile=runtime_profile,
     )
     expected_provider_discovery = build_provider_discovery_extension_params(
@@ -189,6 +202,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     )
     assert subtask_capability == expected_subtask_capability, (
         "OpenAPI subtask capability contract drifted from contracts.extensions SSOT."
+    )
+    assert subtask_invocation == expected_subtask_invocation, (
+        "OpenAPI subtask invocation contract drifted from contracts.extensions SSOT."
     )
     assert provider_discovery == expected_provider_discovery, (
         "OpenAPI provider discovery contract drifted from contracts.extensions SSOT."

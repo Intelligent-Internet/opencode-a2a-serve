@@ -14,6 +14,7 @@ from opencode_a2a.server.application import (
     SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
     SUBTASK_CAPABILITY_EXTENSION_URI,
+    SUBTASK_INVOCATION_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     build_agent_card,
 )
@@ -280,6 +281,30 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert subtask_capability.params["context_fields"]["directory"] == "metadata.opencode.directory"
     assert subtask_capability.params["profile"]["runtime_context"]["project"] == "alpha"
 
+    subtask_invocation = ext_by_uri[SUBTASK_INVOCATION_EXTENSION_URI]
+    assert subtask_invocation.params["methods"] == {
+        "submit_single_subtask": "opencode.sessions.prompt_async"
+    }
+    assert subtask_invocation.params["submission_model"] == {
+        "kind": "single_subtask_prompt_async",
+        "session_scope": "existing_upstream_session",
+        "declared_part_cardinality": "exactly_one_subtask_part",
+        "mixed_part_payload_contract": "not_declared",
+        "batch_parallel_submission_contract": "not_declared",
+    }
+    assert subtask_invocation.params["single_subtask_contract"]["required_params"] == [
+        "session_id",
+        "request.parts",
+        "request.parts[0].type",
+        "request.parts[0].prompt",
+        "request.parts[0].description",
+        "request.parts[0].agent",
+    ]
+    assert (
+        subtask_invocation.params["single_subtask_contract"]["notification_response_status"] == 204
+    )
+    assert subtask_invocation.params["profile"]["runtime_context"]["project"] == "alpha"
+
     provider_discovery = ext_by_uri[PROVIDER_DISCOVERY_EXTENSION_URI]
     assert provider_discovery.params["profile"]["runtime_context"]["project"] == "alpha"
     assert provider_discovery.params["methods"] == {
@@ -381,6 +406,11 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "availability": "always",
         "retention": "stable",
     }
+    assert compatibility.params["extension_retention"][SUBTASK_INVOCATION_EXTENSION_URI] == {
+        "surface": "jsonrpc-extension",
+        "availability": "always",
+        "retention": "stable",
+    }
     shell_policy = compatibility.params["method_retention"]["opencode.sessions.shell"]
     assert compatibility.params["deployment"]["id"] == "single_tenant_shared_workspace"
     assert compatibility.params["runtime_features"]["session_shell"]["availability"] == "disabled"
@@ -411,6 +441,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert wire_contract.params["profile"]["profile_id"] == "opencode-a2a-single-tenant-coding-v1"
     assert MODEL_SELECTION_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert SUBTASK_CAPABILITY_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
+    assert SUBTASK_INVOCATION_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert PROVIDER_DISCOVERY_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert INTERRUPT_RECOVERY_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert "opencode.sessions.shell" not in wire_contract.params["all_jsonrpc_methods"]
@@ -469,12 +500,17 @@ def test_agent_card_skills_hide_shell_when_disabled_by_default() -> None:
     subtask_skill = next(
         skill for skill in card.skills if skill.id == "opencode.subtask.capability"
     )
+    invocation_skill = next(
+        skill for skill in card.skills if skill.id == "opencode.subtask.invocation"
+    )
 
     assert "provider-private" in session_skill.tags
     assert "provider-private" in session_skill.description
     assert all("opencode.sessions.shell" not in example for example in session_skill.examples)
     assert "subtask" in subtask_skill.tags
     assert any("type=subtask" in example for example in subtask_skill.examples)
+    assert "orchestration" in invocation_skill.tags
+    assert any("exactly one subtask part" in example for example in invocation_skill.examples)
     assert "provider-private" in provider_skill.tags
     assert any("opencode.providers.list" in example for example in provider_skill.examples)
     interrupt_recovery_skill = next(
