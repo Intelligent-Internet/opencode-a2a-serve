@@ -12,7 +12,9 @@ JSON-RPC extension details; README stays at overview level.
   - JSON-RPC (`POST /`)
 - Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
 - The public Agent Card is intentionally slimmed to the minimum discovery surface.
+- Public skills stay summary-only; rich examples and detailed provider-private method matrices are reserved for the authenticated extended card.
 - Detailed extension contracts and provider-private method metadata are served through the authenticated extended card endpoint `/agent/authenticatedExtendedCard`.
+- The public `shared-stream-hints` extension only exposes metadata roots and a minimal set of canonical subfields needed for discovery; detailed block payload mappings stay in the authenticated extended card.
 - Agent Card responses emit weak `ETag` and `Cache-Control`; clients should revalidate cached cards instead of repeatedly fetching full payloads.
 - HTTP gzip compression is enabled for larger responses such as the authenticated extended card.
 - The current A2A prose specification may refer to `AgentCard.capabilities.extendedAgentCard`, but the official JSON schema and SDK types use the top-level `supportsAuthenticatedExtendedCard` field. This service follows the shipped schema/SDK surface.

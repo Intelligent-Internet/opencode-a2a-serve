@@ -40,8 +40,11 @@ URI:
 `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#shared-stream-hints-v1`
 
 - Scope: shared canonical metadata for block, usage, interrupt, and session hints
-- Public Agent Card: full shared stream contract
-- Authenticated extended card: same contract
+- Public Agent Card: metadata roots plus the minimum discoverability fields for
+  block identity, progress status, interrupt lifecycle, session identity, and
+  basic token usage
+- Authenticated extended card: full shared stream contract including detailed
+  block payload mappings and extended usage metadata
 - Runtime fields: `metadata.shared.stream`, `metadata.shared.usage`,
   `metadata.shared.interrupt`, `metadata.shared.session`
 

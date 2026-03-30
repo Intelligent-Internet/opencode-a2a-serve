@@ -51,8 +51,63 @@ def _select_public_extension_params(
     return {key: params[key] for key in keys if key in params}
 
 
-def _build_agent_card_description(settings: Settings, runtime_profile: RuntimeProfile) -> str:
+def _build_public_streaming_extension_params(
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "artifact_metadata_field": params["artifact_metadata_field"],
+        "progress_metadata_field": params["progress_metadata_field"],
+        "interrupt_metadata_field": params["interrupt_metadata_field"],
+        "session_metadata_field": params["session_metadata_field"],
+        "usage_metadata_field": params["usage_metadata_field"],
+        "block_types": params["block_types"],
+        "stream_fields": _select_public_extension_params(
+            params["stream_fields"],
+            keys=("block_type", "message_id", "sequence"),
+        ),
+        "progress_fields": _select_public_extension_params(
+            params["progress_fields"],
+            keys=("type", "status"),
+        ),
+        "interrupt_fields": _select_public_extension_params(
+            params["interrupt_fields"],
+            keys=("request_id", "type", "phase"),
+        ),
+        "session_fields": _select_public_extension_params(
+            params["session_fields"],
+            keys=("id", "title"),
+        ),
+        "usage_fields": _select_public_extension_params(
+            params["usage_fields"],
+            keys=("input_tokens", "output_tokens", "total_tokens"),
+        ),
+    }
+
+
+def _build_agent_card_description(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    *,
+    include_detailed_contracts: bool,
+) -> str:
     base = (settings.a2a_description or "").strip() or "OpenCode A2A runtime."
+    if not include_detailed_contracts:
+        public_parts: list[str] = [
+            base,
+            (
+                "Supports HTTP+JSON and JSON-RPC transports, streaming-first A2A messaging, "
+                "and authenticated extended Agent Card discovery."
+            ),
+            (
+                "Single-tenant deployment; all consumers share the same underlying OpenCode "
+                "workspace/environment."
+            ),
+        ]
+        project = runtime_profile.runtime_context.as_dict().get("project")
+        if isinstance(project, str) and project.strip():
+            public_parts.append(f"Deployment project: {project}.")
+        return " ".join(public_parts)
+
     summary = (
         "Supports HTTP+JSON and JSON-RPC transports, streaming-first A2A messaging "
         "(message/send, message/stream), authenticated extended Agent Card "
@@ -229,7 +284,11 @@ def _build_agent_extensions(
                 "Shared streaming metadata contract for canonical block hints, "
                 "timeline identity, usage, and interactive interrupt metadata."
             ),
-            params=streaming_extension_params,
+            params=(
+                streaming_extension_params
+                if include_detailed_contracts
+                else _build_public_streaming_extension_params(streaming_extension_params)
+            ),
         ),
         AgentExtension(
             uri=SESSION_QUERY_EXTENSION_URI,
@@ -311,7 +370,66 @@ def _build_agent_skills(
     *,
     settings: Settings,
     capability_snapshot: JsonRpcCapabilitySnapshot,
+    include_detailed_contracts: bool,
 ) -> list[AgentSkill]:
+    if not include_detailed_contracts:
+        return [
+            AgentSkill(
+                id="opencode.chat",
+                name="OpenCode Chat",
+                description=(
+                    "Handle core A2A chat turns with shared session binding and optional "
+                    "request-scoped model selection."
+                ),
+                tags=["assistant", "coding", "opencode", "core-a2a", "portable"],
+            ),
+            AgentSkill(
+                id="opencode.sessions.query",
+                name="OpenCode Sessions Query",
+                description=(
+                    "Inspect OpenCode session status, history, and low-risk lifecycle actions "
+                    "through provider-private JSON-RPC extensions."
+                ),
+                tags=["opencode", "sessions", "history", "provider-private"],
+            ),
+            AgentSkill(
+                id="opencode.providers.query",
+                name="OpenCode Provider Catalog",
+                description=(
+                    "Discover available upstream providers and models through provider-private "
+                    "JSON-RPC extensions."
+                ),
+                tags=["opencode", "providers", "models", "provider-private"],
+            ),
+            AgentSkill(
+                id="opencode.workspace.control",
+                name="OpenCode Workspace Control",
+                description=(
+                    "Manage OpenCode projects, workspaces, and worktrees through "
+                    "provider-private JSON-RPC extensions."
+                ),
+                tags=["opencode", "project", "workspace", "worktree", "provider-private"],
+            ),
+            AgentSkill(
+                id="opencode.interrupt.recovery",
+                name="OpenCode Interrupt Recovery",
+                description=(
+                    "Recover pending permission and question interrupts through "
+                    "provider-private JSON-RPC extensions."
+                ),
+                tags=["interrupt", "permission", "question", "provider-private"],
+            ),
+            AgentSkill(
+                id="opencode.interrupt.callback",
+                name="Shared Interrupt Callback",
+                description=(
+                    "Reply to streaming permission and question interrupts through shared "
+                    "JSON-RPC callbacks."
+                ),
+                tags=["interrupt", "permission", "question", "shared"],
+            ),
+        ]
+
     return [
         AgentSkill(
             id="opencode.chat",
@@ -407,7 +525,11 @@ def _build_agent_card(
 
     return AgentCard(
         name=settings.a2a_title,
-        description=_build_agent_card_description(settings, runtime_profile),
+        description=_build_agent_card_description(
+            settings,
+            runtime_profile,
+            include_detailed_contracts=include_detailed_contracts,
+        ),
         url=public_url,
         documentation_url=settings.a2a_documentation_url,
         version=settings.a2a_version,
@@ -426,6 +548,7 @@ def _build_agent_card(
         skills=_build_agent_skills(
             settings=settings,
             capability_snapshot=capability_snapshot,
+            include_detailed_contracts=include_detailed_contracts,
         ),
         supports_authenticated_extended_card=True,
         additional_interfaces=[
