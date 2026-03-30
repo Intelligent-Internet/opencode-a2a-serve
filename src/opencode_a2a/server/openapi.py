@@ -43,7 +43,7 @@ def _build_jsonrpc_extension_openapi_description(
         "(message/send, message/stream, tasks/get, tasks/cancel, tasks/resubscribe) "
         "plus shared model-selection metadata, OpenCode session/provider extensions, "
         "interrupt recovery extensions, and shared interrupt callback methods.\n\n"
-        f"OpenCode session query/control methods: {', '.join(session_methods)}.\n"
+        f"OpenCode session lifecycle/query/control methods: {', '.join(session_methods)}.\n"
         f"OpenCode provider/model discovery methods: {provider_methods}.\n"
         f"OpenCode project/workspace/worktree control methods: {workspace_methods}.\n"
         f"OpenCode interrupt recovery methods: {interrupt_recovery_methods}.\n"
@@ -157,6 +157,51 @@ def _build_jsonrpc_extension_openapi_examples(
                 },
             },
         },
+        "session_status": {
+            "summary": "Get OpenCode session status snapshots",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 11,
+                "method": SESSION_QUERY_METHODS["status"],
+                "params": {"directory": "services/api"},
+            },
+        },
+        "session_get": {
+            "summary": "Get one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 12,
+                "method": SESSION_QUERY_METHODS["get_session"],
+                "params": {"session_id": "s-1"},
+            },
+        },
+        "session_children": {
+            "summary": "List child sessions for one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 13,
+                "method": SESSION_QUERY_METHODS["get_session_children"],
+                "params": {"session_id": "s-1"},
+            },
+        },
+        "session_todo": {
+            "summary": "Read todo items for one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 14,
+                "method": SESSION_QUERY_METHODS["get_session_todo"],
+                "params": {"session_id": "s-1"},
+            },
+        },
+        "session_diff": {
+            "summary": "Read diff summary for one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 15,
+                "method": SESSION_QUERY_METHODS["get_session_diff"],
+                "params": {"session_id": "s-1", "message_id": "msg-1"},
+            },
+        },
         "session_messages": {
             "summary": "List session messages",
             "value": {
@@ -168,6 +213,15 @@ def _build_jsonrpc_extension_openapi_examples(
                     "before": "cursor-1",
                     "limit": SESSION_QUERY_DEFAULT_LIMIT,
                 },
+            },
+        },
+        "session_message_get": {
+            "summary": "Get one session message",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 16,
+                "method": SESSION_QUERY_METHODS["get_session_message"],
+                "params": {"session_id": "s-1", "message_id": "msg-1"},
             },
         },
         "session_prompt_async": {
@@ -197,6 +251,73 @@ def _build_jsonrpc_extension_openapi_examples(
                         "arguments": "focus on security findings",
                     },
                 },
+            },
+        },
+        "session_fork": {
+            "summary": "Fork one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 221,
+                "method": SESSION_QUERY_METHODS["fork"],
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"messageID": "msg-1"},
+                },
+            },
+        },
+        "session_share": {
+            "summary": "Share one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 222,
+                "method": SESSION_QUERY_METHODS["share"],
+                "params": {"session_id": "s-1"},
+            },
+        },
+        "session_unshare": {
+            "summary": "Unshare one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 223,
+                "method": SESSION_QUERY_METHODS["unshare"],
+                "params": {"session_id": "s-1"},
+            },
+        },
+        "session_summarize": {
+            "summary": "Summarize one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 224,
+                "method": SESSION_QUERY_METHODS["summarize"],
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "providerID": "openai",
+                        "modelID": "gpt-5",
+                        "auto": True,
+                    },
+                },
+            },
+        },
+        "session_revert": {
+            "summary": "Revert one OpenCode session to a message boundary",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 225,
+                "method": SESSION_QUERY_METHODS["revert"],
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"messageID": "msg-1", "partID": "part-1"},
+                },
+            },
+        },
+        "session_unrevert": {
+            "summary": "Restore reverted content in one OpenCode session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 226,
+                "method": SESSION_QUERY_METHODS["unrevert"],
+                "params": {"session_id": "s-1"},
             },
         },
         "providers_list": {

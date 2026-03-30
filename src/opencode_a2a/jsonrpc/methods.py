@@ -327,6 +327,14 @@ def _extract_session_title(session: dict[str, Any]) -> str:
     return title.strip()
 
 
+def _extract_session_id(session: dict[str, Any]) -> str | None:
+    raw_id = session.get("id")
+    if not isinstance(raw_id, str):
+        return None
+    session_id = raw_id.strip()
+    return session_id or None
+
+
 def _as_a2a_session_context_id(session_id: str) -> str:
     return f"{SESSION_CONTEXT_PREFIX}{session_id}"
 
@@ -334,11 +342,8 @@ def _as_a2a_session_context_id(session_id: str) -> str:
 def _as_a2a_session_task(session: Any) -> dict[str, Any] | None:
     if not isinstance(session, dict):
         return None
-    raw_id = session.get("id")
-    if not isinstance(raw_id, str):
-        return None
-    session_id = raw_id.strip()
-    if not session_id:
+    session_id = _extract_session_id(session)
+    if session_id is None:
         return None
     context_id = _as_a2a_session_context_id(session_id)
     title = _extract_session_title(session)
@@ -394,10 +399,141 @@ def _extract_raw_items(raw_result: Any, *, kind: str) -> list[Any]:
     raise ValueError(f"OpenCode {kind} payload must be an array; got {type(raw_result).__name__}")
 
 
+def _extract_raw_object(raw_result: Any, *, kind: str) -> dict[str, Any]:
+    if isinstance(raw_result, dict):
+        return raw_result
+    raise ValueError(f"OpenCode {kind} payload must be an object; got {type(raw_result).__name__}")
+
+
 def _apply_session_query_limit(items: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
     if limit >= len(items):
         return items
     return items[:limit]
+
+
+def _normalize_session_status_items(raw_result: Any) -> list[dict[str, Any]]:
+    raw_status_map = _extract_raw_object(raw_result, kind="session status")
+    items: list[dict[str, Any]] = []
+    for raw_session_id, raw_status in sorted(raw_status_map.items()):
+        if not isinstance(raw_session_id, str):
+            continue
+        session_id = raw_session_id.strip()
+        if not session_id or not isinstance(raw_status, dict):
+            continue
+        status_type = raw_status.get("type")
+        if not isinstance(status_type, str) or not status_type.strip():
+            continue
+        item: dict[str, Any] = {
+            "session_id": session_id,
+            "type": status_type.strip(),
+        }
+        attempt = raw_status.get("attempt")
+        if isinstance(attempt, int):
+            item["attempt"] = attempt
+        message = raw_status.get("message")
+        if isinstance(message, str) and message.strip():
+            item["message"] = message.strip()
+        next_value = raw_status.get("next")
+        if isinstance(next_value, int | float):
+            item["next"] = next_value
+        items.append(item)
+    return items
+
+
+def _normalize_todo_items(raw_result: Any) -> list[dict[str, Any]]:
+    raw_items = _extract_raw_items(raw_result, kind="session todo")
+    items: list[dict[str, Any]] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        todo_id = item.get("id")
+        content = item.get("content")
+        status = item.get("status")
+        priority = item.get("priority")
+        if not all(isinstance(value, str) for value in (todo_id, content, status, priority)):
+            continue
+        todo_id_str = cast(str, todo_id)
+        content_str = cast(str, content)
+        status_str = cast(str, status)
+        priority_str = cast(str, priority)
+        normalized = {
+            "id": todo_id_str.strip(),
+            "content": content_str.strip(),
+            "status": status_str.strip(),
+            "priority": priority_str.strip(),
+        }
+        if all(normalized.values()):
+            items.append(normalized)
+    return items
+
+
+def _normalize_diff_items(raw_result: Any) -> list[dict[str, Any]]:
+    raw_items = _extract_raw_items(raw_result, kind="session diff")
+    items: list[dict[str, Any]] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        file_path = item.get("file")
+        before = item.get("before")
+        after = item.get("after")
+        additions = item.get("additions")
+        deletions = item.get("deletions")
+        if not isinstance(file_path, str) or not file_path.strip():
+            continue
+        normalized: dict[str, Any] = {"file": file_path.strip()}
+        if isinstance(before, str):
+            normalized["before"] = before
+        if isinstance(after, str):
+            normalized["after"] = after
+        if isinstance(additions, int):
+            normalized["additions"] = additions
+        if isinstance(deletions, int):
+            normalized["deletions"] = deletions
+        items.append(normalized)
+    return items
+
+
+def _normalize_session_summary(raw_result: Any) -> dict[str, Any]:
+    session = _extract_raw_object(raw_result, kind="session")
+    session_id = _extract_session_id(session)
+    if session_id is None:
+        raise ValueError("OpenCode session payload is missing string field 'id'")
+    item: dict[str, Any] = {
+        "id": session_id,
+        "title": _extract_session_title(session),
+    }
+    for source_key, target_key in (
+        ("projectID", "project_id"),
+        ("directory", "directory"),
+        ("parentID", "parent_id"),
+        ("version", "version"),
+    ):
+        value = session.get(source_key)
+        if isinstance(value, str) and value.strip():
+            item[target_key] = value.strip()
+    share = session.get("share")
+    if isinstance(share, dict):
+        share_url = share.get("url")
+        if isinstance(share_url, str) and share_url.strip():
+            item["share_url"] = share_url.strip()
+    revert = session.get("revert")
+    if isinstance(revert, dict):
+        revert_item: dict[str, Any] = {}
+        message_id = revert.get("messageID")
+        if isinstance(message_id, str) and message_id.strip():
+            revert_item["message_id"] = message_id.strip()
+        part_id = revert.get("partID")
+        if isinstance(part_id, str) and part_id.strip():
+            revert_item["part_id"] = part_id.strip()
+        snapshot = revert.get("snapshot")
+        if isinstance(snapshot, str) and snapshot.strip():
+            revert_item["snapshot"] = snapshot.strip()
+        diff = revert.get("diff")
+        if isinstance(diff, str) and diff.strip():
+            revert_item["diff"] = diff.strip()
+        if revert_item:
+            item["revert"] = revert_item
+    return item
 
 
 def _extract_provider_catalog(

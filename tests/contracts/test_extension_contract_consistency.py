@@ -285,7 +285,13 @@ async def test_runtime_supported_methods_align_with_capability_snapshot(
 @pytest.mark.parametrize(
     ("method", "params", "interrupt_type"),
     [
+        ("opencode.sessions.status", {}, None),
+        ("opencode.sessions.get", {"session_id": "s-1"}, None),
+        ("opencode.sessions.children", {"session_id": "s-1"}, None),
+        ("opencode.sessions.todo", {"session_id": "s-1"}, None),
+        ("opencode.sessions.diff", {"session_id": "s-1", "message_id": "msg-1"}, None),
         ("opencode.sessions.list", {}, None),
+        ("opencode.sessions.messages.get", {"session_id": "s-1", "message_id": "msg-1"}, None),
         ("opencode.sessions.messages.list", {"session_id": "s-1"}, None),
         (
             "opencode.sessions.prompt_async",
@@ -303,6 +309,27 @@ async def test_runtime_supported_methods_align_with_capability_snapshot(
             },
             None,
         ),
+        (
+            "opencode.sessions.fork",
+            {"session_id": "s-1", "request": {"messageID": "msg-1"}},
+            None,
+        ),
+        ("opencode.sessions.share", {"session_id": "s-1"}, None),
+        ("opencode.sessions.unshare", {"session_id": "s-1"}, None),
+        (
+            "opencode.sessions.summarize",
+            {
+                "session_id": "s-1",
+                "request": {"providerID": "openai", "modelID": "gpt-5", "auto": True},
+            },
+            None,
+        ),
+        (
+            "opencode.sessions.revert",
+            {"session_id": "s-1", "request": {"messageID": "msg-1"}},
+            None,
+        ),
+        ("opencode.sessions.unrevert", {"session_id": "s-1"}, None),
         (
             "opencode.sessions.shell",
             {

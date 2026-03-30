@@ -88,10 +88,22 @@ def _build_session_query_skill_examples(
     capability_snapshot: JsonRpcCapabilitySnapshot,
 ) -> list[str]:
     examples = [
+        "Get session status snapshots (method opencode.sessions.status).",
         "List OpenCode sessions with filters (method opencode.sessions.list).",
+        "Get one OpenCode session (method opencode.sessions.get).",
+        "List child sessions (method opencode.sessions.children).",
+        "Read one session todo list (method opencode.sessions.todo).",
+        "Read one session diff (method opencode.sessions.diff).",
         ("List messages with cursor pagination (method opencode.sessions.messages.list)."),
+        "Get one session message (method opencode.sessions.messages.get).",
         "Send async prompt to a session (method opencode.sessions.prompt_async).",
         "Send command to a session (method opencode.sessions.command).",
+        "Fork a session at a message boundary (method opencode.sessions.fork).",
+        "Share or unshare a session (methods opencode.sessions.share / opencode.sessions.unshare).",
+        (
+            "Summarize or undo a session (methods opencode.sessions.summarize / "
+            "opencode.sessions.revert / opencode.sessions.unrevert)."
+        ),
     ]
     if capability_snapshot.is_method_enabled(SESSION_QUERY_METHODS["shell"]):
         examples.append("Run shell in a session (method opencode.sessions.shell).")
@@ -209,8 +221,9 @@ def build_agent_card(settings: Settings) -> AgentCard:
                     uri=SESSION_QUERY_EXTENSION_URI,
                     required=False,
                     description=(
-                        "Support OpenCode session list/history queries and async prompt injection "
-                        "via custom JSON-RPC methods on the agent's A2A JSON-RPC interface."
+                        "Support OpenCode session lifecycle inspection, history queries, low-risk "
+                        "session management, and async prompt injection via custom JSON-RPC "
+                        "methods on the agent's A2A JSON-RPC interface."
                     ),
                     params=session_query_extension_params,
                 ),

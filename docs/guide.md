@@ -641,9 +641,10 @@ Minimal stream semantics summary:
 
 ## OpenCode Session Query A2A Extension
 
-This service exposes OpenCode session list/message-history queries and session
-control methods via A2A JSON-RPC extension methods (default endpoint: `POST /`).
-No extra custom REST endpoint is introduced.
+This service exposes OpenCode session lifecycle inspection, list/message-history
+queries, and low-risk session control methods via A2A JSON-RPC extension
+methods (default endpoint: `POST /`). No extra custom REST endpoint is
+introduced.
 
 - Trigger: call extension methods through A2A JSON-RPC
 - Auth: same `Authorization: Bearer <token>`
@@ -656,10 +657,22 @@ No extra custom REST endpoint is introduced.
   to the base A2A implementation; they are not OpenCode-specific extensions.
 - Notification behavior: for `opencode.sessions.*`, requests without `id`
   return HTTP `204 No Content`
-- Result format (query methods):
-  - `result.items` is always an array of A2A standard objects
-  - session list => `Task` with `status.state=completed`
-  - message history => `Message`
+- Result format:
+  - `opencode.sessions.status` => provider-private status summaries in
+    `result.items`
+  - `opencode.sessions.list` / `opencode.sessions.children` => A2A `Task[]`
+  - `opencode.sessions.get` => A2A `Task`
+  - `opencode.sessions.todo` / `opencode.sessions.diff` => provider-private
+    summaries in `result.items`
+  - `opencode.sessions.messages.list` => A2A `Message[]`
+  - `opencode.sessions.messages.get` => A2A `Message`
+  - `opencode.sessions.fork` / `opencode.sessions.share` /
+    `opencode.sessions.unshare` => provider-private session summary in
+    `result.item`
+  - `opencode.sessions.summarize` => provider-private completion result in
+    `result.ok` plus `result.session_id`
+  - `opencode.sessions.revert` / `opencode.sessions.unrevert` =>
+    provider-private session summary in `result.item`
   - limit pagination defaults to `20`; requests above `100` are rejected
   - `opencode.sessions.messages.list` also returns `result.next_cursor`
     when older messages are available
@@ -679,6 +692,30 @@ No extra custom REST endpoint is introduced.
   - optional `metadata.opencode.workspace.id`
   - `before` is an opaque cursor for loading older messages and is only
     supported on `opencode.sessions.messages.list`
+- Mutating lifecycle methods:
+  - `opencode.sessions.fork`
+  - `opencode.sessions.share`
+  - `opencode.sessions.unshare`
+  - `opencode.sessions.summarize`
+  - `opencode.sessions.revert`
+  - `opencode.sessions.unrevert`
+  - these methods reuse the same owner guard as other session control methods
+
+### Session Status (`opencode.sessions.status`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 11,
+    "method": "opencode.sessions.status",
+    "params": {
+      "directory": "services/api"
+    }
+  }'
+```
 
 ### Session List (`opencode.sessions.list`)
 
@@ -722,6 +759,34 @@ Message history responses include:
 - `result.items`: normalized A2A `Message[]`
 - `result.next_cursor`: opaque cursor for the next older page, or `null` when
   no older page is available
+
+### Session Get / Children / Todo / Diff / Message Get
+
+- `opencode.sessions.get` => read one session and map it to A2A `Task`
+- `opencode.sessions.children` => read child sessions and map them to A2A
+  `Task[]`
+- `opencode.sessions.todo` => read provider-private todo summaries
+- `opencode.sessions.diff` => read provider-private diff summaries; optional
+  `message_id`
+- `opencode.sessions.messages.get` => read one message and map it to A2A
+  `Message`
+
+Example (`opencode.sessions.messages.get`):
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 16,
+    "method": "opencode.sessions.messages.get",
+    "params": {
+      "session_id": "<session_id>",
+      "message_id": "<message_id>"
+    }
+  }'
+```
 
 ### Session Prompt Async (`opencode.sessions.prompt_async`)
 
@@ -808,6 +873,93 @@ Response:
 
 - success => `{"item": <A2A Message>}` (JSON-RPC result)
 - notification (no `id`) => HTTP `204 No Content`
+
+### Session Fork / Share / Unshare
+
+These methods return provider-private session summaries in `result.item`.
+
+Example (`opencode.sessions.fork`):
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 221,
+    "method": "opencode.sessions.fork",
+    "params": {
+      "session_id": "<session_id>",
+      "request": {
+        "messageID": "<message_id>"
+      }
+    }
+  }'
+```
+
+### Session Summarize / Revert / Unrevert
+
+- `opencode.sessions.summarize` returns `{"ok": true, "session_id": "<session_id>"}`
+- `opencode.sessions.revert` / `opencode.sessions.unrevert` return provider-private
+  session summaries in `result.item`
+- `opencode.sessions.revert` requires `request.messageID`; `request.partID` is optional
+
+Example (`opencode.sessions.summarize`):
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 224,
+    "method": "opencode.sessions.summarize",
+    "params": {
+      "session_id": "<session_id>",
+      "request": {
+        "providerID": "openai",
+        "modelID": "gpt-5",
+        "auto": true
+      }
+    }
+  }'
+```
+
+Example (`opencode.sessions.revert`):
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 225,
+    "method": "opencode.sessions.revert",
+    "params": {
+      "session_id": "<session_id>",
+      "request": {
+        "messageID": "<message_id>",
+        "partID": "<part_id>"
+      }
+    }
+  }'
+```
+
+Example (`opencode.sessions.share`):
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 222,
+    "method": "opencode.sessions.share",
+    "params": {
+      "session_id": "<session_id>"
+    }
+  }'
+```
 
 ### Session Shell (`opencode.sessions.shell`)
 

@@ -30,10 +30,22 @@ ExtensionHandlerFunc: TypeAlias = Callable[
 @dataclass(frozen=True)
 class ExtensionHandlerContext:
     upstream_client: OpencodeUpstreamClient
+    method_session_status: str
     method_list_sessions: str
+    method_get_session: str
+    method_get_session_children: str
+    method_get_session_todo: str
+    method_get_session_diff: str
+    method_get_session_message: str
     method_get_session_messages: str
     method_prompt_async: str
     method_command: str
+    method_fork_session: str
+    method_share_session: str
+    method_unshare_session: str
+    method_summarize_session: str
+    method_revert_session: str
+    method_unrevert_session: str
     method_shell: str | None
     method_list_providers: str
     method_list_models: str
@@ -103,15 +115,35 @@ def build_extension_method_registry(
     from .handlers.interrupt_queries import handle_interrupt_query_request
     from .handlers.provider_discovery import handle_provider_discovery_request
     from .handlers.session_control import handle_session_control_request
+    from .handlers.session_lifecycle import handle_session_lifecycle_request
     from .handlers.session_queries import handle_session_query_request
     from .handlers.workspace_control import handle_workspace_control_request
 
     session_control_methods = {context.method_prompt_async, context.method_command}
     if context.method_shell is not None:
         session_control_methods.add(context.method_shell)
+    session_lifecycle_methods = {
+        context.method_session_status,
+        context.method_get_session,
+        context.method_get_session_children,
+        context.method_get_session_todo,
+        context.method_get_session_diff,
+        context.method_get_session_message,
+        context.method_fork_session,
+        context.method_share_session,
+        context.method_unshare_session,
+        context.method_summarize_session,
+        context.method_revert_session,
+        context.method_unrevert_session,
+    }
 
     return ExtensionMethodRegistry(
         (
+            ExtensionMethodSpec(
+                name="session_lifecycle",
+                methods=frozenset(session_lifecycle_methods),
+                handler=handle_session_lifecycle_request,
+            ),
             ExtensionMethodSpec(
                 name="session_query",
                 methods=frozenset(

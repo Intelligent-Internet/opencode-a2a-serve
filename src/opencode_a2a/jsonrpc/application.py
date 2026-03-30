@@ -77,10 +77,22 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
     ):
         super().__init__(*args, **kwargs)
         self._upstream_client = upstream_client
+        self._method_session_status = methods["status"]
         self._method_list_sessions = methods["list_sessions"]
+        self._method_get_session = methods["get_session"]
+        self._method_get_session_children = methods["get_session_children"]
+        self._method_get_session_todo = methods["get_session_todo"]
+        self._method_get_session_diff = methods["get_session_diff"]
+        self._method_get_session_message = methods["get_session_message"]
         self._method_get_session_messages = methods["get_session_messages"]
         self._method_prompt_async = methods["prompt_async"]
         self._method_command = methods["command"]
+        self._method_fork_session = methods["fork"]
+        self._method_share_session = methods["share"]
+        self._method_unshare_session = methods["unshare"]
+        self._method_summarize_session = methods["summarize"]
+        self._method_revert_session = methods["revert"]
+        self._method_unrevert_session = methods["unrevert"]
         self._method_shell = methods.get("shell")
         self._method_list_providers = methods["list_providers"]
         self._method_list_models = methods["list_models"]
@@ -120,10 +132,22 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._session_claim_release = cast(Callable[..., Awaitable[None]], session_claim_release)
         self._extension_handler_context = ExtensionHandlerContext(
             upstream_client=self._upstream_client,
+            method_session_status=self._method_session_status,
             method_list_sessions=self._method_list_sessions,
+            method_get_session=self._method_get_session,
+            method_get_session_children=self._method_get_session_children,
+            method_get_session_todo=self._method_get_session_todo,
+            method_get_session_diff=self._method_get_session_diff,
+            method_get_session_message=self._method_get_session_message,
             method_get_session_messages=self._method_get_session_messages,
             method_prompt_async=self._method_prompt_async,
             method_command=self._method_command,
+            method_fork_session=self._method_fork_session,
+            method_share_session=self._method_share_session,
+            method_unshare_session=self._method_unshare_session,
+            method_summarize_session=self._method_summarize_session,
+            method_revert_session=self._method_revert_session,
+            method_unrevert_session=self._method_unrevert_session,
             method_shell=self._method_shell,
             method_list_providers=self._method_list_providers,
             method_list_models=self._method_list_models,
