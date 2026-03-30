@@ -8,6 +8,9 @@ from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.types import TransportProtocol
 
 from opencode_a2a.server.application import (
+    AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL,
+    PUBLIC_AGENT_CARD_CACHE_CONTROL,
+    SESSION_QUERY_EXTENSION_URI,
     _normalize_log_level,
     build_agent_card,
     create_app,
@@ -86,6 +89,77 @@ def test_openapi_jsonrpc_examples_include_core_message_methods() -> None:
     assert "message/send" in methods
     assert "message/stream" in methods
     assert "message_send_file_input" in examples
+
+
+@pytest.mark.asyncio
+async def test_agent_card_routes_split_public_and_authenticated_extended_contracts(
+    monkeypatch,
+) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        public_card = await client.get("/.well-known/agent-card.json")
+        assert public_card.status_code == 200
+        assert public_card.headers["cache-control"] == PUBLIC_AGENT_CARD_CACHE_CONTROL
+        assert public_card.headers["etag"]
+        assert public_card.json()["supportsAuthenticatedExtendedCard"] is True
+
+        public_cached = await client.get(
+            "/.well-known/agent-card.json",
+            headers={"If-None-Match": public_card.headers["etag"]},
+        )
+        assert public_cached.status_code == 304
+
+        unauthorized_extended = await client.get("/agent/authenticatedExtendedCard")
+        assert unauthorized_extended.status_code == 401
+
+        extended_card = await client.get("/agent/authenticatedExtendedCard", headers=headers)
+        assert extended_card.status_code == 200
+        assert extended_card.headers["cache-control"] == AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
+        assert extended_card.headers["vary"] == "Authorization"
+        assert extended_card.headers["etag"]
+
+        extended_cached = await client.get(
+            "/agent/authenticatedExtendedCard",
+            headers={
+                **headers,
+                "If-None-Match": extended_card.headers["etag"],
+            },
+        )
+        assert extended_cached.status_code == 304
+
+        public_extensions = {
+            item["uri"]: item for item in public_card.json()["capabilities"]["extensions"]
+        }
+        extended_extensions = {
+            item["uri"]: item for item in extended_card.json()["capabilities"]["extensions"]
+        }
+        assert public_extensions[SESSION_QUERY_EXTENSION_URI].get("params") is None
+        assert extended_extensions[SESSION_QUERY_EXTENSION_URI]["params"]["methods"]["status"] == (
+            "opencode.sessions.status"
+        )
+        assert len(public_card.content) < len(extended_card.content)
+
+        rpc_card = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": "card-1",
+                "method": "agent/getAuthenticatedExtendedCard",
+                "params": {},
+            },
+        )
+        assert rpc_card.status_code == 200
+        assert (
+            rpc_card.json()["result"]["capabilities"]["extensions"][3]["uri"]
+            == SESSION_QUERY_EXTENSION_URI
+        )
 
 
 @pytest.mark.asyncio

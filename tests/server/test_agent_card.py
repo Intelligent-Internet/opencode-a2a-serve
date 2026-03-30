@@ -1,9 +1,12 @@
+import json
+
 from opencode_a2a.contracts.extensions import (
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
     build_service_behavior_contract_params,
 )
 from opencode_a2a.jsonrpc.application import SESSION_CONTEXT_PREFIX
+from opencode_a2a.server.agent_card import build_authenticated_extended_agent_card
 from opencode_a2a.server.application import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
@@ -31,13 +34,89 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     )
     assert "single-tenant, self-hosted coding workflows" in card.description
     assert card.capabilities.streaming is True
+    assert card.supports_authenticated_extended_card is True
     assert card.default_input_modes == ["text/plain", "application/octet-stream"]
     assert list(card.security_schemes.keys()) == ["bearerAuth"]
     assert card.security == [{"bearerAuth": []}]
 
 
+def test_public_agent_card_is_slimmed_but_keeps_core_shared_contract_hints() -> None:
+    public_card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    extended_card = build_authenticated_extended_agent_card(
+        make_settings(a2a_bearer_token="test-token")
+    )
+    ext_by_uri = {ext.uri: ext for ext in public_card.capabilities.extensions or []}
+
+    assert ext_by_uri[SESSION_BINDING_EXTENSION_URI].params == {
+        "metadata_field": "metadata.shared.session.id",
+        "behavior": "prefer_metadata_binding_else_create_session",
+        "supported_metadata": [
+            "shared.session.id",
+            "opencode.directory",
+            "opencode.workspace.id",
+        ],
+        "provider_private_metadata": [
+            "opencode.directory",
+            "opencode.workspace.id",
+        ],
+    }
+    assert ext_by_uri[MODEL_SELECTION_EXTENSION_URI].params == {
+        "metadata_field": "metadata.shared.model",
+        "behavior": "prefer_metadata_model_else_upstream_default",
+        "applies_to_methods": ["message/send", "message/stream"],
+        "supported_metadata": [
+            "shared.model.providerID",
+            "shared.model.modelID",
+        ],
+        "provider_private_metadata": [],
+        "fields": {
+            "providerID": "metadata.shared.model.providerID",
+            "modelID": "metadata.shared.model.modelID",
+        },
+    }
+    assert ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params == {
+        "methods": {
+            "reply_permission": "a2a.interrupt.permission.reply",
+            "reply_question": "a2a.interrupt.question.reply",
+            "reject_question": "a2a.interrupt.question.reject",
+        },
+        "supported_interrupt_events": [
+            "permission.asked",
+            "question.asked",
+        ],
+        "request_id_field": "metadata.shared.interrupt.request_id",
+    }
+
+    for uri in (
+        SESSION_QUERY_EXTENSION_URI,
+        PROVIDER_DISCOVERY_EXTENSION_URI,
+        WORKSPACE_CONTROL_EXTENSION_URI,
+        INTERRUPT_RECOVERY_EXTENSION_URI,
+        COMPATIBILITY_PROFILE_EXTENSION_URI,
+        WIRE_CONTRACT_EXTENSION_URI,
+    ):
+        assert ext_by_uri[uri].params is None
+
+    public_size = len(
+        json.dumps(
+            public_card.model_dump(mode="json", by_alias=True, exclude_none=True),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    extended_size = len(
+        json.dumps(
+            extended_card.model_dump(mode="json", by_alias=True, exclude_none=True),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    assert public_size < extended_size
+    assert public_size < 20000
+
+
 def test_agent_card_injects_profile_into_extensions() -> None:
-    card = build_agent_card(
+    card = build_authenticated_extended_agent_card(
         make_settings(
             a2a_bearer_token="test-token",
             a2a_project="alpha",
@@ -538,7 +617,7 @@ def test_agent_card_chat_examples_include_project_hint_when_configured() -> None
 
 
 def test_agent_card_contracts_include_shell_when_enabled() -> None:
-    card = build_agent_card(
+    card = build_authenticated_extended_agent_card(
         make_settings(a2a_bearer_token="test-token", a2a_enable_session_shell=True)
     )
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
@@ -588,7 +667,7 @@ def test_agent_card_skills_hide_shell_when_disabled_by_default() -> None:
 
 
 def test_agent_card_hides_shell_when_policy_disables_it() -> None:
-    card = build_agent_card(
+    card = build_authenticated_extended_agent_card(
         make_settings(
             a2a_bearer_token="test-token",
             a2a_enable_session_shell=True,

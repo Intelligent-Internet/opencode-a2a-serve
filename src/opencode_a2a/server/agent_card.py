@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -39,6 +41,14 @@ from ..contracts.extensions import (
 )
 from ..jsonrpc.application import SESSION_CONTEXT_PREFIX
 from ..profile.runtime import RuntimeProfile, build_runtime_profile
+
+
+def _select_public_extension_params(
+    params: dict[str, Any],
+    *,
+    keys: tuple[str, ...],
+) -> dict[str, Any]:
+    return {key: params[key] for key in keys if key in params}
 
 
 def _build_agent_card_description(settings: Settings, runtime_profile: RuntimeProfile) -> str:
@@ -125,22 +135,12 @@ def _build_workspace_control_skill_examples() -> list[str]:
     ]
 
 
-def build_agent_card(settings: Settings) -> AgentCard:
-    public_url = settings.a2a_public_url.rstrip("/")
-    base_url = public_url
-    runtime_profile = build_runtime_profile(settings)
-    security_schemes: dict[str, SecurityScheme] = {
-        "bearerAuth": SecurityScheme(
-            root=HTTPAuthSecurityScheme(
-                description="Bearer token authentication",
-                scheme="bearer",
-                bearer_format="opaque",
-            )
-        )
-    }
-    security: list[dict[str, list[str]]] = [{"bearerAuth": []}]
-    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
-
+def _build_agent_extensions(
+    *,
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> list[AgentExtension]:
     session_binding_extension_params = build_session_binding_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -173,10 +173,242 @@ def build_agent_card(settings: Settings) -> AgentCard:
         runtime_profile=runtime_profile,
     )
 
+    return [
+        AgentExtension(
+            uri=SESSION_BINDING_EXTENSION_URI,
+            required=False,
+            description=(
+                "Shared contract to bind A2A messages to an existing upstream "
+                "session when continuing a previous chat. Clients should pass "
+                "metadata.shared.session.id. The metadata.opencode.directory field "
+                "remains available as an OpenCode-private override under "
+                "server-side directory boundary validation."
+            ),
+            params=(
+                session_binding_extension_params
+                if include_detailed_contracts
+                else _select_public_extension_params(
+                    session_binding_extension_params,
+                    keys=(
+                        "metadata_field",
+                        "behavior",
+                        "supported_metadata",
+                        "provider_private_metadata",
+                    ),
+                )
+            ),
+        ),
+        AgentExtension(
+            uri=MODEL_SELECTION_EXTENSION_URI,
+            required=False,
+            description=(
+                "Shared contract for request-scoped upstream model selection on the "
+                "main chat path. Clients should pass metadata.shared.model with "
+                "providerID/modelID."
+            ),
+            params=(
+                model_selection_extension_params
+                if include_detailed_contracts
+                else _select_public_extension_params(
+                    model_selection_extension_params,
+                    keys=(
+                        "metadata_field",
+                        "behavior",
+                        "applies_to_methods",
+                        "supported_metadata",
+                        "provider_private_metadata",
+                        "fields",
+                    ),
+                )
+            ),
+        ),
+        AgentExtension(
+            uri=STREAMING_EXTENSION_URI,
+            required=False,
+            description=(
+                "Shared streaming metadata contract for canonical block hints, "
+                "timeline identity, usage, and interactive interrupt metadata."
+            ),
+            params=streaming_extension_params,
+        ),
+        AgentExtension(
+            uri=SESSION_QUERY_EXTENSION_URI,
+            required=False,
+            description=(
+                "Support OpenCode session lifecycle inspection, history queries, low-risk "
+                "session management, and async prompt injection via custom JSON-RPC "
+                "methods on the agent's A2A JSON-RPC interface."
+            ),
+            params=session_query_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=PROVIDER_DISCOVERY_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose OpenCode-specific provider/model discovery methods through "
+                "JSON-RPC extensions."
+            ),
+            params=provider_discovery_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=WORKSPACE_CONTROL_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose OpenCode-specific project/workspace/worktree control-plane "
+                "methods through JSON-RPC extensions."
+            ),
+            params=workspace_control_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=INTERRUPT_RECOVERY_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose provider-private interrupt recovery methods so clients can "
+                "list pending permission/question requests after reconnecting."
+            ),
+            params=interrupt_recovery_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=INTERRUPT_CALLBACK_EXTENSION_URI,
+            required=False,
+            description=(
+                "Handle interactive interrupt callbacks generated during "
+                "streaming through shared JSON-RPC methods."
+            ),
+            params=(
+                interrupt_callback_extension_params
+                if include_detailed_contracts
+                else _select_public_extension_params(
+                    interrupt_callback_extension_params,
+                    keys=("methods", "supported_interrupt_events", "request_id_field"),
+                )
+            ),
+        ),
+        AgentExtension(
+            uri=COMPATIBILITY_PROFILE_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose the A2A compatibility profile defining core baselines, "
+                "extension retention policies, declared service behaviors, and "
+                "deployment-conditional methods."
+            ),
+            params=compatibility_profile_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=WIRE_CONTRACT_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose the wire-level contract declaring supported JSON-RPC methods, "
+                "HTTP endpoints, declared service behaviors, and unified error "
+                "contracts."
+            ),
+            params=wire_contract_params if include_detailed_contracts else None,
+        ),
+    ]
+
+
+def _build_agent_skills(
+    *,
+    settings: Settings,
+    capability_snapshot: JsonRpcCapabilitySnapshot,
+) -> list[AgentSkill]:
+    return [
+        AgentSkill(
+            id="opencode.chat",
+            name="OpenCode Chat",
+            description=(
+                "Handle core A2A message/send and message/stream requests by routing "
+                "TextPart and FilePart inputs to OpenCode sessions with shared session "
+                "binding and optional request-scoped model selection."
+            ),
+            tags=["assistant", "coding", "opencode", "core-a2a", "portable"],
+            examples=_build_chat_examples(settings.a2a_project),
+        ),
+        AgentSkill(
+            id="opencode.sessions.query",
+            name="OpenCode Sessions Query",
+            description=(
+                "provider-private OpenCode session/history and session-control surface "
+                "exposed through JSON-RPC extensions."
+            ),
+            tags=["opencode", "sessions", "history", "provider-private"],
+            examples=_build_session_query_skill_examples(
+                capability_snapshot=capability_snapshot,
+            ),
+        ),
+        AgentSkill(
+            id="opencode.providers.query",
+            name="OpenCode Provider Catalog",
+            description=(
+                "provider-private OpenCode provider/model discovery surface exposed "
+                "through JSON-RPC extensions."
+            ),
+            tags=["opencode", "providers", "models", "provider-private"],
+            examples=[
+                "List available providers (method opencode.providers.list).",
+                "List available models for a provider (method opencode.models.list).",
+            ],
+        ),
+        AgentSkill(
+            id="opencode.workspace.control",
+            name="OpenCode Workspace Control",
+            description=(
+                "provider-private OpenCode project/workspace/worktree control surface "
+                "exposed through JSON-RPC extensions."
+            ),
+            tags=["opencode", "project", "workspace", "worktree", "provider-private"],
+            examples=_build_workspace_control_skill_examples(),
+        ),
+        AgentSkill(
+            id="opencode.interrupt.recovery",
+            name="OpenCode Interrupt Recovery",
+            description=(
+                "provider-private OpenCode interrupt recovery surface exposed through "
+                "JSON-RPC extensions."
+            ),
+            tags=["interrupt", "permission", "question", "provider-private"],
+            examples=_build_interrupt_recovery_skill_examples(),
+        ),
+        AgentSkill(
+            id="opencode.interrupt.callback",
+            name="Shared Interrupt Callback",
+            description=(
+                "Reply permission/question interrupts emitted during streaming via "
+                "JSON-RPC methods a2a.interrupt.permission.reply, "
+                "a2a.interrupt.question.reply, and a2a.interrupt.question.reject."
+            ),
+            tags=["interrupt", "permission", "question", "shared"],
+            examples=[
+                "Reply once/always/reject to a permission request by request_id.",
+                "Submit answers for a question request by request_id.",
+            ],
+        ),
+    ]
+
+
+def _build_agent_card(
+    settings: Settings,
+    *,
+    include_detailed_contracts: bool,
+) -> AgentCard:
+    public_url = settings.a2a_public_url.rstrip("/")
+    runtime_profile = build_runtime_profile(settings)
+    security_schemes: dict[str, SecurityScheme] = {
+        "bearerAuth": SecurityScheme(
+            root=HTTPAuthSecurityScheme(
+                description="Bearer token authentication",
+                scheme="bearer",
+                bearer_format="opaque",
+            )
+        )
+    }
+    security: list[dict[str, list[str]]] = [{"bearerAuth": []}]
+    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+
     return AgentCard(
         name=settings.a2a_title,
         description=_build_agent_card_description(settings, runtime_profile),
-        url=base_url,
+        url=public_url,
         documentation_url=settings.a2a_documentation_url,
         version=settings.a2a_version,
         protocol_version=settings.a2a_protocol_version,
@@ -185,182 +417,29 @@ def build_agent_card(settings: Settings) -> AgentCard:
         default_output_modes=["text/plain"],
         capabilities=AgentCapabilities(
             streaming=True,
-            extensions=[
-                AgentExtension(
-                    uri=SESSION_BINDING_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Shared contract to bind A2A messages to an existing upstream "
-                        "session when continuing a previous chat. Clients should pass "
-                        "metadata.shared.session.id. The metadata.opencode.directory field "
-                        "remains available as an OpenCode-private override under "
-                        "server-side directory boundary validation."
-                    ),
-                    params=session_binding_extension_params,
-                ),
-                AgentExtension(
-                    uri=MODEL_SELECTION_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Shared contract for request-scoped upstream model selection on the "
-                        "main chat path. Clients should pass metadata.shared.model with "
-                        "providerID/modelID."
-                    ),
-                    params=model_selection_extension_params,
-                ),
-                AgentExtension(
-                    uri=STREAMING_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Shared streaming metadata contract for canonical block hints, "
-                        "timeline identity, usage, and interactive interrupt metadata."
-                    ),
-                    params=streaming_extension_params,
-                ),
-                AgentExtension(
-                    uri=SESSION_QUERY_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Support OpenCode session lifecycle inspection, history queries, low-risk "
-                        "session management, and async prompt injection via custom JSON-RPC "
-                        "methods on the agent's A2A JSON-RPC interface."
-                    ),
-                    params=session_query_extension_params,
-                ),
-                AgentExtension(
-                    uri=PROVIDER_DISCOVERY_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Expose OpenCode-specific provider/model discovery methods through "
-                        "JSON-RPC extensions."
-                    ),
-                    params=provider_discovery_extension_params,
-                ),
-                AgentExtension(
-                    uri=WORKSPACE_CONTROL_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Expose OpenCode-specific project/workspace/worktree control-plane "
-                        "methods through JSON-RPC extensions."
-                    ),
-                    params=workspace_control_extension_params,
-                ),
-                AgentExtension(
-                    uri=INTERRUPT_RECOVERY_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Expose provider-private interrupt recovery methods so clients can "
-                        "list pending permission/question requests after reconnecting."
-                    ),
-                    params=interrupt_recovery_extension_params,
-                ),
-                AgentExtension(
-                    uri=INTERRUPT_CALLBACK_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Handle interactive interrupt callbacks generated during "
-                        "streaming through shared JSON-RPC methods."
-                    ),
-                    params=interrupt_callback_extension_params,
-                ),
-                AgentExtension(
-                    uri=COMPATIBILITY_PROFILE_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Expose the A2A compatibility profile defining core baselines, "
-                        "extension retention policies, declared service behaviors, and "
-                        "deployment-conditional methods."
-                    ),
-                    params=compatibility_profile_params,
-                ),
-                AgentExtension(
-                    uri=WIRE_CONTRACT_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Expose the wire-level contract declaring supported JSON-RPC methods, "
-                        "HTTP endpoints, declared service behaviors, and unified error "
-                        "contracts."
-                    ),
-                    params=wire_contract_params,
-                ),
-            ],
+            extensions=_build_agent_extensions(
+                settings=settings,
+                runtime_profile=runtime_profile,
+                include_detailed_contracts=include_detailed_contracts,
+            ),
         ),
-        skills=[
-            AgentSkill(
-                id="opencode.chat",
-                name="OpenCode Chat",
-                description=(
-                    "Handle core A2A message/send and message/stream requests by routing "
-                    "TextPart and FilePart inputs to OpenCode sessions with shared session "
-                    "binding and optional request-scoped model selection."
-                ),
-                tags=["assistant", "coding", "opencode", "core-a2a", "portable"],
-                examples=_build_chat_examples(settings.a2a_project),
-            ),
-            AgentSkill(
-                id="opencode.sessions.query",
-                name="OpenCode Sessions Query",
-                description=(
-                    "provider-private OpenCode session/history and session-control surface "
-                    "exposed through JSON-RPC extensions."
-                ),
-                tags=["opencode", "sessions", "history", "provider-private"],
-                examples=_build_session_query_skill_examples(
-                    capability_snapshot=capability_snapshot,
-                ),
-            ),
-            AgentSkill(
-                id="opencode.providers.query",
-                name="OpenCode Provider Catalog",
-                description=(
-                    "provider-private OpenCode provider/model discovery surface exposed "
-                    "through JSON-RPC extensions."
-                ),
-                tags=["opencode", "providers", "models", "provider-private"],
-                examples=[
-                    "List available providers (method opencode.providers.list).",
-                    "List available models for a provider (method opencode.models.list).",
-                ],
-            ),
-            AgentSkill(
-                id="opencode.workspace.control",
-                name="OpenCode Workspace Control",
-                description=(
-                    "provider-private OpenCode project/workspace/worktree control surface "
-                    "exposed through JSON-RPC extensions."
-                ),
-                tags=["opencode", "project", "workspace", "worktree", "provider-private"],
-                examples=_build_workspace_control_skill_examples(),
-            ),
-            AgentSkill(
-                id="opencode.interrupt.recovery",
-                name="OpenCode Interrupt Recovery",
-                description=(
-                    "provider-private OpenCode interrupt recovery surface exposed through "
-                    "JSON-RPC extensions."
-                ),
-                tags=["interrupt", "permission", "question", "provider-private"],
-                examples=_build_interrupt_recovery_skill_examples(),
-            ),
-            AgentSkill(
-                id="opencode.interrupt.callback",
-                name="Shared Interrupt Callback",
-                description=(
-                    "Reply permission/question interrupts emitted during streaming via "
-                    "JSON-RPC methods a2a.interrupt.permission.reply, "
-                    "a2a.interrupt.question.reply, and a2a.interrupt.question.reject."
-                ),
-                tags=["interrupt", "permission", "question", "shared"],
-                examples=[
-                    "Reply once/always/reject to a permission request by request_id.",
-                    "Submit answers for a question request by request_id.",
-                ],
-            ),
-        ],
+        skills=_build_agent_skills(
+            settings=settings,
+            capability_snapshot=capability_snapshot,
+        ),
+        supports_authenticated_extended_card=True,
         additional_interfaces=[
-            AgentInterface(transport=TransportProtocol.http_json, url=base_url),
-            AgentInterface(transport=TransportProtocol.jsonrpc, url=base_url),
+            AgentInterface(transport=TransportProtocol.http_json, url=public_url),
+            AgentInterface(transport=TransportProtocol.jsonrpc, url=public_url),
         ],
         security_schemes=security_schemes,
         security=security,
     )
+
+
+def build_agent_card(settings: Settings) -> AgentCard:
+    return _build_agent_card(settings, include_detailed_contracts=False)
+
+
+def build_authenticated_extended_agent_card(settings: Settings) -> AgentCard:
+    return _build_agent_card(settings, include_detailed_contracts=True)

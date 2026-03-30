@@ -11,6 +11,9 @@ JSON-RPC extension details; README stays at overview level.
   - HTTP+JSON (REST endpoints such as `/v1/message:send`)
   - JSON-RPC (`POST /`)
 - Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
+- The public Agent Card is intentionally slimmed to the minimum discovery surface.
+- Detailed extension contracts and provider-private method metadata are served through the authenticated extended card endpoint `/agent/authenticatedExtendedCard`.
+- Agent Card responses emit `ETag` and `Cache-Control`; clients should revalidate cached cards instead of repeatedly fetching full payloads.
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload usually uses `message.content` and role values like `ROLE_USER`
   - JSON-RPC `message/send` payload uses `params.message.parts` and role values `user` / `agent`
@@ -89,6 +92,9 @@ Key variables to understand protocol behavior:
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
 - Runtime authentication also applies to `/health`; the public unauthenticated
   discovery surface remains `/.well-known/agent-card.json` and `/.well-known/agent.json`.
+- The authenticated extended card endpoint `/agent/authenticatedExtendedCard`
+  is bearer-token protected and returns the detailed extension contracts that
+  are intentionally omitted from the public discovery card.
 - The same outbound client flags are also honored by the server-side embedded
   A2A client used for peer calls and `a2a_call` tool execution:
   - `A2A_CLIENT_TIMEOUT_SECONDS`
