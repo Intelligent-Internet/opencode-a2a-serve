@@ -19,15 +19,7 @@ class OpencodeFileInputPart(TypedDict, total=False):
     filename: str
 
 
-class OpencodeToolResultPart(TypedDict, total=False):
-    type: Literal["tool"]
-    tool: str
-    call_id: str
-    output: str
-    error: str
-
-
-OpencodeInputPart = OpencodeTextInputPart | OpencodeFileInputPart | OpencodeToolResultPart
+OpencodeInputPart = OpencodeTextInputPart | OpencodeFileInputPart
 
 
 def extract_text_from_a2a_parts(parts: Any) -> str:

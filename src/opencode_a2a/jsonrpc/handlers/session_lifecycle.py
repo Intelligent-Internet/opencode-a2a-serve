@@ -386,9 +386,7 @@ async def handle_session_lifecycle_request(
             raw_items = _extract_raw_items(raw_result, kind="child sessions")
             result = {
                 "items": [
-                    task
-                    for item in raw_items
-                    if (task := _as_a2a_session_task(item)) is not None
+                    task for item in raw_items if (task := _as_a2a_session_task(item)) is not None
                 ]
             }
         elif method == context.method_get_session_todo:
