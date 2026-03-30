@@ -2,6 +2,9 @@
 
 This document is the stable specification surface referenced by the extension
 URIs published in the Agent Card.
+It is intentionally a compact URI/spec index, not the main consumer guide. For
+runtime behavior, request/response examples, and client integration guidance,
+see [`guide.md`](./guide.md).
 
 ## SDK Compatibility Note
 
