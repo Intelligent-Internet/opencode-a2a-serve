@@ -46,6 +46,7 @@ from a2a.utils.errors import ServerError
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic_settings import BaseSettings
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import StreamingResponse
 
 from ..client import A2AClient
@@ -116,6 +117,7 @@ logger = logging.getLogger(__name__)
 TASK_STORE_ERROR_TYPE = "TASK_STORE_UNAVAILABLE"
 PUBLIC_AGENT_CARD_CACHE_CONTROL = "public, max-age=300"
 AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL = "private, max-age=300"
+AGENT_CARD_GZIP_MINIMUM_SIZE = 1024
 
 __all__ = [
     "_RequestBodyTooLargeError",
@@ -514,7 +516,7 @@ def _agent_card_response_bytes(card) -> bytes:
 
 
 def _build_agent_card_etag(card) -> str:
-    return f'"{hashlib.sha256(_agent_card_response_bytes(card)).hexdigest()}"'
+    return f'W/"{hashlib.sha256(_agent_card_response_bytes(card)).hexdigest()}"'
 
 
 def _etag_matches(if_none_match: str | None, etag: str) -> bool:
@@ -522,6 +524,22 @@ def _etag_matches(if_none_match: str | None, etag: str) -> bool:
         return False
     candidates = {item.strip() for item in if_none_match.split(",") if item.strip()}
     return "*" in candidates or etag in candidates
+
+
+def _merge_vary(*values: str) -> str:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for item in value.split(","):
+            normalized = item.strip()
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(normalized)
+    return ", ".join(ordered)
 
 
 class A2AClientManager:
@@ -787,6 +805,7 @@ def create_app(settings: Settings) -> FastAPI:
         version=settings.a2a_version,
         lifespan=lifespan,
     )
+    app.add_middleware(GZipMiddleware, minimum_size=AGENT_CARD_GZIP_MINIMUM_SIZE)
     jsonrpc_app.add_routes_to_app(app)
     for route, callback in rest_adapter.routes().items():
         app.add_api_route(route[0], callback, methods=[route[1]])
@@ -857,6 +876,7 @@ def create_app(settings: Settings) -> FastAPI:
                 headers={
                     "ETag": public_card_etag,
                     "Cache-Control": PUBLIC_AGENT_CARD_CACHE_CONTROL,
+                    "Vary": "Accept-Encoding",
                 },
             )
 
@@ -867,11 +887,19 @@ def create_app(settings: Settings) -> FastAPI:
         if is_public_card:
             response.headers["ETag"] = public_card_etag
             response.headers["Cache-Control"] = PUBLIC_AGENT_CARD_CACHE_CONTROL
+            response.headers["Vary"] = _merge_vary(
+                response.headers.get("Vary", ""),
+                "Accept-Encoding",
+            )
             return response
 
         response.headers["ETag"] = extended_card_etag
         response.headers["Cache-Control"] = AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
-        response.headers["Vary"] = "Authorization"
+        response.headers["Vary"] = _merge_vary(
+            response.headers.get("Vary", ""),
+            "Authorization",
+            "Accept-Encoding",
+        )
         if _etag_matches(request.headers.get("if-none-match"), extended_card_etag):
             return Response(status_code=304, headers=dict(response.headers))
         return response

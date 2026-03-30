@@ -107,6 +107,7 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         assert public_card.status_code == 200
         assert public_card.headers["cache-control"] == PUBLIC_AGENT_CARD_CACHE_CONTROL
         assert public_card.headers["etag"]
+        assert public_card.headers["vary"] == "Accept-Encoding"
         assert public_card.json()["supportsAuthenticatedExtendedCard"] is True
 
         public_cached = await client.get(
@@ -121,7 +122,9 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         extended_card = await client.get("/agent/authenticatedExtendedCard", headers=headers)
         assert extended_card.status_code == 200
         assert extended_card.headers["cache-control"] == AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
-        assert extended_card.headers["vary"] == "Authorization"
+        assert {
+            value.strip() for value in extended_card.headers["vary"].split(",") if value.strip()
+        } == {"Authorization", "Accept-Encoding"}
         assert extended_card.headers["etag"]
 
         extended_cached = await client.get(
@@ -160,6 +163,27 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
             rpc_card.json()["result"]["capabilities"]["extensions"][3]["uri"]
             == SESSION_QUERY_EXTENSION_URI
         )
+
+
+@pytest.mark.asyncio
+async def test_authenticated_extended_card_supports_gzip_encoding(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/agent/authenticatedExtendedCard",
+            headers={
+                "Authorization": "Bearer test-token",
+                "Accept-Encoding": "gzip",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers.get("content-encoding") == "gzip"
 
 
 @pytest.mark.asyncio

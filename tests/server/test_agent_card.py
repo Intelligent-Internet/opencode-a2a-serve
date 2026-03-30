@@ -47,6 +47,9 @@ def test_public_agent_card_is_slimmed_but_keeps_core_shared_contract_hints() -> 
     )
     ext_by_uri = {ext.uri: ext for ext in public_card.capabilities.extensions or []}
 
+    for uri in ext_by_uri:
+        assert uri.startswith("https://github.com/Intelligent-Internet/opencode-a2a/blob/main/")
+
     assert ext_by_uri[SESSION_BINDING_EXTENSION_URI].params == {
         "metadata_field": "metadata.shared.session.id",
         "behavior": "prefer_metadata_binding_else_create_session",
