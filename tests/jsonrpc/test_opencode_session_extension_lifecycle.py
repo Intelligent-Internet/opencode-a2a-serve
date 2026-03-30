@@ -1,4 +1,5 @@
 import hashlib
+from pathlib import Path
 
 import httpx
 import pytest
@@ -258,7 +259,7 @@ async def test_session_lifecycle_summarize_succeeds_and_claims_owner(monkeypatch
         "modelID": "gpt-5",
         "auto": True,
     }
-    assert dummy.lifecycle_calls[0]["directory"].endswith("/opencode-a2a-serve")
+    assert Path(dummy.lifecycle_calls[0]["directory"]).resolve() == Path.cwd().resolve()
     assert dummy.lifecycle_calls[0]["workspace_id"] is None
 
     claim_result = await _jsonrpc_app(app)._session_claim(  # noqa: SLF001
