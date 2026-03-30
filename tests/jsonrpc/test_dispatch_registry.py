@@ -24,7 +24,12 @@ async def test_extension_registry_tracks_configured_methods(monkeypatch) -> None
     )
 
     registry_methods = _jsonrpc_app(app)._extension_method_registry.methods()  # noqa: SLF001
+    assert "opencode.sessions.status" in registry_methods
     assert "opencode.sessions.list" in registry_methods
+    assert "opencode.sessions.fork" in registry_methods
+    assert "opencode.sessions.summarize" in registry_methods
+    assert "opencode.sessions.revert" in registry_methods
+    assert "opencode.sessions.unrevert" in registry_methods
     assert "opencode.providers.list" in registry_methods
     assert "opencode.projects.list" in registry_methods
     assert "opencode.permissions.list" in registry_methods

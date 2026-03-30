@@ -183,6 +183,22 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "prompt_async": "opencode.sessions.prompt_async",
         "command": "opencode.sessions.command",
     }
+    assert session_query.params["lifecycle_methods"] == {
+        "status": "opencode.sessions.status",
+        "get_session": "opencode.sessions.get",
+        "get_session_children": "opencode.sessions.children",
+        "get_session_todo": "opencode.sessions.todo",
+        "get_session_diff": "opencode.sessions.diff",
+        "get_session_message": "opencode.sessions.messages.get",
+        "fork": "opencode.sessions.fork",
+        "share": "opencode.sessions.share",
+        "unshare": "opencode.sessions.unshare",
+        "summarize": "opencode.sessions.summarize",
+        "revert": "opencode.sessions.revert",
+        "unrevert": "opencode.sessions.unrevert",
+    }
+    assert session_query.params["methods"]["status"] == "opencode.sessions.status"
+    assert session_query.params["methods"]["get_session"] == "opencode.sessions.get"
     assert session_query.params["methods"]["prompt_async"] == "opencode.sessions.prompt_async"
     assert session_query.params["methods"]["command"] == "opencode.sessions.command"
     assert "shell" not in session_query.params["methods"]
@@ -203,8 +219,52 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     ]
     prompt_contract = session_query.params["method_contracts"]["opencode.sessions.prompt_async"]
     command_contract = session_query.params["method_contracts"]["opencode.sessions.command"]
+    status_contract = session_query.params["method_contracts"]["opencode.sessions.status"]
+    get_contract = session_query.params["method_contracts"]["opencode.sessions.get"]
+    diff_contract = session_query.params["method_contracts"]["opencode.sessions.diff"]
+    message_get_contract = session_query.params["method_contracts"][
+        "opencode.sessions.messages.get"
+    ]
+    fork_contract = session_query.params["method_contracts"]["opencode.sessions.fork"]
+    summarize_contract = session_query.params["method_contracts"]["opencode.sessions.summarize"]
+    revert_contract = session_query.params["method_contracts"]["opencode.sessions.revert"]
+    unrevert_contract = session_query.params["method_contracts"]["opencode.sessions.unrevert"]
     list_contract = session_query.params["method_contracts"]["opencode.sessions.list"]
     messages_contract = session_query.params["method_contracts"]["opencode.sessions.messages.list"]
+    assert status_contract["result"]["fields"] == ["items"]
+    assert get_contract["params"]["required"] == ["session_id"]
+    assert get_contract["result"]["fields"] == ["item"]
+    assert diff_contract["params"]["optional"] == [
+        "message_id",
+        "directory",
+        "metadata.opencode.directory",
+        "metadata.opencode.workspace.id",
+    ]
+    assert message_get_contract["params"]["required"] == ["session_id", "message_id"]
+    assert fork_contract["params"]["optional"] == [
+        "request.messageID",
+        "directory",
+        "metadata.opencode.directory",
+        "metadata.opencode.workspace.id",
+    ]
+    assert summarize_contract["params"]["optional"] == [
+        "request.providerID",
+        "request.modelID",
+        "request.auto",
+        "directory",
+        "metadata.opencode.directory",
+        "metadata.opencode.workspace.id",
+    ]
+    assert summarize_contract["result"]["fields"] == ["ok", "session_id"]
+    assert revert_contract["params"]["required"] == ["session_id", "request.messageID"]
+    assert revert_contract["params"]["optional"] == [
+        "request.partID",
+        "directory",
+        "metadata.opencode.directory",
+        "metadata.opencode.workspace.id",
+    ]
+    assert revert_contract["result"]["items_type"] == "SessionSummary"
+    assert unrevert_contract["result"]["fields"] == ["item"]
     assert prompt_contract["params"]["required"] == ["session_id", "request.parts"]
     assert prompt_contract["result"]["fields"] == ["ok", "session_id"]
     assert command_contract["params"]["required"] == [
@@ -236,6 +296,9 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert messages_contract["result"]["fields"] == ["items", "next_cursor"]
     assert list_contract["notification_response_status"] == 204
     assert messages_contract["notification_response_status"] == 204
+    assert summarize_contract["notification_response_status"] == 204
+    assert revert_contract["notification_response_status"] == 204
+    assert unrevert_contract["notification_response_status"] == 204
     assert prompt_contract["notification_response_status"] == 204
     assert "result_envelope" not in session_query.params
     assert "opencode.sessions.shell" not in session_query.params["method_contracts"]

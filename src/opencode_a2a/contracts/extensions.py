@@ -124,6 +124,13 @@ SESSION_QUERY_PAGINATION_PARAMS: tuple[str, ...] = ("limit", "before")
 SESSION_QUERY_PAGINATION_UNSUPPORTED: tuple[str, ...] = ("cursor", "page", "size")
 
 SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
+    "status": SessionQueryMethodContract(
+        method="opencode.sessions.status",
+        optional_params=("directory", OPENCODE_WORKSPACE_METADATA_FIELD),
+        result_fields=("items",),
+        items_type="SessionStatusSummary[]",
+        notification_response_status=204,
+    ),
     "list_sessions": SessionQueryMethodContract(
         method="opencode.sessions.list",
         optional_params=(
@@ -161,6 +168,67 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         notification_response_status=204,
         pagination_mode=SESSION_QUERY_PAGINATION_MODE,
     ),
+    "get_session": SessionQueryMethodContract(
+        method="opencode.sessions.get",
+        required_params=("session_id",),
+        optional_params=(
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("item",),
+        items_type="Task",
+        notification_response_status=204,
+    ),
+    "get_session_children": SessionQueryMethodContract(
+        method="opencode.sessions.children",
+        required_params=("session_id",),
+        optional_params=(
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("items",),
+        items_type="Task[]",
+        notification_response_status=204,
+    ),
+    "get_session_todo": SessionQueryMethodContract(
+        method="opencode.sessions.todo",
+        required_params=("session_id",),
+        optional_params=(
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("items",),
+        items_type="Todo[]",
+        notification_response_status=204,
+    ),
+    "get_session_diff": SessionQueryMethodContract(
+        method="opencode.sessions.diff",
+        required_params=("session_id",),
+        optional_params=(
+            "message_id",
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("items",),
+        items_type="FileDiff[]",
+        notification_response_status=204,
+    ),
+    "get_session_message": SessionQueryMethodContract(
+        method="opencode.sessions.messages.get",
+        required_params=("session_id", "message_id"),
+        optional_params=(
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("item",),
+        items_type="Message",
+        notification_response_status=204,
+    ),
     "prompt_async": SessionQueryMethodContract(
         method="opencode.sessions.prompt_async",
         required_params=("session_id", "request.parts"),
@@ -194,6 +262,82 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         result_fields=("item",),
         notification_response_status=204,
     ),
+    "fork": SessionQueryMethodContract(
+        method="opencode.sessions.fork",
+        required_params=("session_id",),
+        optional_params=(
+            "request.messageID",
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("item",),
+        items_type="SessionSummary",
+        notification_response_status=204,
+    ),
+    "share": SessionQueryMethodContract(
+        method="opencode.sessions.share",
+        required_params=("session_id",),
+        optional_params=(
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("item",),
+        items_type="SessionSummary",
+        notification_response_status=204,
+    ),
+    "unshare": SessionQueryMethodContract(
+        method="opencode.sessions.unshare",
+        required_params=("session_id",),
+        optional_params=(
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("item",),
+        items_type="SessionSummary",
+        notification_response_status=204,
+    ),
+    "summarize": SessionQueryMethodContract(
+        method="opencode.sessions.summarize",
+        required_params=("session_id",),
+        optional_params=(
+            "request.providerID",
+            "request.modelID",
+            "request.auto",
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("ok", "session_id"),
+        notification_response_status=204,
+    ),
+    "revert": SessionQueryMethodContract(
+        method="opencode.sessions.revert",
+        required_params=("session_id", "request.messageID"),
+        optional_params=(
+            "request.partID",
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("item",),
+        items_type="SessionSummary",
+        notification_response_status=204,
+    ),
+    "unrevert": SessionQueryMethodContract(
+        method="opencode.sessions.unrevert",
+        required_params=("session_id",),
+        optional_params=(
+            "directory",
+            OPENCODE_DIRECTORY_METADATA_FIELD,
+            OPENCODE_WORKSPACE_METADATA_FIELD,
+        ),
+        result_fields=("item",),
+        items_type="SessionSummary",
+        notification_response_status=204,
+    ),
     "shell": SessionQueryMethodContract(
         method="opencode.sessions.shell",
         required_params=("session_id", "request.agent", "request.command"),
@@ -213,6 +357,23 @@ SESSION_QUERY_METHODS: dict[str, str] = {
 SESSION_CONTROL_METHOD_KEYS: tuple[str, ...] = ("prompt_async", "command", "shell")
 SESSION_CONTROL_METHODS: dict[str, str] = {
     key: SESSION_QUERY_METHODS[key] for key in SESSION_CONTROL_METHOD_KEYS
+}
+SESSION_LIFECYCLE_METHOD_KEYS: tuple[str, ...] = (
+    "status",
+    "get_session",
+    "get_session_children",
+    "get_session_todo",
+    "get_session_diff",
+    "get_session_message",
+    "fork",
+    "share",
+    "unshare",
+    "summarize",
+    "revert",
+    "unrevert",
+)
+SESSION_LIFECYCLE_METHODS: dict[str, str] = {
+    key: SESSION_QUERY_METHODS[key] for key in SESSION_LIFECYCLE_METHOD_KEYS
 }
 
 CORE_JSONRPC_METHODS: tuple[str, ...] = tuple(JSONRPCApplication.METHOD_TO_MODEL)
@@ -509,6 +670,9 @@ class JsonRpcCapabilitySnapshot:
             methods.pop("shell", None)
         return methods
 
+    def session_lifecycle_methods(self) -> dict[str, str]:
+        return dict(SESSION_LIFECYCLE_METHODS)
+
     def provider_discovery_methods(self) -> dict[str, str]:
         return dict(PROVIDER_DISCOVERY_METHODS)
 
@@ -524,10 +688,7 @@ class JsonRpcCapabilitySnapshot:
     def supported_jsonrpc_methods(self) -> list[str]:
         methods = [
             *CORE_JSONRPC_METHODS,
-            SESSION_QUERY_METHODS["list_sessions"],
-            SESSION_QUERY_METHODS["get_session_messages"],
-            SESSION_CONTROL_METHODS["prompt_async"],
-            SESSION_CONTROL_METHODS["command"],
+            *(method for key, method in SESSION_QUERY_METHODS.items() if key != "shell"),
             *PROVIDER_DISCOVERY_METHODS.values(),
             *WORKSPACE_CONTROL_METHODS.values(),
             *INTERRUPT_RECOVERY_METHODS.values(),
@@ -539,10 +700,7 @@ class JsonRpcCapabilitySnapshot:
 
     def extension_jsonrpc_methods(self) -> list[str]:
         methods = [
-            SESSION_QUERY_METHODS["list_sessions"],
-            SESSION_QUERY_METHODS["get_session_messages"],
-            SESSION_CONTROL_METHODS["prompt_async"],
-            SESSION_CONTROL_METHODS["command"],
+            *(method for key, method in SESSION_QUERY_METHODS.items() if key != "shell"),
             *PROVIDER_DISCOVERY_METHODS.values(),
             *WORKSPACE_CONTROL_METHODS.values(),
             *INTERRUPT_RECOVERY_METHODS.values(),
@@ -749,6 +907,7 @@ def build_session_query_extension_params(
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     methods = capability_snapshot.session_query_methods()
     control_methods = capability_snapshot.session_control_methods()
+    lifecycle_methods = capability_snapshot.session_lifecycle_methods()
     active_session_query_methods = set(methods.values())
 
     method_contracts: dict[str, Any] = {}
@@ -782,6 +941,7 @@ def build_session_query_extension_params(
     return {
         "methods": methods,
         "control_methods": control_methods,
+        "lifecycle_methods": lifecycle_methods,
         "control_method_flags": capability_snapshot.control_method_flags(),
         "profile": runtime_profile.summary_dict(),
         "pagination": {
@@ -1074,12 +1234,8 @@ def build_compatibility_profile_params(
                 "retention": "stable",
                 "extension_uri": SESSION_QUERY_EXTENSION_URI,
             }
-            for method in (
-                SESSION_QUERY_METHODS["list_sessions"],
-                SESSION_QUERY_METHODS["get_session_messages"],
-                SESSION_CONTROL_METHODS["prompt_async"],
-                SESSION_CONTROL_METHODS["command"],
-            )
+            for key, method in SESSION_QUERY_METHODS.items()
+            if key != "shell"
         }
     )
     method_retention.update(capability_snapshot.conditional_method_retention())

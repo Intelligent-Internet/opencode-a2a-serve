@@ -230,6 +230,18 @@ class OpencodeUpstreamClient:
         )
         return self._require_boolean_response(endpoint=endpoint, payload=data)
 
+    async def _delete_json(
+        self,
+        path: str,
+        *,
+        endpoint: str,
+        params: Mapping[str, Any] | None = None,
+    ) -> Any:
+        async with self._request_budget.reserve(operation=endpoint):
+            response = await self._client.delete(path, params=params)
+            response.raise_for_status()
+            return self._decode_json_response(response, endpoint=endpoint)
+
     async def remember_interrupt_request(
         self,
         *,
@@ -432,6 +444,71 @@ class OpencodeUpstreamClient:
             raise RuntimeError("OpenCode session response missing id")
         return session_id
 
+    async def session_status(
+        self,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._get_json(
+            "/session/status",
+            endpoint="/session/status",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+        )
+
+    async def get_session(
+        self,
+        session_id: str,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._get_json(
+            f"/session/{session_id}",
+            endpoint="/session/{sessionID}",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+        )
+
+    async def list_child_sessions(
+        self,
+        session_id: str,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._get_json(
+            f"/session/{session_id}/children",
+            endpoint="/session/{sessionID}/children",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+        )
+
+    async def get_session_todo(
+        self,
+        session_id: str,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._get_json(
+            f"/session/{session_id}/todo",
+            endpoint="/session/{sessionID}/todo",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+        )
+
+    async def get_session_diff(
+        self,
+        session_id: str,
+        *,
+        params: dict[str, Any] | None = None,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._get_json(
+            f"/session/{session_id}/diff",
+            endpoint="/session/{sessionID}/diff",
+            params=self._merge_params(params, directory=directory, workspace_id=workspace_id),
+        )
+
     async def abort_session(
         self,
         session_id: str,
@@ -483,6 +560,20 @@ class OpencodeUpstreamClient:
                     next_cursor = normalized_cursor
             return OpencodeMessagePage(payload=payload, next_cursor=next_cursor)
 
+    async def get_message(
+        self,
+        session_id: str,
+        message_id: str,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._get_json(
+            f"/session/{session_id}/message/{message_id}",
+            endpoint="/session/{sessionID}/message/{messageID}",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+        )
+
     async def session_prompt_async(
         self,
         session_id: str,
@@ -532,6 +623,90 @@ class OpencodeUpstreamClient:
             endpoint="/session/{sessionID}/shell",
             params=self._query_params(directory=directory, workspace_id=workspace_id),
             json_body=request,
+        )
+
+    async def fork_session(
+        self,
+        session_id: str,
+        request: dict[str, Any] | None = None,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._post_json(
+            f"/session/{session_id}/fork",
+            endpoint="/session/{sessionID}/fork",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+            json_body=request or {},
+        )
+
+    async def share_session(
+        self,
+        session_id: str,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._post_json(
+            f"/session/{session_id}/share",
+            endpoint="/session/{sessionID}/share",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+        )
+
+    async def unshare_session(
+        self,
+        session_id: str,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._delete_json(
+            f"/session/{session_id}/share",
+            endpoint="/session/{sessionID}/share",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+        )
+
+    async def summarize_session(
+        self,
+        session_id: str,
+        request: dict[str, Any] | None = None,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> bool:
+        return await self._post_boolean(
+            f"/session/{session_id}/summarize",
+            endpoint="/session/{sessionID}/summarize",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+            json_body=request if request is not None else _UNSET,
+        )
+
+    async def revert_session(
+        self,
+        session_id: str,
+        request: dict[str, Any],
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._post_json(
+            f"/session/{session_id}/revert",
+            endpoint="/session/{sessionID}/revert",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
+            json_body=request,
+        )
+
+    async def unrevert_session(
+        self,
+        session_id: str,
+        *,
+        directory: str | None = None,
+        workspace_id: str | None = None,
+    ) -> Any:
+        return await self._post_json(
+            f"/session/{session_id}/unrevert",
+            endpoint="/session/{sessionID}/unrevert",
+            params=self._query_params(directory=directory, workspace_id=workspace_id),
         )
 
     async def list_provider_catalog(

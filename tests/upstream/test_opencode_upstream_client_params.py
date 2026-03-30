@@ -137,6 +137,45 @@ async def test_list_messages_reads_next_cursor_from_headers(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_session_lifecycle_read_methods_forward_expected_endpoints(monkeypatch):
+    client = OpencodeUpstreamClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            opencode_workspace_root="/safe",
+            opencode_timeout=1.0,
+            a2a_log_level="DEBUG",
+            a2a_log_payloads=False,
+        )
+    )
+
+    seen: list[tuple[str, str, dict[str, object] | None]] = []
+
+    async def fake_get(path: str, *, params=None, **_kwargs):
+        seen.append(("GET", path, params))
+        return _DummyResponse({})
+
+    monkeypatch.setattr(client._client, "get", fake_get)
+
+    await client.session_status()
+    await client.get_session("sess-1", workspace_id="wrk-1")
+    await client.list_child_sessions("sess-1")
+    await client.get_session_todo("sess-1")
+    await client.get_session_diff("sess-1", params={"messageID": "msg-1"})
+    await client.get_message("sess-1", "msg-1")
+
+    assert seen == [
+        ("GET", "/session/status", {"directory": "/safe"}),
+        ("GET", "/session/sess-1", {"workspace": "wrk-1"}),
+        ("GET", "/session/sess-1/children", {"directory": "/safe"}),
+        ("GET", "/session/sess-1/todo", {"directory": "/safe"}),
+        ("GET", "/session/sess-1/diff", {"directory": "/safe", "messageID": "msg-1"}),
+        ("GET", "/session/sess-1/message/msg-1", {"directory": "/safe"}),
+    ]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_session_prompt_async_posts_prompt_async_endpoint(monkeypatch):
     client = OpencodeUpstreamClient(
         make_settings(
@@ -168,6 +207,65 @@ async def test_session_prompt_async_posts_prompt_async_endpoint(monkeypatch):
     assert seen["path"] == "/session/ses-1/prompt_async"
     assert seen["params"]["directory"] == "/safe"
     assert seen["json"] == payload
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_session_lifecycle_mutations_forward_expected_endpoints(monkeypatch):
+    client = OpencodeUpstreamClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            opencode_workspace_root="/safe",
+            opencode_timeout=1.0,
+            a2a_log_level="DEBUG",
+            a2a_log_payloads=False,
+        )
+    )
+
+    seen: list[tuple[str, str, dict[str, object] | None, dict[str, object] | None]] = []
+
+    async def fake_post(path: str, *, params=None, json=None, **_kwargs):
+        seen.append(("POST", path, params, json))
+        if path.endswith("/summarize"):
+            return _DummyResponse(True)
+        return _DummyResponse({"id": "s-2"})
+
+    async def fake_delete(path: str, *, params=None, **_kwargs):
+        seen.append(("DELETE", path, params, None))
+        return _DummyResponse({"id": "s-1"})
+
+    monkeypatch.setattr(client._client, "post", fake_post)
+    monkeypatch.setattr(client._client, "delete", fake_delete)
+
+    await client.fork_session("sess-1", {"messageID": "msg-1"})
+    await client.share_session("sess-1", workspace_id="wrk-1")
+    await client.unshare_session("sess-1")
+    await client.summarize_session(
+        "sess-1",
+        {"providerID": "openai", "modelID": "gpt-5", "auto": True},
+    )
+    await client.revert_session("sess-1", {"messageID": "msg-1", "partID": "part-1"})
+    await client.unrevert_session("sess-1")
+
+    assert seen == [
+        ("POST", "/session/sess-1/fork", {"directory": "/safe"}, {"messageID": "msg-1"}),
+        ("POST", "/session/sess-1/share", {"workspace": "wrk-1"}, None),
+        ("DELETE", "/session/sess-1/share", {"directory": "/safe"}, None),
+        (
+            "POST",
+            "/session/sess-1/summarize",
+            {"directory": "/safe"},
+            {"providerID": "openai", "modelID": "gpt-5", "auto": True},
+        ),
+        (
+            "POST",
+            "/session/sess-1/revert",
+            {"directory": "/safe"},
+            {"messageID": "msg-1", "partID": "part-1"},
+        ),
+        ("POST", "/session/sess-1/unrevert", {"directory": "/safe"}, None),
+    ]
 
     await client.close()
 
