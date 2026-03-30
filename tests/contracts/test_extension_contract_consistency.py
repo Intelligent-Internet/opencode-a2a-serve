@@ -20,6 +20,7 @@ from opencode_a2a.contracts.extensions import (
 )
 from opencode_a2a.jsonrpc.application import SESSION_CONTEXT_PREFIX
 from opencode_a2a.profile.runtime import build_runtime_profile
+from opencode_a2a.server.agent_card import build_authenticated_extended_agent_card
 from opencode_a2a.server.application import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
@@ -31,7 +32,6 @@ from opencode_a2a.server.application import (
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     WORKSPACE_CONTROL_EXTENSION_URI,
-    build_agent_card,
     create_app,
 )
 from tests.support.helpers import (
@@ -41,7 +41,7 @@ from tests.support.helpers import make_settings
 
 
 def test_extension_ssot_matches_agent_card_contracts() -> None:
-    card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    card = build_authenticated_extended_agent_card(make_settings(a2a_bearer_token="test-token"))
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
     session_binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]

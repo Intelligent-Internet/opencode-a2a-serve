@@ -11,6 +11,11 @@ JSON-RPC extension details; README stays at overview level.
   - HTTP+JSON (REST endpoints such as `/v1/message:send`)
   - JSON-RPC (`POST /`)
 - Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
+- The public Agent Card is intentionally slimmed to the minimum discovery surface; per-extension disclosure policy is defined in [`extension-specifications.md`](./extension-specifications.md).
+- Detailed provider-private contracts are served through the authenticated extended card endpoint `/agent/authenticatedExtendedCard`.
+- Agent Card responses emit weak `ETag` and `Cache-Control`; clients should revalidate cached cards instead of repeatedly fetching full payloads.
+- HTTP gzip compression is enabled for larger responses such as the authenticated extended card.
+- The current A2A prose specification may refer to `AgentCard.capabilities.extendedAgentCard`, but the official JSON schema and SDK types use the top-level `supportsAuthenticatedExtendedCard` field. This service follows the shipped schema/SDK surface.
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload usually uses `message.content` and role values like `ROLE_USER`
   - JSON-RPC `message/send` payload uses `params.message.parts` and role values `user` / `agent`
@@ -89,6 +94,8 @@ Key variables to understand protocol behavior:
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
 - Runtime authentication also applies to `/health`; the public unauthenticated
   discovery surface remains `/.well-known/agent-card.json` and `/.well-known/agent.json`.
+- The authenticated extended card endpoint `/agent/authenticatedExtendedCard`
+  is bearer-token protected.
 - The same outbound client flags are also honored by the server-side embedded
   A2A client used for peer calls and `a2a_call` tool execution:
   - `A2A_CLIENT_TIMEOUT_SECONDS`
@@ -473,12 +480,23 @@ Important distinction:
 - Runtime payload metadata answers "what happened on this request/stream?"
 - Clients should not treat runtime metadata alone as a substitute for
   capability discovery when an extension URI is already declared.
+- Treat the extension URI as the stable specification identifier.
+- [`extension-specifications.md`](./extension-specifications.md) owns the stable
+  URI catalog plus public-vs-extended disclosure policy.
+- This guide owns runtime usage, request/response semantics, and client-facing
+  examples.
+- The authenticated extended card is the detailed deployment-specific contract
+  view.
 
 ## Shared Session Binding Contract
 
-Agent Card capability:
+Stable specification URI:
 
-- URI: `urn:a2a:session-binding/v1`
+- `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#shared-session-binding-v1`
+
+This section focuses on how clients should use the binding at runtime. For the
+stable URI record and public-vs-extended disclosure policy, see
+[`extension-specifications.md`](./extension-specifications.md).
 
 To continue a historical OpenCode session, include this metadata key in each
 invoke request:
@@ -529,9 +547,13 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 
 ## Shared Model Selection Contract
 
-Agent Card capability:
+Stable specification URI:
 
-- URI: `urn:a2a:model-selection/v1`
+- `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#shared-model-selection-v1`
+
+This section focuses on request-scoped usage. For the stable URI record and
+public-vs-extended disclosure policy, see
+[`extension-specifications.md`](./extension-specifications.md).
 
 This extension declares that the main chat path accepts a request-scoped model
 override through shared metadata:
@@ -539,11 +561,9 @@ override through shared metadata:
 - `metadata.shared.model.providerID`
 - `metadata.shared.model.modelID`
 
-Declaration versus runtime:
+Runtime payload:
 
-- The URI `urn:a2a:model-selection/v1` is the capability declaration.
-- The actual request payload carries the runtime override under
-  `metadata.shared.model`.
+- The actual request carries the override under `metadata.shared.model`.
 
 Behavior:
 
@@ -587,18 +607,20 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 
 ## Shared Stream Hints Contract
 
-Agent Card capability:
+Stable specification URI:
 
-- URI: `urn:a2a:stream-hints/v1`
+- `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#shared-stream-hints-v1`
+
+This section focuses on how clients should interpret runtime metadata. For the
+stable URI record and public-vs-extended disclosure policy, see
+[`extension-specifications.md`](./extension-specifications.md).
 
 This extension declares that streaming and final task payloads use canonical
 shared metadata for block, usage, interrupt, and session hints.
 
-Declaration versus runtime:
+Runtime payload:
 
-- The URI `urn:a2a:stream-hints/v1` is the capability declaration.
-- The actual request/stream payloads carry the runtime hints under shared
-  metadata fields.
+- Request/stream payloads carry the hints under shared metadata fields.
 
 Shared runtime fields:
 
@@ -627,7 +649,7 @@ Consumer guidance:
   response; rely on Agent Card discovery first when possible.
 - Treat `metadata.shared.interrupt` as observation data. Callback operations
   are a separate shared capability declared by
-  `urn:a2a:interactive-interrupt/v1`.
+  `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#shared-interactive-interrupt-v1`.
 
 Minimal stream semantics summary:
 

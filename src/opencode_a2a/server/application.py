@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import inspect
+import json
 import logging
 import secrets
 from contextlib import asynccontextmanager
@@ -36,10 +37,16 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
 )
+from a2a.utils.constants import (
+    AGENT_CARD_WELL_KNOWN_PATH,
+    EXTENDED_AGENT_CARD_PATH,
+    PREV_AGENT_CARD_WELL_KNOWN_PATH,
+)
 from a2a.utils.errors import ServerError
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic_settings import BaseSettings
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.responses import StreamingResponse
 
 from ..client import A2AClient
@@ -74,6 +81,7 @@ from .agent_card import (
     _build_chat_examples,
     _build_session_query_skill_examples,
     build_agent_card,
+    build_authenticated_extended_agent_card,
 )
 from .openapi import (
     _build_jsonrpc_extension_openapi_description,
@@ -107,6 +115,9 @@ from .task_store import (
 
 logger = logging.getLogger(__name__)
 TASK_STORE_ERROR_TYPE = "TASK_STORE_UNAVAILABLE"
+PUBLIC_AGENT_CARD_CACHE_CONTROL = "public, max-age=300"
+AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL = "private, max-age=300"
+AGENT_CARD_GZIP_MINIMUM_SIZE = 1024
 
 __all__ = [
     "_RequestBodyTooLargeError",
@@ -132,6 +143,7 @@ __all__ = [
     "_build_jsonrpc_extension_openapi_examples",
     "_build_rest_message_openapi_examples",
     "_build_session_query_skill_examples",
+    "build_authenticated_extended_agent_card",
     "_configure_logging",
     "_decode_payload_preview",
     "_detect_sensitive_extension_method",
@@ -477,8 +489,8 @@ def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):
         if request.method == "OPTIONS" or request.url.path in {
-            "/.well-known/agent-card.json",
-            "/.well-known/agent.json",
+            AGENT_CARD_WELL_KNOWN_PATH,
+            PREV_AGENT_CARD_WELL_KNOWN_PATH,
         }:
             return await call_next(request)
 
@@ -491,6 +503,43 @@ def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
         request.state.user_identity = f"bearer:{hashlib.sha256(provided.encode()).hexdigest()[:12]}"
 
         return await call_next(request)
+
+
+def _agent_card_response_bytes(card) -> bytes:
+    payload = card.model_dump(mode="json", by_alias=True, exclude_none=True)
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def _build_agent_card_etag(card) -> str:
+    return f'W/"{hashlib.sha256(_agent_card_response_bytes(card)).hexdigest()}"'
+
+
+def _etag_matches(if_none_match: str | None, etag: str) -> bool:
+    if not if_none_match:
+        return False
+    candidates = {item.strip() for item in if_none_match.split(",") if item.strip()}
+    return "*" in candidates or etag in candidates
+
+
+def _merge_vary(*values: str) -> str:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for item in value.split(","):
+            normalized = item.strip()
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(normalized)
+    return ", ".join(ordered)
 
 
 class A2AClientManager:
@@ -693,6 +742,7 @@ def create_app(settings: Settings) -> FastAPI:
     )
 
     agent_card = build_agent_card(settings)
+    extended_agent_card = build_authenticated_extended_agent_card(settings)
     context_builder = IdentityAwareCallContextBuilder()
     runtime_profile = build_runtime_profile(settings)
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
@@ -708,6 +758,7 @@ def create_app(settings: Settings) -> FastAPI:
     # Build JSON-RPC app (POST / by default) and attach REST endpoints (HTTP+JSON) to the same app.
     jsonrpc_app = OpencodeSessionQueryJSONRPCApplication(
         agent_card=agent_card,
+        extended_agent_card=extended_agent_card,
         http_handler=handler,
         context_builder=context_builder,
         upstream_client=upstream_client,
@@ -735,6 +786,8 @@ def create_app(settings: Settings) -> FastAPI:
         http_handler=handler,
         context_builder=context_builder,
     )
+    public_card_etag = _build_agent_card_etag(agent_card)
+    extended_card_etag = _build_agent_card_etag(extended_agent_card)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -752,6 +805,7 @@ def create_app(settings: Settings) -> FastAPI:
         version=settings.a2a_version,
         lifespan=lifespan,
     )
+    app.add_middleware(GZipMiddleware, minimum_size=AGENT_CARD_GZIP_MINIMUM_SIZE)
     jsonrpc_app.add_routes_to_app(app)
     for route, callback in rest_adapter.routes().items():
         app.add_api_route(route[0], callback, methods=[route[1]])
@@ -801,6 +855,54 @@ def create_app(settings: Settings) -> FastAPI:
 
         token = _REQUEST_BODY_BYTES.set(body)
         return body, token
+
+    @app.middleware("http")
+    async def cache_agent_card_responses(request: Request, call_next):
+        if request.method != "GET":
+            return await call_next(request)
+
+        path = request.url.path
+        is_public_card = path in {
+            AGENT_CARD_WELL_KNOWN_PATH,
+            PREV_AGENT_CARD_WELL_KNOWN_PATH,
+        }
+        is_extended_card = path == EXTENDED_AGENT_CARD_PATH
+        if not is_public_card and not is_extended_card:
+            return await call_next(request)
+
+        if is_public_card and _etag_matches(request.headers.get("if-none-match"), public_card_etag):
+            return Response(
+                status_code=304,
+                headers={
+                    "ETag": public_card_etag,
+                    "Cache-Control": PUBLIC_AGENT_CARD_CACHE_CONTROL,
+                    "Vary": "Accept-Encoding",
+                },
+            )
+
+        response = await call_next(request)
+        if response.status_code != 200:
+            return response
+
+        if is_public_card:
+            response.headers["ETag"] = public_card_etag
+            response.headers["Cache-Control"] = PUBLIC_AGENT_CARD_CACHE_CONTROL
+            response.headers["Vary"] = _merge_vary(
+                response.headers.get("Vary", ""),
+                "Accept-Encoding",
+            )
+            return response
+
+        response.headers["ETag"] = extended_card_etag
+        response.headers["Cache-Control"] = AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
+        response.headers["Vary"] = _merge_vary(
+            response.headers.get("Vary", ""),
+            "Authorization",
+            "Accept-Encoding",
+        )
+        if _etag_matches(request.headers.get("if-none-match"), extended_card_etag):
+            return Response(status_code=304, headers=dict(response.headers))
+        return response
 
     @app.middleware("http")
     async def enforce_request_body_limit(request: Request, call_next):

@@ -200,9 +200,22 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
         },
     }
 
-    description = _build_agent_card_description(settings, runtime_profile)
-    assert "Deployment project: alpha." in description
-    assert "Workspace root: /workspace." in description
+    public_description = _build_agent_card_description(
+        settings,
+        runtime_profile,
+        include_detailed_contracts=False,
+    )
+    assert "Deployment project: alpha." in public_description
+    assert "Workspace root: /workspace." not in public_description
+    assert "authenticated extended Agent Card discovery" in public_description
+
+    extended_description = _build_agent_card_description(
+        settings,
+        runtime_profile,
+        include_detailed_contracts=True,
+    )
+    assert "Deployment project: alpha." in extended_description
+    assert "Workspace root: /workspace." in extended_description
     assert any("project alpha" in item for item in _build_chat_examples("alpha"))
     assert all(
         "shell" not in item
