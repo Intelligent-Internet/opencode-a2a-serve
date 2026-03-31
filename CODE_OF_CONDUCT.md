@@ -18,12 +18,8 @@ This project expects respectful, technically focused collaboration.
 
 ## Reporting
 
-For normal collaboration problems, open an issue or discussion with enough
-context to review the situation. For security-sensitive or private concerns,
-follow the disclosure path in [SECURITY.md](SECURITY.md).
+For normal collaboration problems, open an issue or discussion with enough context to review the situation. For security-sensitive or private concerns, follow the disclosure path in [SECURITY.md](SECURITY.md).
 
 ## Enforcement
 
-Repository maintainers may edit, hide, lock, or remove content that violates
-this policy, and may restrict participation when needed to keep collaboration
-safe and productive.
+Repository maintainers may edit, hide, lock, or remove content that violates this policy, and may restrict participation when needed to keep collaboration safe and productive.

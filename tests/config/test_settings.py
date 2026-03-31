@@ -23,6 +23,7 @@ def test_settings_valid():
         "A2A_BEARER_TOKEN": "test-token",
         "OPENCODE_TIMEOUT": "300",
         "OPENCODE_WORKSPACE_ROOT": "/srv/workspaces/alpha",
+        "A2A_HTTP_GZIP_MINIMUM_SIZE": "2048",
         "A2A_MAX_REQUEST_BODY_BYTES": "2048",
         "A2A_PENDING_SESSION_CLAIM_TTL_SECONDS": "45",
         "A2A_INTERRUPT_REQUEST_TTL_SECONDS": "7200",
@@ -47,6 +48,7 @@ def test_settings_valid():
         assert settings.a2a_bearer_token == "test-token"
         assert settings.opencode_timeout == 300.0
         assert settings.opencode_workspace_root == "/srv/workspaces/alpha"
+        assert settings.a2a_http_gzip_minimum_size == 2048
         assert settings.a2a_max_request_body_bytes == 2048
         assert settings.a2a_pending_session_claim_ttl_seconds == 45.0
         assert settings.a2a_interrupt_request_ttl_seconds == 7200.0
@@ -103,6 +105,19 @@ def test_settings_reject_negative_max_request_body_bytes():
 
     field_names = [e["loc"][0] for e in excinfo.value.errors()]
     assert "A2A_MAX_REQUEST_BODY_BYTES" in field_names
+
+
+def test_settings_reject_negative_http_gzip_minimum_size():
+    env = {
+        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_HTTP_GZIP_MINIMUM_SIZE": "-1",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()
+
+    field_names = [e["loc"][0] for e in excinfo.value.errors()]
+    assert "A2A_HTTP_GZIP_MINIMUM_SIZE" in field_names
 
 
 def test_settings_reject_declared_writable_roots_outside_workspace_for_workspace_only_scope():

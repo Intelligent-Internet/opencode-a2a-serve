@@ -1,7 +1,6 @@
 # scripts
 
-Executable scripts live in this directory. This file is the entry index for the
-remaining repository-maintenance helpers.
+Executable scripts live in this directory. This file is the entry index for the remaining repository-maintenance helpers.
 
 ## Product Contract vs Script Docs
 
