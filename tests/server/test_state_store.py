@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from sqlalchemy import text
 
 from opencode_a2a.server.state_store import (
     DatabaseSessionStateRepository,
@@ -221,5 +222,75 @@ async def test_interrupt_request_repository_lists_pending_items_by_identity_and_
     assert permission_items[0].details == {"permission": "read"}
     assert [item.request_id for item in question_items] == ["q-1"]
     assert question_items[0].details == {"questions": [{"question": "Proceed?"}]}
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_interrupt_request_repository_upgrades_legacy_interrupt_table(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'legacy-interrupt.db'}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=database_url,
+    )
+    engine = build_database_engine(settings)
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE a2a_interrupt_requests (
+                    request_id VARCHAR NOT NULL PRIMARY KEY,
+                    session_id VARCHAR,
+                    interrupt_type VARCHAR,
+                    identity VARCHAR,
+                    task_id VARCHAR,
+                    context_id VARCHAR,
+                    expires_at FLOAT,
+                    tombstone_expires_at FLOAT
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                INSERT INTO a2a_interrupt_requests (
+                    request_id,
+                    session_id,
+                    interrupt_type,
+                    identity,
+                    task_id,
+                    context_id,
+                    expires_at,
+                    tombstone_expires_at
+                ) VALUES (
+                    'perm-legacy',
+                    'ses-legacy',
+                    'permission',
+                    'user-1',
+                    'task-legacy',
+                    'ctx-legacy',
+                    4102444800.0,
+                    NULL
+                )
+                """
+            )
+        )
+
+    repository = build_interrupt_request_repository(settings, engine=engine)
+    await initialize_state_repository(repository)
+
+    status, binding = await repository.resolve(request_id="perm-legacy")
+    pending = await repository.list_pending(identity="user-1", interrupt_type="permission")
+
+    assert status == "active"
+    assert binding is not None
+    assert binding.session_id == "ses-legacy"
+    assert binding.details is None
+    assert [item.request_id for item in pending] == ["perm-legacy"]
+    assert pending[0].details is None
 
     await engine.dispose()
