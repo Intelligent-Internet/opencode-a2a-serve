@@ -78,6 +78,18 @@ uv run mypy src/opencode_a2a
 - Link the relevant issue in commits and PR descriptions when applicable.
 - Open PRs as Draft by default when the change still needs review or iteration.
 
+## Release Recovery
+
+`Publish` is the release workflow for tagged versions. It now supports both the normal tag-push path and explicit maintainer recovery runs.
+
+- Tag pushes still perform the full release flow: regression checks, artifact builds, PyPI publish, and GitHub Release sync.
+- Manual `workflow_dispatch` runs require a `release_tag` input so the workflow checks out and rebuilds the exact tagged revision instead of the current branch tip.
+- Manual `workflow_dispatch` runs default `publish_to_pypi=false` so the safest recovery path is to repair the GitHub Release without attempting a duplicate PyPI publish.
+- Set `publish_to_pypi=true` only when a maintainer intentionally needs the manual dispatch to publish artifacts to PyPI before syncing the GitHub Release.
+- GitHub Release sync is idempotent for the tagged release: it creates the release when missing and uploads only missing wheel/sdist assets.
+
+If a release run publishes to PyPI successfully but fails while creating or uploading the GitHub Release, recover with a manual dispatch against the same tag and set `publish_to_pypi=false`.
+
 ## Documentation
 
 Update docs together with code whenever you change:
