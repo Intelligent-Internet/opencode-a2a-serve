@@ -14,7 +14,7 @@ JSON-RPC extension details; README stays at overview level.
 - The public Agent Card is intentionally slimmed to the minimum discovery surface; per-extension disclosure policy is defined in [`extension-specifications.md`](./extension-specifications.md).
 - Detailed provider-private contracts are served through the authenticated extended card endpoint `/agent/authenticatedExtendedCard`.
 - Agent Card responses emit weak `ETag` and `Cache-Control`; clients should revalidate cached cards instead of repeatedly fetching full payloads.
-- Global HTTP gzip compression is enabled for eligible non-streaming HTTP responses larger than 1024 bytes when clients send `Accept-Encoding: gzip`; the main benefit currently lands on larger card responses such as the authenticated extended card.
+- Global HTTP gzip compression is enabled for eligible non-streaming HTTP responses larger than `A2A_HTTP_GZIP_MINIMUM_SIZE` bytes when clients send `Accept-Encoding: gzip`; the default threshold is `8192`, so the main benefit currently lands on larger responses such as the authenticated extended card.
 - The current A2A prose specification may refer to `AgentCard.capabilities.extendedAgentCard`, but the official JSON schema and SDK types use the top-level `supportsAuthenticatedExtendedCard` field. This service follows the shipped schema/SDK surface.
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload usually uses `message.content` and role values like `ROLE_USER`
@@ -58,6 +58,8 @@ Key variables to understand protocol behavior:
 - `A2A_LOG_PAYLOADS` / `A2A_LOG_BODY_LIMIT`: payload logging behavior and
   truncation. When `A2A_LOG_LEVEL=DEBUG`, upstream OpenCode stream events are
   also logged with preview truncation controlled by `A2A_LOG_BODY_LIMIT`.
+- `A2A_HTTP_GZIP_MINIMUM_SIZE`: minimum eligible response-body size in bytes
+  for global non-streaming HTTP gzip compression. Default: `8192`.
 - `A2A_MAX_REQUEST_BODY_BYTES`: runtime request-body limit. Oversized requests
   return HTTP `413`.
 - `A2A_PENDING_SESSION_CLAIM_TTL_SECONDS`: lease duration for pending preferred

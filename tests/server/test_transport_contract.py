@@ -193,10 +193,42 @@ async def test_global_http_gzip_applies_to_eligible_non_streaming_responses(monk
             },
         )
 
-    assert public_response.status_code == 200
-    assert public_response.headers.get("content-encoding") == "gzip"
     assert extended_response.status_code == 200
     assert extended_response.headers.get("content-encoding") == "gzip"
+    assert public_response.status_code == 200
+    assert public_response.headers.get("content-encoding") is None
+    assert health_response.status_code == 200
+    assert health_response.headers.get("content-encoding") is None
+
+
+@pytest.mark.asyncio
+async def test_http_gzip_minimum_size_setting_can_opt_in_smaller_responses(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_http_gzip_minimum_size=1024,
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        public_response = await client.get(
+            "/.well-known/agent-card.json",
+            headers={"Accept-Encoding": "gzip"},
+        )
+        health_response = await client.get(
+            "/health",
+            headers={
+                "Authorization": "Bearer test-token",
+                "Accept-Encoding": "gzip",
+            },
+        )
+
+    assert public_response.status_code == 200
+    assert public_response.headers.get("content-encoding") == "gzip"
     assert health_response.status_code == 200
     assert health_response.headers.get("content-encoding") == "gzip"
 
