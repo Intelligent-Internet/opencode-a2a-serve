@@ -17,10 +17,8 @@ Open a GitHub issue when you can provide:
 
 ## Security Concerns
 
-Do not post active secrets, bearer tokens, or sensitive workspace data in a
-public issue. Use the disclosure guidance in [SECURITY.md](SECURITY.md).
+Do not post active secrets, bearer tokens, or sensitive workspace data in a public issue. Use the disclosure guidance in [SECURITY.md](SECURITY.md).
 
 ## Commercial Or SLA Support
 
-This repository does not currently advertise a separate SLA or managed support
-channel. GitHub issues are the default public support path.
+This repository does not currently advertise a separate SLA or managed support channel. GitHub issues are the default public support path.

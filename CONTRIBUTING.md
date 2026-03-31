@@ -2,9 +2,7 @@
 
 Thanks for contributing to `opencode-a2a`.
 
-This repository maintains an OpenCode A2A runtime. Changes
-should keep runtime behavior, Agent Card declarations, OpenAPI examples, and
-machine-readable extension contracts aligned.
+This repository maintains an OpenCode A2A runtime. Changes should keep runtime behavior, Agent Card declarations, OpenAPI examples, and machine-readable extension contracts aligned.
 
 ## Before You Start
 
@@ -50,16 +48,14 @@ uv run pre-commit run --all-files
 uv run pytest
 ```
 
-If you change shell scripts, also run `bash -n` on each modified script, for
-example:
+If you change shell scripts, also run `bash -n` on each modified script, for example:
 
 ```bash
 bash -n scripts/doctor.sh
 bash -n scripts/lint.sh
 ```
 
-If you change extension methods, extension metadata, or Agent Card/OpenAPI
-contract surfaces, also run:
+If you change extension methods, extension metadata, or Agent Card/OpenAPI contract surfaces, also run:
 
 ```bash
 uv run pytest tests/contracts/test_extension_contract_consistency.py
@@ -91,12 +87,9 @@ Update docs together with code whenever you change:
 - user-facing request or response shapes
 - operational scripts
 
-Keep compatibility guidance centralized in [docs/guide.md](docs/guide.md) unless a
-new standalone document is clearly necessary.
+Keep compatibility guidance centralized in [docs/guide.md](docs/guide.md) unless a new standalone document is clearly necessary.
 
-When changing extension contracts, update
-[`src/opencode_a2a/contracts/extensions.py`](src/opencode_a2a/contracts/extensions.py)
-first and keep these generated/documented surfaces aligned:
+When changing extension contracts, update [`src/opencode_a2a/contracts/extensions.py`](src/opencode_a2a/contracts/extensions.py) first and keep these generated/documented surfaces aligned:
 
 - Agent Card extension params
 - OpenAPI `POST /` extension metadata and examples
