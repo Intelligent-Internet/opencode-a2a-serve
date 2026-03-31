@@ -15,7 +15,9 @@ from sqlalchemy import (
     and_,
     delete,
     insert,
+    inspect,
     select,
+    text,
     update,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -25,6 +27,7 @@ from ..execution.stream_state import _TTLCache
 from ..runtime_state import InterruptRequestBinding, InterruptRequestTombstone
 
 if TYPE_CHECKING:
+    from sqlalchemy.engine import Connection
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 _STATE_METADATA = MetaData()
@@ -68,6 +71,34 @@ _INTERRUPT_REQUESTS = Table(
 
 _MEMORY_SESSION_BINDING_TTL_SECONDS = 3600
 _MEMORY_SESSION_BINDING_MAXSIZE = 10_000
+
+
+def _add_missing_sqlite_column(
+    connection: Connection,
+    *,
+    table: Table,
+    column_name: str,
+) -> None:
+    if connection.dialect.name != "sqlite":
+        return
+    existing_columns = {column["name"] for column in inspect(connection).get_columns(table.name)}
+    if column_name in existing_columns:
+        return
+    column = table.c[column_name]
+    if column.primary_key or not column.nullable:
+        raise RuntimeError(
+            f"Unsupported SQLite state-store migration for {table.name}.{column_name}"
+        )
+    column_type = column.type.compile(dialect=connection.dialect)
+    connection.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column_name}" {column_type}'))
+
+
+def _ensure_state_store_schema(connection: Connection) -> None:
+    _add_missing_sqlite_column(
+        connection,
+        table=_INTERRUPT_REQUESTS,
+        column_name="details_json",
+    )
 
 
 class SessionStateRepository(ABC):
@@ -220,6 +251,7 @@ class DatabaseSessionStateRepository(SessionStateRepository):
             return
         async with self.engine.begin() as conn:
             await conn.run_sync(_STATE_METADATA.create_all)
+            await conn.run_sync(_ensure_state_store_schema)
         self._initialized = True
 
     async def _ensure_initialized(self) -> None:
@@ -541,6 +573,7 @@ class DatabaseInterruptRequestRepository(InterruptRequestRepository):
             return
         async with self.engine.begin() as conn:
             await conn.run_sync(_STATE_METADATA.create_all)
+            await conn.run_sync(_ensure_state_store_schema)
         self._initialized = True
 
     async def _ensure_initialized(self) -> None:
