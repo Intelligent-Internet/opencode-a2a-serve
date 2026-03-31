@@ -13,7 +13,7 @@ on:
       publish_to_pypi:
         description: Publish artifacts to PyPI before syncing the GitHub Release
         required: true
-        default: true
+        default: false
         type: boolean
       sync_github_release:
         description: Create or repair the GitHub Release and release assets
