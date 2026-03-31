@@ -14,7 +14,7 @@ JSON-RPC extension details; README stays at overview level.
 - The public Agent Card is intentionally slimmed to the minimum discovery surface; per-extension disclosure policy is defined in [`extension-specifications.md`](./extension-specifications.md).
 - Detailed provider-private contracts are served through the authenticated extended card endpoint `/agent/authenticatedExtendedCard`.
 - Agent Card responses emit weak `ETag` and `Cache-Control`; clients should revalidate cached cards instead of repeatedly fetching full payloads.
-- HTTP gzip compression is enabled for larger responses such as the authenticated extended card.
+- Global HTTP gzip compression is enabled for eligible non-streaming HTTP responses larger than 1024 bytes when clients send `Accept-Encoding: gzip`; the main benefit currently lands on larger card responses such as the authenticated extended card.
 - The current A2A prose specification may refer to `AgentCard.capabilities.extendedAgentCard`, but the official JSON schema and SDK types use the top-level `supportsAuthenticatedExtendedCard` field. This service follows the shipped schema/SDK surface.
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload usually uses `message.content` and role values like `ROLE_USER`

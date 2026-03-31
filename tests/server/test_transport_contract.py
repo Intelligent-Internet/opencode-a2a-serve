@@ -166,7 +166,7 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
 
 
 @pytest.mark.asyncio
-async def test_authenticated_extended_card_supports_gzip_encoding(monkeypatch) -> None:
+async def test_global_http_gzip_applies_to_eligible_non_streaming_responses(monkeypatch) -> None:
     import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
@@ -174,16 +174,60 @@ async def test_authenticated_extended_card_supports_gzip_encoding(monkeypatch) -
     transport = httpx.ASGITransport(app=app)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get(
+        public_response = await client.get(
+            "/.well-known/agent-card.json",
+            headers={"Accept-Encoding": "gzip"},
+        )
+        extended_response = await client.get(
             "/agent/authenticatedExtendedCard",
             headers={
                 "Authorization": "Bearer test-token",
                 "Accept-Encoding": "gzip",
             },
         )
+        health_response = await client.get(
+            "/health",
+            headers={
+                "Authorization": "Bearer test-token",
+                "Accept-Encoding": "gzip",
+            },
+        )
 
-    assert response.status_code == 200
-    assert response.headers.get("content-encoding") == "gzip"
+    assert public_response.status_code == 200
+    assert public_response.headers.get("content-encoding") == "gzip"
+    assert extended_response.status_code == 200
+    assert extended_response.headers.get("content-encoding") == "gzip"
+    assert health_response.status_code == 200
+    assert health_response.headers.get("content-encoding") == "gzip"
+
+
+@pytest.mark.asyncio
+async def test_streaming_responses_remain_outside_gzip_middleware(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with client.stream(
+            "POST",
+            "/v1/message:stream",
+            headers={
+                "Authorization": "Bearer test-token",
+                "Accept-Encoding": "gzip",
+            },
+            json={
+                "message": {
+                    "messageId": "gzip-stream-test",
+                    "role": "ROLE_USER",
+                    "content": [{"text": "hello"}],
+                }
+            },
+        ) as response:
+            assert response.status_code == 200
+            assert response.headers.get("content-encoding") is None
+            assert "text/event-stream" in response.headers.get("content-type", "")
 
 
 @pytest.mark.asyncio

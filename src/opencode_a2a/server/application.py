@@ -117,7 +117,7 @@ logger = logging.getLogger(__name__)
 TASK_STORE_ERROR_TYPE = "TASK_STORE_UNAVAILABLE"
 PUBLIC_AGENT_CARD_CACHE_CONTROL = "public, max-age=300"
 AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL = "private, max-age=300"
-AGENT_CARD_GZIP_MINIMUM_SIZE = 1024
+HTTP_GZIP_MINIMUM_SIZE = 1024
 
 __all__ = [
     "_RequestBodyTooLargeError",
@@ -805,7 +805,7 @@ def create_app(settings: Settings) -> FastAPI:
         version=settings.a2a_version,
         lifespan=lifespan,
     )
-    app.add_middleware(GZipMiddleware, minimum_size=AGENT_CARD_GZIP_MINIMUM_SIZE)
+    app.add_middleware(GZipMiddleware, minimum_size=HTTP_GZIP_MINIMUM_SIZE)
     jsonrpc_app.add_routes_to_app(app)
     for route, callback in rest_adapter.routes().items():
         app.add_api_route(route[0], callback, methods=[route[1]])
