@@ -5,6 +5,25 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v* tag to publish or repair
+        required: true
+        type: string
+      publish_to_pypi:
+        description: Publish artifacts to PyPI before syncing the GitHub Release
+        required: true
+        default: true
+        type: boolean
+      sync_github_release:
+        description: Create or repair the GitHub Release and release assets
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: publish-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -19,6 +38,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -48,6 +68,8 @@ jobs:
         run: uv build --no-sources
 
       - name: Verify published version matches tag
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
         run: |
           python - <<'PY'
           import os
@@ -64,7 +86,7 @@ jobs:
           sdist = sdists[0].name
           version = wheel.removeprefix("opencode_a2a-").split("-py3", 1)[0]
           sdist_version = sdist.removeprefix("opencode_a2a-").removesuffix(".tar.gz")
-          tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          tag = os.environ["RELEASE_TAG"].removeprefix("v")
           if version != tag:
               raise SystemExit(f"Wheel version {version!r} does not match tag {tag!r}")
           if sdist_version != tag:
@@ -79,12 +101,60 @@ jobs:
         run: bash ./scripts/smoke_test_built_cli.sh dist/opencode_a2a-*.tar.gz
 
       - name: Publish to PyPI
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_pypi }}
         uses: pypa/gh-action-pypi-publish@release/v1
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            dist/*.tar.gz
-            dist/*.whl
+      - name: Sync GitHub Release
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.sync_github_release }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          retry() {
+            local attempts="$1"
+            local sleep_seconds="$2"
+            shift 2
+
+            local attempt=1
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+
+              if [ "$attempt" -ge "$attempts" ]; then
+                echo "Command failed after ${attempts} attempts: $*" >&2
+                return 1
+              fi
+
+              echo "Retrying (${attempt}/${attempts}) after transient failure: $*" >&2
+              sleep "$sleep_seconds"
+              attempt=$((attempt + 1))
+            done
+          }
+
+          ensure_release() {
+            if retry 3 5 gh release view "$RELEASE_TAG" --json url >/dev/null; then
+              echo "Release ${RELEASE_TAG} already exists."
+              return 0
+            fi
+
+            retry 3 5 gh release create "$RELEASE_TAG" --verify-tag --generate-notes
+          }
+
+          ensure_release
+
+          mapfile -t existing_assets < <(
+            retry 3 5 gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name'
+          )
+
+          for asset in dist/*.tar.gz dist/*.whl; do
+            asset_name="$(basename "$asset")"
+            if printf '%s\n' "${existing_assets[@]}" | grep -Fxq "$asset_name"; then
+              echo "Release asset already present: $asset_name"
+              continue
+            fi
+
+            retry 3 5 gh release upload "$RELEASE_TAG" "$asset"
+          done
