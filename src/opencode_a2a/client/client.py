@@ -131,7 +131,10 @@ class A2AClient:
                 async for event in client.send_message(
                     request,
                     context=build_call_context(
-                        self._settings.bearer_token, extra_headers, self._settings.basic_auth
+                        self._settings.bearer_token,
+                        extra_headers,
+                        self._settings.basic_auth,
+                        self._settings.protocol_version,
                     ),
                     request_metadata=request_metadata,
                     extensions=extensions,
@@ -203,7 +206,10 @@ class A2AClient:
                         metadata=request_metadata or {},
                     ),
                     context=build_call_context(
-                        self._settings.bearer_token, extra_headers, self._settings.basic_auth
+                        self._settings.bearer_token,
+                        extra_headers,
+                        self._settings.basic_auth,
+                        self._settings.protocol_version,
                     ),
                 )
             except (
@@ -231,7 +237,10 @@ class A2AClient:
                 return await client.cancel_task(
                     TaskIdParams(id=task_id, metadata=request_metadata or {}),
                     context=build_call_context(
-                        self._settings.bearer_token, extra_headers, self._settings.basic_auth
+                        self._settings.bearer_token,
+                        extra_headers,
+                        self._settings.basic_auth,
+                        self._settings.protocol_version,
                     ),
                 )
             except (
@@ -259,7 +268,10 @@ class A2AClient:
                 async for event in client.resubscribe(
                     TaskIdParams(id=task_id, metadata=request_metadata or {}),
                     context=build_call_context(
-                        self._settings.bearer_token, extra_headers, self._settings.basic_auth
+                        self._settings.bearer_token,
+                        extra_headers,
+                        self._settings.basic_auth,
+                        self._settings.protocol_version,
                     ),
                 ):
                     yield event
@@ -293,7 +305,9 @@ class A2AClient:
             client = factory.create(
                 card,
                 interceptors=build_client_interceptors(
-                    self._settings.bearer_token, self._settings.basic_auth
+                    self._settings.bearer_token,
+                    self._settings.basic_auth,
+                    self._settings.protocol_version,
                 ),
             )
         except ValueError as exc:

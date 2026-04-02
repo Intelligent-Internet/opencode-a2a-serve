@@ -166,6 +166,83 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
 
 
 @pytest.mark.asyncio
+async def test_rest_endpoints_reject_unsupported_protocol_version() -> None:
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/message:send",
+            headers={
+                "Authorization": "Bearer test-token",
+                "A2A-Version": "2.0",
+            },
+            json={
+                "message": {
+                    "messageId": "req-1",
+                    "role": "ROLE_USER",
+                    "content": [{"text": "hello"}],
+                }
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "Unsupported A2A version",
+        "type": "VERSION_NOT_SUPPORTED",
+        "requested_version": "2.0",
+        "supported_protocol_versions": ["0.3", "1.0"],
+        "default_protocol_version": "0.3",
+    }
+
+
+@pytest.mark.asyncio
+async def test_rest_endpoints_return_v1_status_body_for_v1_protocol_errors() -> None:
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/message:send?A2A-Version=1.1",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "message": {
+                    "messageId": "req-2",
+                    "role": "ROLE_USER",
+                    "content": [{"text": "hello"}],
+                }
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": {
+            "code": 400,
+            "status": "INVALID_ARGUMENT",
+            "message": "Unsupported A2A version",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                    "reason": "VERSION_NOT_SUPPORTED",
+                    "domain": "a2a-protocol.org",
+                    "metadata": {
+                        "requestedVersion": "1.1",
+                        "supportedProtocolVersions": '["0.3","1.0"]',
+                        "defaultProtocolVersion": "0.3",
+                    },
+                },
+                {
+                    "@type": "type.googleapis.com/opencode_a2a.HttpErrorContext",
+                    "requestedVersion": "1.1",
+                    "supportedProtocolVersions": ["0.3", "1.0"],
+                    "defaultProtocolVersion": "0.3",
+                },
+            ],
+        }
+    }
+
+
+@pytest.mark.asyncio
 async def test_global_http_gzip_applies_to_eligible_non_streaming_responses(monkeypatch) -> None:
     import opencode_a2a.server.application as app_module
 
@@ -357,6 +434,36 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
         )
         assert rest_envelope_resp.status_code == 400
         assert "Invalid HTTP+JSON payload" in rest_envelope_resp.text
+
+        v1_rest_resp = await client.post(
+            "/v1/message:send",
+            headers={**headers, "A2A-Version": "1.0"},
+            json=rest_with_jsonrpc_shape,
+        )
+        assert v1_rest_resp.status_code == 400
+        assert v1_rest_resp.json() == {
+            "error": {
+                "code": 400,
+                "status": "INVALID_ARGUMENT",
+                "message": (
+                    "Invalid HTTP+JSON payload for REST endpoint. "
+                    "Use message.content with ROLE_* role values, or call "
+                    "POST / with method=message/send or method=message/stream."
+                ),
+                "details": [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                        "reason": "INVALID_HTTP_JSON_PAYLOAD",
+                        "domain": "a2a-protocol.org",
+                        "metadata": {"path": "/v1/message:send"},
+                    },
+                    {
+                        "@type": "type.googleapis.com/opencode_a2a.HttpErrorContext",
+                        "path": "/v1/message:send",
+                    },
+                ],
+            }
+        }
 
         rpc_resp = await client.post("/", headers=headers, json=rpc_with_rest_shape)
         assert rpc_resp.status_code == 200

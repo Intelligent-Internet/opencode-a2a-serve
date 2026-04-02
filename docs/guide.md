@@ -257,6 +257,31 @@ Consumer guidance:
 - Discover custom JSON-RPC methods from Agent Card / OpenAPI before calling them.
 - Treat `supported_methods` in `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 
+## Protocol Version Negotiation
+
+- The runtime accepts `A2A-Version` from either the HTTP header or the query parameter of A2A transport requests.
+- If both are omitted, the runtime falls back to the configured default protocol version.
+- Current defaults declare `default_protocol_version=0.3` and `supported_protocol_versions=["0.3", "1.0"]`.
+- Unsupported or invalid versions are rejected before request routing:
+  - JSON-RPC returns a unified `VERSION_NOT_SUPPORTED` error envelope.
+  - REST returns HTTP `400` with the same contract fields.
+- Error shaping now follows the negotiated major line:
+  - `0.3` keeps the existing legacy `error.data={...}` and flat REST error payloads.
+  - `1.0` keeps standard JSON-RPC error codes for standard failures, but moves A2A-specific JSON-RPC errors to `google.rpc.ErrorInfo`-style `error.data[]` details and REST errors to AIP-193 `error.details[]`.
+- The current transport payloads still follow the SDK-owned request/response shapes; version negotiation is introduced first so later issues can evolve error and payload compatibility without scattering version checks across handlers.
+
+Current compatibility matrix:
+
+| Area | `0.3` | `1.0` | Current note |
+| --- | --- | --- | --- |
+| Version negotiation | Supported | Supported | The runtime accepts `A2A-Version` and routes requests before handler dispatch. |
+| Agent Card / interface version discovery | Default card protocol only | Partial | The service publishes `default_protocol_version` and `supported_protocol_versions`, but `AgentInterface.protocolVersion` cannot yet be declared with `a2a-sdk==0.3.25`. |
+| Transport payloads and enums | Supported | Partial | Request/response payloads, enums, and schema details still follow the SDK-owned `0.3` baseline. |
+| Error model | Supported | Partial | `0.3` keeps legacy `error.data={...}` / flat REST payloads; `1.0` uses protocol-aware JSON-RPC details and AIP-193-style REST errors. |
+| Pagination and list semantics | Supported | Partial | Cursor/list behavior is stable, but the declared shape still follows the `0.3` SDK baseline. |
+| Push notification surfaces | Supported | Partial | Core task push-notification routes are available, but no extra `1.0`-specific compatibility layer is declared yet. |
+| Signatures and authenticated data | Supported | Partial | Security schemes and authenticated extended card discovery follow the shipped SDK schema rather than a dedicated `1.0` compatibility layer. |
+
 ## Compatibility Profile
 
 The service also publishes a machine-readable compatibility profile through Agent Card and OpenAPI metadata.
@@ -271,6 +296,13 @@ Its purpose is to declare:
 Current profile shape:
 
 - `profile_id=opencode-a2a-single-tenant-coding-v1`
+- `default_protocol_version`
+- `supported_protocol_versions`
+- `protocol_compatibility`
+  - `versions["0.3"].status=supported`
+  - `versions["1.0"].status=partial`
+  - `versions[*].supported_features[]`
+  - `versions[*].known_gaps[]`
 - Deployment semantics are declared under `deployment`:
   - `id=single_tenant_shared_workspace`
   - `single_tenant=true`
@@ -306,6 +338,7 @@ Retention guidance:
 - Treat `a2a.interrupt.*` methods as shared extensions.
 - Treat `opencode.sessions.*`, `opencode.providers.*`, and `opencode.models.*` as provider-private OpenCode extensions rather than portable A2A baseline capabilities.
 - Treat `opencode.sessions.shell` as deployment-conditional and discover it from the declared profile and current wire contract before calling it.
+- Treat `protocol_compatibility` as the runtime truth for which protocol line is fully supported versus only partially adapted.
 
 ## Multipart Input Example
 

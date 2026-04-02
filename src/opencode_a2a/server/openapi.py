@@ -588,10 +588,14 @@ def _patch_jsonrpc_openapi_contract(
     compatibility_profile = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
     wire_contract = build_wire_contract_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     original_openapi = app.openapi

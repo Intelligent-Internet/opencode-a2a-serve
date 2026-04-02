@@ -87,6 +87,7 @@ URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extens
 URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#a2a-compatibility-profile-v1`
 
 - Scope: compatibility profile describing core baselines, extension retention, and service behaviors
+- Includes machine-readable protocol compatibility summary for the currently declared `0.3` / `1.0` support boundary
 - Public Agent Card: capability declaration only
 - Authenticated extended card: full compatibility profile payload
 - Transport: Agent Card extension params
@@ -96,6 +97,7 @@ URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extens
 URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#a2a-wire-contract-v1`
 
 - Scope: wire-level contract for supported methods, endpoints, and error semantics
+- Includes the same machine-readable protocol compatibility summary published by the compatibility profile
 - Public Agent Card: capability declaration only
 - Authenticated extended card: full wire contract payload
 - Transport: Agent Card extension params

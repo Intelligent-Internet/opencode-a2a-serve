@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
+from functools import partial
 from typing import Any, cast
 
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
 from a2a.types import (
     A2AError,
     InvalidRequestError,
+    JSONRPCError,
     JSONRPCRequest,
 )
 from fastapi.responses import JSONResponse
@@ -21,6 +24,7 @@ from .dispatch import (
     build_extension_method_registry,
 )
 from .error_responses import (
+    adapt_jsonrpc_error_for_protocol,
     invalid_params_error,
     method_not_supported_error,
 )
@@ -178,9 +182,26 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             self._extension_handler_context
         )
 
+    def _generate_protocol_error_response(
+        self,
+        request_id: str | int | None,
+        error: JSONRPCError | A2AError,
+        *,
+        protocol_version: str,
+    ) -> JSONResponse:
+        return self._generate_error_response(
+            request_id,
+            adapt_jsonrpc_error_for_protocol(protocol_version, error),
+        )
+
     async def _handle_requests(self, request: Request) -> Response:
         # Fast path: sniff method first then either handle here or delegate.
         request_id: str | int | None = None
+        negotiated_protocol_version = getattr(
+            request.state,
+            "a2a_protocol_version",
+            self._protocol_version,
+        )
         try:
             body = await request.json()
             if isinstance(body, dict):
@@ -189,9 +210,10 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                     request_id = None
 
             if not self._allowed_content_length(request):
-                return self._generate_error_response(
+                return self._generate_protocol_error_response(
                     request_id,
                     A2AError(root=InvalidRequestError(message="Payload too large")),
+                    protocol_version=negotiated_protocol_version,
                 )
 
             base_request = JSONRPCRequest.model_validate(body)
@@ -205,24 +227,33 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 return await super()._handle_requests(request)
             if base_request.id is None:
                 return Response(status_code=204)
-
-            return self._generate_error_response(
+            return self._generate_protocol_error_response(
                 base_request.id,
                 method_not_supported_error(
                     method=base_request.method,
                     supported_methods=self._supported_methods,
-                    protocol_version=self._protocol_version,
+                    protocol_version=negotiated_protocol_version,
                 ),
+                protocol_version=negotiated_protocol_version,
             )
 
         params = base_request.params or {}
         if not isinstance(params, dict):
-            return self._generate_error_response(
+            return self._generate_protocol_error_response(
                 base_request.id,
                 invalid_params_error("params must be an object"),
+                protocol_version=negotiated_protocol_version,
             )
-        return await extension_spec.handler(
+        request_context = replace(
             self._extension_handler_context,
+            protocol_version=negotiated_protocol_version,
+            error_response=partial(
+                self._generate_protocol_error_response,
+                protocol_version=negotiated_protocol_version,
+            ),
+        )
+        return await extension_spec.handler(
+            request_context,
             base_request,
             params,
             request,

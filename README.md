@@ -91,6 +91,14 @@ curl http://127.0.0.1:8000/.well-known/agent-card.json
 - Request-scoped model selection through `metadata.shared.model`
 - OpenCode-oriented JSON-RPC extensions for session and model/provider queries
 
+## A2A Protocol Support
+
+- Default protocol line: `0.3`
+- Declared supported protocol lines: `0.3`, `1.0`
+- `0.3` is the stable interoperability baseline for the current runtime surface.
+- `1.0` currently covers version negotiation plus protocol-aware JSON-RPC and REST error shaping, while transport payloads, enums, pagination, signatures, and interface-level protocol declarations still follow the shipped SDK baseline.
+- The detailed compatibility matrix and machine-readable support boundary are documented in [`docs/guide.md`](docs/guide.md).
+
 ## Peering Node / Outbound Access
 
 `opencode-a2a` supports a "Peering Node" architecture where a single process handles both inbound (Server) and outbound (Client) A2A traffic.

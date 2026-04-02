@@ -37,6 +37,88 @@ async def test_unsupported_method_returns_unified_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unsupported_method_uses_requested_protocol_version() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={
+                "Authorization": "Bearer test-token",
+                "A2A-Version": "1.0",
+            },
+            json={"jsonrpc": "2.0", "id": 123, "method": "unsupported.method", "params": {}},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["A2A-Version"] == "1.0"
+    body = response.json()
+    assert body["error"]["message"] == "Method not found"
+    assert body["error"]["data"] == {
+        "method": "unsupported.method",
+        "supportedMethods": body["error"]["data"]["supportedMethods"],
+        "protocolVersion": "1.0",
+    }
+    assert "message/send" in body["error"]["data"]["supportedMethods"]
+
+
+@pytest.mark.asyncio
+async def test_unsupported_v1_minor_version_returns_v1_error_details() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/?A2A-Version=1.1",
+            headers={"Authorization": "Bearer test-token"},
+            json={"jsonrpc": "2.0", "id": 124, "method": "message/send", "params": {}},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"]["code"] == -32001
+    assert body["error"]["data"][0] == {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "reason": "VERSION_NOT_SUPPORTED",
+        "domain": "a2a-protocol.org",
+        "metadata": {
+            "requestedVersion": "1.1",
+            "supportedProtocolVersions": '["0.3","1.0"]',
+            "defaultProtocolVersion": "0.3",
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_unsupported_version_returns_version_error() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/?A2A-Version=2.0",
+            headers={"Authorization": "Bearer test-token"},
+            json={"jsonrpc": "2.0", "id": 123, "method": "message/send", "params": {}},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["jsonrpc"] == "2.0"
+    assert body["id"] == 123
+    assert body["error"]["code"] == -32001
+    assert body["error"]["data"] == {
+        "type": "VERSION_NOT_SUPPORTED",
+        "requested_version": "2.0",
+        "supported_protocol_versions": ["0.3", "1.0"],
+        "default_protocol_version": "0.3",
+    }
+
+
+@pytest.mark.asyncio
 async def test_unsupported_method_notification_returns_204() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     app = create_app(settings)

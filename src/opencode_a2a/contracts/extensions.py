@@ -40,6 +40,13 @@ WIRE_CONTRACT_EXTENSION_URI = _extension_spec_uri("a2a-wire-contract-v1")
 SERVICE_BEHAVIOR_CLASSIFICATION = "service-level-semantic-enhancement"
 CANCEL_IDEMPOTENCY_BEHAVIOR = "return_current_terminal_task"
 TERMINAL_RESUBSCRIBE_BEHAVIOR = "replay_terminal_task_once_then_close"
+V1_PARTIAL_COMPATIBILITY_GAPS: tuple[str, ...] = (
+    "AgentInterface.protocolVersion cannot be declared with a2a-sdk==0.3.25.",
+    (
+        "Transport payloads, enums, pagination, signatures, and push-notification "
+        "surfaces still follow the SDK-owned 0.3 baseline."
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -1225,7 +1232,17 @@ def build_compatibility_profile_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
+    supported_protocol_versions: tuple[str, ...] | list[str] | None = None,
+    default_protocol_version: str | None = None,
 ) -> dict[str, Any]:
+    declared_default_protocol_version = default_protocol_version or protocol_version
+    declared_supported_protocol_versions = list(
+        supported_protocol_versions or (declared_default_protocol_version,)
+    )
+    protocol_compatibility = build_protocol_compatibility_params(
+        supported_protocol_versions=declared_supported_protocol_versions,
+        default_protocol_version=declared_default_protocol_version,
+    )
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     service_behaviors = build_service_behavior_contract_params()
     method_retention: dict[str, dict[str, Any]] = {
@@ -1295,6 +1312,9 @@ def build_compatibility_profile_params(
     )
     return {
         **runtime_profile.summary_dict(protocol_version=protocol_version),
+        "default_protocol_version": declared_default_protocol_version,
+        "supported_protocol_versions": declared_supported_protocol_versions,
+        "protocol_compatibility": protocol_compatibility,
         "core": {
             "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
             "http_endpoints": list(CORE_HTTP_ENDPOINTS),
@@ -1372,7 +1392,69 @@ def build_compatibility_profile_params(
                 "Treat declared service behaviors as stable server-level semantic "
                 "enhancements layered on top of the core A2A method baseline."
             ),
+            (
+                "Treat protocol_compatibility as the runtime truth for which major line "
+                "is fully supported versus partially adapted."
+            ),
         ],
+    }
+
+
+def build_protocol_compatibility_params(
+    *,
+    supported_protocol_versions: tuple[str, ...] | list[str],
+    default_protocol_version: str,
+) -> dict[str, Any]:
+    declared_supported_versions = list(supported_protocol_versions)
+    versions: dict[str, dict[str, Any]] = {
+        "0.3": {
+            "enabled": "0.3" in declared_supported_versions,
+            "default": default_protocol_version == "0.3",
+            "status": "supported",
+            "supported_features": [
+                "Default compatibility line for the current deployment.",
+                "A2A-Version negotiation fallback and explicit 0.3 routing.",
+                "Legacy JSON-RPC and REST error envelopes.",
+                (
+                    "SDK-owned transport payloads, enums, pagination, signatures, and "
+                    "push-notification surfaces."
+                ),
+            ],
+            "known_gaps": [],
+        },
+        "1.0": {
+            "enabled": "1.0" in declared_supported_versions,
+            "default": default_protocol_version == "1.0",
+            "status": "partial",
+            "supported_features": [
+                "A2A-Version negotiation and request routing.",
+                "Protocol-aware JSON-RPC error shaping.",
+                "Protocol-aware REST error shaping.",
+            ],
+            "known_gaps": list(V1_PARTIAL_COMPATIBILITY_GAPS),
+        },
+    }
+
+    for version in declared_supported_versions:
+        if version in versions:
+            continue
+        versions[version] = {
+            "enabled": True,
+            "default": default_protocol_version == version,
+            "status": "custom",
+            "supported_features": [
+                "Supported by deployment configuration.",
+                "Version-specific compatibility details are not yet declared.",
+            ],
+            "known_gaps": [
+                "This protocol line does not yet have a dedicated compatibility summary.",
+            ],
+        }
+
+    return {
+        "default_protocol_version": default_protocol_version,
+        "supported_protocol_versions": declared_supported_versions,
+        "versions": versions,
     }
 
 
@@ -1380,12 +1462,25 @@ def build_wire_contract_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
+    supported_protocol_versions: tuple[str, ...] | list[str] | None = None,
+    default_protocol_version: str | None = None,
 ) -> dict[str, Any]:
+    declared_default_protocol_version = default_protocol_version or protocol_version
+    declared_supported_protocol_versions = list(
+        supported_protocol_versions or (declared_default_protocol_version,)
+    )
+    protocol_compatibility = build_protocol_compatibility_params(
+        supported_protocol_versions=declared_supported_protocol_versions,
+        default_protocol_version=declared_default_protocol_version,
+    )
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     service_behaviors = build_service_behavior_contract_params()
 
     return {
         "protocol_version": protocol_version,
+        "default_protocol_version": declared_default_protocol_version,
+        "supported_protocol_versions": declared_supported_protocol_versions,
+        "protocol_compatibility": protocol_compatibility,
         "profile": runtime_profile.summary_dict(protocol_version=protocol_version),
         "preferred_transport": "HTTP+JSON",
         "additional_transports": ["JSON-RPC"],

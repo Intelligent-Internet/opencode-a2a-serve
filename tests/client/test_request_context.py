@@ -16,11 +16,18 @@ from opencode_a2a.client.request_context import (
 
 def test_split_request_metadata_and_default_headers() -> None:
     request_metadata, extra_headers = split_request_metadata(
-        {"authorization": "Bearer explicit-token", "trace_id": "trace-1"}
+        {
+            "authorization": "Bearer explicit-token",
+            "A2A-Version": "1.0.0",
+            "trace_id": "trace-1",
+        }
     )
 
     assert request_metadata == {"trace_id": "trace-1"}
-    assert extra_headers == {"Authorization": "Bearer explicit-token"}
+    assert extra_headers == {
+        "Authorization": "Bearer explicit-token",
+        "A2A-Version": "1.0",
+    }
     assert build_default_headers("peer-token") == {"Authorization": "Bearer peer-token"}
 
 
@@ -44,6 +51,13 @@ def test_build_default_headers_rejects_invalid_basic_auth() -> None:
 def test_build_default_headers_prefers_bearer_over_basic_auth() -> None:
     assert build_default_headers("peer-token", "user:pass") == {
         "Authorization": "Bearer peer-token"
+    }
+
+
+def test_build_default_headers_includes_protocol_version() -> None:
+    assert build_default_headers("peer-token", protocol_version="1.0.0") == {
+        "Authorization": "Bearer peer-token",
+        "A2A-Version": "1.0",
     }
 
 

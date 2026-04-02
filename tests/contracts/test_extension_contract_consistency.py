@@ -84,10 +84,14 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     expected_compatibility_profile = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
     expected_wire_contract = build_wire_contract_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
 
     assert session_binding.params == expected_session_binding, (
@@ -120,6 +124,10 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     assert wire_contract.params == expected_wire_contract, (
         "Wire contract extension drifted from contracts.extensions SSOT."
     )
+    assert (
+        compatibility_profile.params["protocol_compatibility"]
+        == wire_contract.params["protocol_compatibility"]
+    ), "Protocol compatibility summary drifted between compatibility profile and wire contract."
 
 
 def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
@@ -170,10 +178,14 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     expected_compatibility_profile = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
     expected_wire_contract = build_wire_contract_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
 
     assert session_binding == expected_session_binding, (
@@ -206,6 +218,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert wire_contract == expected_wire_contract, (
         "OpenAPI wire contract drifted from contracts.extensions SSOT."
     )
+    assert (
+        compatibility_profile["protocol_compatibility"] == wire_contract["protocol_compatibility"]
+    ), "OpenAPI protocol compatibility summary drifted between profile and wire contract."
 
     json_request_schema = (
         post.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema", {})
