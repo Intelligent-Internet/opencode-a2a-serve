@@ -25,6 +25,7 @@ from tests.support.helpers import make_settings
 
 def test_agent_card_description_reflects_actual_transport_capabilities() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    skills_by_id = {skill.id: skill for skill in card.skills}
 
     assert "HTTP+JSON and JSON-RPC transports" in card.description
     assert "authenticated extended Agent Card discovery" in card.description
@@ -35,8 +36,15 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert card.capabilities.streaming is True
     assert card.supports_authenticated_extended_card is True
     assert card.default_input_modes == ["text/plain", "application/octet-stream"]
+    assert card.default_output_modes == ["text/plain", "application/json"]
     assert list(card.security_schemes.keys()) == ["bearerAuth"]
     assert card.security == [{"bearerAuth": []}]
+    assert skills_by_id["opencode.chat"].input_modes == ["text/plain", "application/octet-stream"]
+    assert skills_by_id["opencode.chat"].output_modes == ["text/plain", "application/json"]
+    assert skills_by_id["opencode.sessions.query"].input_modes == ["application/json"]
+    assert skills_by_id["opencode.sessions.query"].output_modes == ["application/json"]
+    assert skills_by_id["opencode.interrupt.callback"].input_modes == ["application/json"]
+    assert skills_by_id["opencode.interrupt.callback"].output_modes == ["application/json"]
 
 
 def test_public_agent_card_is_slimmed_but_keeps_core_shared_contract_hints() -> None:
