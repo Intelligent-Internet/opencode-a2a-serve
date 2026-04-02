@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
+from opencode_a2a.server.migrations import CURRENT_STATE_STORE_SCHEMA_VERSION
 from opencode_a2a.server.state_store import (
     DatabaseSessionStateRepository,
     MemorySessionStateRepository,
@@ -14,6 +15,23 @@ from opencode_a2a.server.state_store import (
 )
 from opencode_a2a.server.task_store import build_database_engine
 from tests.support.helpers import make_settings
+
+
+async def _read_state_store_schema_version(engine) -> int | None:  # noqa: ANN001
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            text("SELECT version FROM a2a_schema_version WHERE name = 'state_store'")
+        )
+        value = result.scalar_one_or_none()
+        return int(value) if value is not None else None
+
+
+async def _read_state_store_schema_row_count(engine) -> int:  # noqa: ANN001
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            text("SELECT COUNT(*) FROM a2a_schema_version WHERE name = 'state_store'")
+        )
+        return int(result.scalar_one())
 
 
 @pytest.mark.asyncio
@@ -39,6 +57,7 @@ async def test_database_session_state_repository_persists_bindings(tmp_path: Pat
     assert await reader.get_session(identity="user-1", context_id="ctx-1") == "ses-1"
     assert await reader.get_owner(session_id="ses-1") == "user-1"
     assert await reader.get_pending_claim(session_id="ses-2") == "user-2"
+    assert await _read_state_store_schema_version(engine) == CURRENT_STATE_STORE_SCHEMA_VERSION
 
     await engine.dispose()
 
@@ -292,5 +311,101 @@ async def test_database_interrupt_request_repository_upgrades_legacy_interrupt_t
     assert binding.details is None
     assert [item.request_id for item in pending] == ["perm-legacy"]
     assert pending[0].details is None
+    assert await _read_state_store_schema_version(engine) == CURRENT_STATE_STORE_SCHEMA_VERSION
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_state_store_records_schema_version_for_existing_current_schema(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'current-schema.db'}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=database_url,
+    )
+    engine = build_database_engine(settings)
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE a2a_session_bindings (
+                    identity VARCHAR NOT NULL,
+                    context_id VARCHAR NOT NULL,
+                    session_id VARCHAR NOT NULL,
+                    PRIMARY KEY (identity, context_id)
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE a2a_session_owners (
+                    session_id VARCHAR NOT NULL PRIMARY KEY,
+                    identity VARCHAR NOT NULL
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE a2a_pending_session_claims (
+                    session_id VARCHAR NOT NULL PRIMARY KEY,
+                    identity VARCHAR NOT NULL,
+                    updated_at FLOAT NOT NULL
+                )
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                CREATE TABLE a2a_interrupt_requests (
+                    request_id VARCHAR NOT NULL PRIMARY KEY,
+                    session_id VARCHAR,
+                    interrupt_type VARCHAR,
+                    identity VARCHAR,
+                    task_id VARCHAR,
+                    context_id VARCHAR,
+                    details_json VARCHAR,
+                    expires_at FLOAT,
+                    tombstone_expires_at FLOAT
+                )
+                """
+            )
+        )
+
+    session_repository = build_session_state_repository(settings, engine=engine)
+    await initialize_state_repository(session_repository)
+
+    assert await _read_state_store_schema_version(engine) == CURRENT_STATE_STORE_SCHEMA_VERSION
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_state_store_initialization_is_idempotent_across_repositories(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'idempotent-state.db'}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=database_url,
+    )
+    engine = build_database_engine(settings)
+
+    session_repository = build_session_state_repository(settings, engine=engine)
+    interrupt_repository = build_interrupt_request_repository(settings, engine=engine)
+
+    await initialize_state_repository(session_repository)
+    await initialize_state_repository(interrupt_repository)
+    await initialize_state_repository(session_repository)
+
+    assert await _read_state_store_schema_version(engine) == CURRENT_STATE_STORE_SCHEMA_VERSION
+    assert await _read_state_store_schema_row_count(engine) == 1
 
     await engine.dispose()
