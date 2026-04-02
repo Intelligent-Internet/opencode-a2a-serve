@@ -77,6 +77,18 @@ UV_TOOL_DIR="${tool_dir}" \
 UV_TOOL_BIN_DIR="${tool_bin_dir}" \
 uv tool install "${artifact_path}" --python "${python_bin}"
 
+mapfile -t installed_python_paths < <(
+  find "${tool_dir}" \( -type f -o -type l \) -path '*/bin/python' | sort
+)
+if [[ "${#installed_python_paths[@]}" -ne 1 ]]; then
+  echo "Expected exactly one installed tool python, found ${#installed_python_paths[@]}" >&2
+  printf ' - %s\n' "${installed_python_paths[@]}" >&2 || true
+  exit 1
+fi
+installed_python="${installed_python_paths[0]}"
+
+"${installed_python}" -c "import opencode_a2a; print(opencode_a2a.__version__)" >/dev/null
+
 port="$(
   "${python_bin}" - <<'PY'
 import socket
