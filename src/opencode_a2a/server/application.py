@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import inspect
 import json
 import logging
 import secrets
@@ -73,6 +72,7 @@ from ..contracts.extensions import (
     build_capability_snapshot,
 )
 from ..execution.executor import OpencodeAgentExecutor, _emit_metric
+from ..invocation import call_with_supported_kwargs
 from ..jsonrpc.application import (
     OpencodeSessionQueryJSONRPCApplication,
 )
@@ -734,22 +734,6 @@ class _ClientCacheEntry:
         self.pending_eviction = pending_eviction
 
 
-def _call_with_optional_kwargs(factory, /, *args, **kwargs):  # noqa: ANN001
-    try:
-        return factory(*args, **kwargs)
-    except TypeError as exc:
-        signature = inspect.signature(factory)
-        supported_kwargs = {
-            name: value for name, value in kwargs.items() if name in signature.parameters
-        }
-        if supported_kwargs == kwargs:
-            raise
-        try:
-            return factory(*args, **supported_kwargs)
-        except TypeError:
-            raise exc from None
-
-
 def create_app(settings: Settings) -> FastAPI:
     database_engine = (
         build_database_engine(settings) if settings.a2a_task_store_backend == "database" else None
@@ -759,13 +743,13 @@ def create_app(settings: Settings) -> FastAPI:
         settings,
         engine=database_engine,
     )
-    upstream_client = _call_with_optional_kwargs(
+    upstream_client = call_with_supported_kwargs(
         OpencodeUpstreamClient,
         settings,
         interrupt_request_repository=interrupt_request_repository,
     )
     client_manager = A2AClientManager(settings)
-    executor = _call_with_optional_kwargs(
+    executor = call_with_supported_kwargs(
         OpencodeAgentExecutor,
         upstream_client,
         streaming_enabled=True,
@@ -774,7 +758,7 @@ def create_app(settings: Settings) -> FastAPI:
         a2a_client_manager=client_manager,
         session_state_repository=session_state_repository,
     )
-    task_store = _call_with_optional_kwargs(
+    task_store = call_with_supported_kwargs(
         build_task_store,
         settings,
         engine=database_engine,
