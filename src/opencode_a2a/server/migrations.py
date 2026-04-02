@@ -44,10 +44,6 @@ def _add_missing_nullable_column(
     column = table.c[column_name]
     if column.primary_key or not column.nullable:
         raise RuntimeError(f"Unsupported state-store migration for {table.name}.{column_name}")
-    if connection.dialect.name not in {"sqlite"}:
-        raise RuntimeError(
-            "Automatic state-store migrations currently support SQLite upgrades only"
-        )
     preparer = connection.dialect.identifier_preparer
     table_name_sql = preparer.quote(table.name)
     column_name_sql = preparer.quote(column_name)

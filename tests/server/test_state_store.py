@@ -4,9 +4,12 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 
+import opencode_a2a.server.migrations as migrations_module
 from opencode_a2a.server.migrations import CURRENT_STATE_STORE_SCHEMA_VERSION
 from opencode_a2a.server.state_store import (
+    _INTERRUPT_REQUESTS,
     DatabaseSessionStateRepository,
     MemorySessionStateRepository,
     build_interrupt_request_repository,
@@ -32,6 +35,31 @@ async def _read_state_store_schema_row_count(engine) -> int:  # noqa: ANN001
             text("SELECT COUNT(*) FROM a2a_schema_version WHERE name = 'state_store'")
         )
         return int(result.scalar_one())
+
+
+def test_add_missing_nullable_column_supports_non_sqlite_dialects(monkeypatch) -> None:
+    executed: list[str] = []
+
+    class _FakeInspector:
+        def get_columns(self, _table_name: str) -> list[dict[str, str]]:
+            return []
+
+    class _FakeConnection:
+        def __init__(self) -> None:
+            self.dialect = postgresql_dialect()
+
+        def execute(self, clause) -> None:  # noqa: ANN001
+            executed.append(str(clause))
+
+    monkeypatch.setattr(migrations_module, "inspect", lambda _connection: _FakeInspector())
+
+    migrations_module._add_missing_nullable_column(
+        _FakeConnection(),
+        table=_INTERRUPT_REQUESTS,
+        column_name="details_json",
+    )
+
+    assert executed == ["ALTER TABLE a2a_interrupt_requests ADD COLUMN details_json VARCHAR"]
 
 
 @pytest.mark.asyncio
