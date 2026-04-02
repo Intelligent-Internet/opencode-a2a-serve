@@ -3,6 +3,7 @@ import json
 from opencode_a2a.contracts.extensions import (
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
+    build_protocol_compatibility_params,
     build_service_behavior_contract_params,
 )
 from opencode_a2a.jsonrpc.application import SESSION_CONTEXT_PREFIX
@@ -578,6 +579,10 @@ def test_agent_card_injects_profile_into_extensions() -> None:
 
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
     expected_service_behaviors = build_service_behavior_contract_params()
+    expected_protocol_compatibility = build_protocol_compatibility_params(
+        supported_protocol_versions=["0.3", "1.0"],
+        default_protocol_version="0.3",
+    )
     assert compatibility.params["extension_retention"][MODEL_SELECTION_EXTENSION_URI] == {
         "surface": "core-runtime-metadata",
         "availability": "always",
@@ -622,12 +627,14 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "delivery": "single_task_snapshot",
         "closes_stream": True,
     }
+    assert compatibility.params["protocol_compatibility"] == expected_protocol_compatibility
     assert compatibility.description.endswith("deployment-conditional methods.")
 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     assert wire_contract.params["profile"]["profile_id"] == "opencode-a2a-single-tenant-coding-v1"
     assert wire_contract.params["default_protocol_version"] == "0.3"
     assert wire_contract.params["supported_protocol_versions"] == ["0.3", "1.0"]
+    assert wire_contract.params["protocol_compatibility"] == expected_protocol_compatibility
     assert MODEL_SELECTION_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert PROVIDER_DISCOVERY_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert WORKSPACE_CONTROL_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
