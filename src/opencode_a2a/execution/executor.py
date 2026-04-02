@@ -34,6 +34,7 @@ from ..opencode_upstream_client import (
     UpstreamConcurrencyLimitError,
     UpstreamContractError,
 )
+from ..output_modes import accepts_output_mode, normalize_accepted_output_modes
 from ..parts.mapping import (
     UnsupportedA2AInputError,
     extract_text_from_a2a_parts,
@@ -90,6 +91,8 @@ from .upstream_error_translator import (
 )
 
 logger = logging.getLogger(__name__)
+_TEXT_PLAIN_MEDIA_TYPE = "text/plain"
+_APPLICATION_JSON_MEDIA_TYPE = "application/json"
 
 __all__ = [
     "_build_output_metadata",
@@ -148,6 +151,7 @@ class _PreparedExecution:
     directory: str | None
     workspace_id: str | None
     session_binding_context_id: str
+    allow_structured_output: bool
 
 
 def _build_session_binding_context_id(
@@ -368,6 +372,7 @@ class _ExecutionCoordinator:
                     directory=self._prepared.directory,
                     workspace_id=self._prepared.workspace_id,
                     terminal_signal=self._stream_terminal_signal,
+                    allow_structured_output=self._prepared.allow_structured_output,
                 )
             )
 
@@ -775,6 +780,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         identity = (call_context.state.get("identity") if call_context else None) or "anonymous"
 
         streaming_request = self._should_stream(context)
+        accepted_output_modes = normalize_accepted_output_modes(context.configuration)
         message_parts = (
             getattr(context.message, "parts", None) if context.message is not None else None
         )
@@ -853,6 +859,22 @@ class OpencodeAgentExecutor(AgentExecutor):
             )
             return
 
+        if not accepts_output_mode(accepted_output_modes, _TEXT_PLAIN_MEDIA_TYPE):
+            await self._emit_error(
+                event_queue,
+                task_id=task_id,
+                context_id=context_id,
+                message="acceptedOutputModes must include text/plain for OpenCode chat responses.",
+                state=TaskState.failed,
+                streaming_request=streaming_request,
+            )
+            return
+
+        allow_structured_output = accepts_output_mode(
+            accepted_output_modes,
+            _APPLICATION_JSON_MEDIA_TYPE,
+        )
+
         logger.debug(
             (
                 "Received message identity=%s task_id=%s context_id=%s "
@@ -877,6 +899,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             directory=directory,
             workspace_id=workspace_id,
             session_binding_context_id=session_binding_context_id,
+            allow_structured_output=allow_structured_output,
         )
         coordinator = _ExecutionCoordinator(
             self,
@@ -1097,6 +1120,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         terminal_signal: asyncio.Future[_StreamTerminalSignal],
         directory: str | None = None,
         workspace_id: str | None = None,
+        allow_structured_output: bool = True,
     ) -> None:
         await self._stream_runtime.consume(
             session_id=session_id,
@@ -1110,6 +1134,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             terminal_signal=terminal_signal,
             directory=directory,
             workspace_id=workspace_id,
+            allow_structured_output=allow_structured_output,
         )
 
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, PropertyMock
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
-from a2a.types import Message, MessageSendParams, Part, Role, TextPart
+from a2a.types import Message, MessageSendConfiguration, MessageSendParams, Part, Role, TextPart
 
 from opencode_a2a.config import Settings
 from opencode_a2a.opencode_upstream_client import OpencodeMessage, OpencodeMessagePage
@@ -87,14 +87,26 @@ def make_request_context(
     text: str,
     metadata: dict[str, Any] | None = None,
     message_id: str = "req-1",
+    accepted_output_modes: list[str] | None = None,
+    call_context: Any = None,
 ) -> RequestContext:
     message = Message(
         message_id=message_id,
         role=Role.user,
         parts=[TextPart(text=text)],
     )
-    params = MessageSendParams(message=message, metadata=metadata)
-    return RequestContext(request=params, task_id=task_id, context_id=context_id)
+    configuration = (
+        MessageSendConfiguration(acceptedOutputModes=accepted_output_modes)
+        if accepted_output_modes is not None
+        else None
+    )
+    params = MessageSendParams(message=message, metadata=metadata, configuration=configuration)
+    return RequestContext(
+        request=params,
+        task_id=task_id,
+        context_id=context_id,
+        call_context=call_context,
+    )
 
 
 def make_request_context_with_parts(
@@ -105,13 +117,19 @@ def make_request_context_with_parts(
     metadata: dict[str, Any] | None = None,
     message_id: str = "req-1",
     call_context: Any = None,
+    accepted_output_modes: list[str] | None = None,
 ) -> RequestContext:
     message = Message(
         message_id=message_id,
         role=Role.user,
         parts=parts,
     )
-    params = MessageSendParams(message=message, metadata=metadata)
+    configuration = (
+        MessageSendConfiguration(acceptedOutputModes=accepted_output_modes)
+        if accepted_output_modes is not None
+        else None
+    )
+    params = MessageSendParams(message=message, metadata=metadata, configuration=configuration)
     return RequestContext(
         request=params,
         task_id=task_id,

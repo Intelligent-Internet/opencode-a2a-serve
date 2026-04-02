@@ -77,6 +77,7 @@ class StreamRuntime:
         terminal_signal: asyncio.Future[_StreamTerminalSignal],
         directory: str | None = None,
         workspace_id: str | None = None,
+        allow_structured_output: bool = True,
     ) -> None:
         part_states: dict[str, _StreamPartState] = {}
         pending_deltas: defaultdict[str, list[_PendingDelta]] = defaultdict(list)
@@ -85,6 +86,8 @@ class StreamRuntime:
 
         async def _emit_chunks(chunks: list[_NormalizedStreamChunk]) -> None:
             for chunk in chunks:
+                if not allow_structured_output and getattr(chunk.part.root, "kind", None) == "data":
+                    continue
                 resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
                 chunk_text = getattr(chunk.part.root, "text", "")
                 if stream_state.should_drop_initial_user_echo(

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import inspect
 import json
 import logging
 import secrets
@@ -36,7 +35,9 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
+    UnsupportedOperationError,
 )
+from a2a.utils import are_modalities_compatible
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     EXTENDED_AGENT_CARD_PATH,
@@ -71,12 +72,15 @@ from ..contracts.extensions import (
     build_capability_snapshot,
 )
 from ..execution.executor import OpencodeAgentExecutor, _emit_metric
+from ..invocation import call_with_supported_kwargs
 from ..jsonrpc.application import (
     OpencodeSessionQueryJSONRPCApplication,
 )
 from ..opencode_upstream_client import OpencodeUpstreamClient
+from ..output_modes import normalize_accepted_output_modes
 from ..profile.runtime import build_runtime_profile
 from .agent_card import (
+    _CHAT_OUTPUT_MODES,
     _build_agent_card_description,
     _build_chat_examples,
     _build_session_query_skill_examples,
@@ -256,6 +260,44 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             getattr(message, "contextId", None) or getattr(message, "context_id", None) or task_id
         )
 
+    @staticmethod
+    def _extract_accepted_output_modes(params) -> list[str] | None:  # noqa: ANN001
+        configuration = getattr(params, "configuration", None)
+        normalized = normalize_accepted_output_modes(configuration)
+        return list(normalized) if normalized is not None else None
+
+    @classmethod
+    def _validate_chat_output_modes(cls, params) -> None:  # noqa: ANN001
+        accepted_output_modes = cls._extract_accepted_output_modes(params)
+        if not accepted_output_modes:
+            return
+
+        if not are_modalities_compatible(list(_CHAT_OUTPUT_MODES), accepted_output_modes):
+            raise ServerError(
+                error=UnsupportedOperationError(
+                    message=(
+                        "Requested acceptedOutputModes are not compatible "
+                        "with OpenCode chat responses."
+                    ),
+                    data={
+                        "accepted_output_modes": accepted_output_modes,
+                        "supported_output_modes": list(_CHAT_OUTPUT_MODES),
+                    },
+                )
+            )
+
+        if "text/plain" not in accepted_output_modes:
+            raise ServerError(
+                error=UnsupportedOperationError(
+                    message="OpenCode chat responses require text/plain in acceptedOutputModes.",
+                    data={
+                        "accepted_output_modes": accepted_output_modes,
+                        "required_output_modes": ["text/plain"],
+                        "supported_output_modes": list(_CHAT_OUTPUT_MODES),
+                    },
+                )
+            )
+
     async def on_get_task(
         self,
         params: TaskQueryParams,
@@ -320,6 +362,7 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             raise self._task_store_server_error(exc) from exc
 
     async def on_message_send_stream(self, params, context=None):
+        self._validate_chat_output_modes(params)
         (
             _task_manager,
             task_id,
@@ -369,6 +412,7 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             self._track_background_task(cleanup_task)
 
     async def on_message_send(self, params, context=None):
+        self._validate_chat_output_modes(params)
         (
             _task_manager,
             task_id,
@@ -690,22 +734,6 @@ class _ClientCacheEntry:
         self.pending_eviction = pending_eviction
 
 
-def _call_with_optional_kwargs(factory, /, *args, **kwargs):  # noqa: ANN001
-    try:
-        return factory(*args, **kwargs)
-    except TypeError as exc:
-        signature = inspect.signature(factory)
-        supported_kwargs = {
-            name: value for name, value in kwargs.items() if name in signature.parameters
-        }
-        if supported_kwargs == kwargs:
-            raise
-        try:
-            return factory(*args, **supported_kwargs)
-        except TypeError:
-            raise exc from None
-
-
 def create_app(settings: Settings) -> FastAPI:
     database_engine = (
         build_database_engine(settings) if settings.a2a_task_store_backend == "database" else None
@@ -715,13 +743,13 @@ def create_app(settings: Settings) -> FastAPI:
         settings,
         engine=database_engine,
     )
-    upstream_client = _call_with_optional_kwargs(
+    upstream_client = call_with_supported_kwargs(
         OpencodeUpstreamClient,
         settings,
         interrupt_request_repository=interrupt_request_repository,
     )
     client_manager = A2AClientManager(settings)
-    executor = _call_with_optional_kwargs(
+    executor = call_with_supported_kwargs(
         OpencodeAgentExecutor,
         upstream_client,
         streaming_enabled=True,
@@ -730,7 +758,7 @@ def create_app(settings: Settings) -> FastAPI:
         a2a_client_manager=client_manager,
         session_state_repository=session_state_repository,
     )
-    task_store = _call_with_optional_kwargs(
+    task_store = call_with_supported_kwargs(
         build_task_store,
         settings,
         engine=database_engine,

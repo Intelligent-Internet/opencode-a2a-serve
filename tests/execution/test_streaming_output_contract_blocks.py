@@ -123,6 +123,45 @@ async def test_streaming_emits_structured_tool_part_updates() -> None:
 
 
 @pytest.mark.asyncio
+async def test_streaming_suppresses_structured_tool_updates_when_json_output_not_accepted() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            _event(
+                session_id="ses-1",
+                role="assistant",
+                part_type="tool",
+                delta="",
+                part_id="prt-tool-1",
+                part_overrides={
+                    "callID": "call-1",
+                    "tool": "bash",
+                    "state": {"status": "running"},
+                },
+            ),
+        ],
+        response_text="done",
+    )
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(
+            task_id="task-tool-text-only",
+            context_id="ctx-tool-text-only",
+            text="go",
+            accepted_output_modes=["text/plain"],
+        ),
+        queue,
+    )
+
+    updates = _artifact_updates(queue)
+    tool_updates = [ev for ev in updates if _artifact_stream_meta(ev)["block_type"] == "tool_call"]
+    assert tool_updates == []
+    assert any(_artifact_stream_meta(ev)["block_type"] == "text" for ev in updates)
+
+
+@pytest.mark.asyncio
 async def test_streaming_flushes_partial_marker_on_eof_as_current_block_type() -> None:
     client = DummyStreamingClient(
         stream_events_payload=[

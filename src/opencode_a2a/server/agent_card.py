@@ -42,6 +42,10 @@ from ..contracts.extensions import (
 from ..jsonrpc.application import SESSION_CONTEXT_PREFIX
 from ..profile.runtime import RuntimeProfile, build_runtime_profile
 
+_CHAT_INPUT_MODES = ["text/plain", "application/octet-stream"]
+_CHAT_OUTPUT_MODES = ["text/plain", "application/json"]
+_JSON_RPC_MODES = ["application/json"]
+
 
 def _select_public_extension_params(
     params: dict[str, Any],
@@ -381,6 +385,8 @@ def _build_agent_skills(
                     "Handle core A2A chat turns with shared session binding and optional "
                     "request-scoped model selection."
                 ),
+                input_modes=list(_CHAT_INPUT_MODES),
+                output_modes=list(_CHAT_OUTPUT_MODES),
                 tags=["assistant", "coding", "opencode", "core-a2a", "portable"],
             ),
             AgentSkill(
@@ -390,6 +396,8 @@ def _build_agent_skills(
                     "Inspect OpenCode session status, history, and low-risk lifecycle actions "
                     "through provider-private JSON-RPC extensions."
                 ),
+                input_modes=list(_JSON_RPC_MODES),
+                output_modes=list(_JSON_RPC_MODES),
                 tags=["opencode", "sessions", "history", "provider-private"],
             ),
             AgentSkill(
@@ -399,6 +407,8 @@ def _build_agent_skills(
                     "Discover available upstream providers and models through provider-private "
                     "JSON-RPC extensions."
                 ),
+                input_modes=list(_JSON_RPC_MODES),
+                output_modes=list(_JSON_RPC_MODES),
                 tags=["opencode", "providers", "models", "provider-private"],
             ),
             AgentSkill(
@@ -408,6 +418,8 @@ def _build_agent_skills(
                     "Manage OpenCode projects, workspaces, and worktrees through "
                     "provider-private JSON-RPC extensions."
                 ),
+                input_modes=list(_JSON_RPC_MODES),
+                output_modes=list(_JSON_RPC_MODES),
                 tags=["opencode", "project", "workspace", "worktree", "provider-private"],
             ),
             AgentSkill(
@@ -417,6 +429,8 @@ def _build_agent_skills(
                     "Recover pending permission and question interrupts through "
                     "provider-private JSON-RPC extensions."
                 ),
+                input_modes=list(_JSON_RPC_MODES),
+                output_modes=list(_JSON_RPC_MODES),
                 tags=["interrupt", "permission", "question", "provider-private"],
             ),
             AgentSkill(
@@ -426,6 +440,8 @@ def _build_agent_skills(
                     "Reply to streaming permission and question interrupts through shared "
                     "JSON-RPC callbacks."
                 ),
+                input_modes=list(_JSON_RPC_MODES),
+                output_modes=list(_JSON_RPC_MODES),
                 tags=["interrupt", "permission", "question", "shared"],
             ),
         ]
@@ -439,6 +455,8 @@ def _build_agent_skills(
                 "TextPart and FilePart inputs to OpenCode sessions with shared session "
                 "binding and optional request-scoped model selection."
             ),
+            input_modes=list(_CHAT_INPUT_MODES),
+            output_modes=list(_CHAT_OUTPUT_MODES),
             tags=["assistant", "coding", "opencode", "core-a2a", "portable"],
             examples=_build_chat_examples(settings.a2a_project),
         ),
@@ -449,6 +467,8 @@ def _build_agent_skills(
                 "provider-private OpenCode session/history and session-control surface "
                 "exposed through JSON-RPC extensions."
             ),
+            input_modes=list(_JSON_RPC_MODES),
+            output_modes=list(_JSON_RPC_MODES),
             tags=["opencode", "sessions", "history", "provider-private"],
             examples=_build_session_query_skill_examples(
                 capability_snapshot=capability_snapshot,
@@ -461,6 +481,8 @@ def _build_agent_skills(
                 "provider-private OpenCode provider/model discovery surface exposed "
                 "through JSON-RPC extensions."
             ),
+            input_modes=list(_JSON_RPC_MODES),
+            output_modes=list(_JSON_RPC_MODES),
             tags=["opencode", "providers", "models", "provider-private"],
             examples=[
                 "List available providers (method opencode.providers.list).",
@@ -474,6 +496,8 @@ def _build_agent_skills(
                 "provider-private OpenCode project/workspace/worktree control surface "
                 "exposed through JSON-RPC extensions."
             ),
+            input_modes=list(_JSON_RPC_MODES),
+            output_modes=list(_JSON_RPC_MODES),
             tags=["opencode", "project", "workspace", "worktree", "provider-private"],
             examples=_build_workspace_control_skill_examples(),
         ),
@@ -484,6 +508,8 @@ def _build_agent_skills(
                 "provider-private OpenCode interrupt recovery surface exposed through "
                 "JSON-RPC extensions."
             ),
+            input_modes=list(_JSON_RPC_MODES),
+            output_modes=list(_JSON_RPC_MODES),
             tags=["interrupt", "permission", "question", "provider-private"],
             examples=_build_interrupt_recovery_skill_examples(),
         ),
@@ -495,6 +521,8 @@ def _build_agent_skills(
                 "JSON-RPC methods a2a.interrupt.permission.reply, "
                 "a2a.interrupt.question.reply, and a2a.interrupt.question.reject."
             ),
+            input_modes=list(_JSON_RPC_MODES),
+            output_modes=list(_JSON_RPC_MODES),
             tags=["interrupt", "permission", "question", "shared"],
             examples=[
                 "Reply once/always/reject to a permission request by request_id.",
@@ -535,8 +563,8 @@ def _build_agent_card(
         version=settings.a2a_version,
         protocol_version=settings.a2a_protocol_version,
         preferred_transport=TransportProtocol.http_json,
-        default_input_modes=["text/plain", "application/octet-stream"],
-        default_output_modes=["text/plain"],
+        default_input_modes=list(_CHAT_INPUT_MODES),
+        default_output_modes=list(_CHAT_OUTPUT_MODES),
         capabilities=AgentCapabilities(
             streaming=True,
             extensions=_build_agent_extensions(
