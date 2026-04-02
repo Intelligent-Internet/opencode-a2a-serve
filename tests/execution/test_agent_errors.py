@@ -12,7 +12,11 @@ from opencode_a2a.opencode_upstream_client import (
     UpstreamConcurrencyLimitError,
     UpstreamContractError,
 )
-from tests.support.helpers import configure_mock_client_runtime, make_request_context_mock
+from tests.support.helpers import (
+    configure_mock_client_runtime,
+    make_request_context,
+    make_request_context_mock,
+)
 
 
 @pytest.mark.asyncio
@@ -87,6 +91,29 @@ async def test_execute_invalid_metadata_type():
     assert isinstance(event, Task)
     assert event.status.state.name == "failed"
     assert "Invalid metadata" in str(event.status.message)
+
+
+@pytest.mark.asyncio
+async def test_execute_rejects_output_modes_without_text_plain() -> None:
+    client = MagicMock()
+    configure_mock_client_runtime(client)
+    executor = OpencodeAgentExecutor(client, streaming_enabled=False)
+
+    context = make_request_context(
+        task_id="task-1",
+        context_id="ctx-1",
+        text="hello",
+        accepted_output_modes=["application/json"],
+    )
+
+    event_queue = AsyncMock(spec=EventQueue)
+    await executor.execute(context, event_queue)
+
+    event = event_queue.enqueue_event.call_args[0][0]
+    assert isinstance(event, Task)
+    assert event.status.state.name == "failed"
+    assert "acceptedOutputModes must include text/plain" in event.status.message.parts[0].root.text
+    assert not client.create_session.called
 
 
 @pytest.mark.asyncio

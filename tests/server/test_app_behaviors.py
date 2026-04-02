@@ -15,6 +15,7 @@ from a2a.types import (
     TaskQueryParams,
     TaskState,
     TaskStatus,
+    UnsupportedOperationError,
 )
 from a2a.utils.errors import ServerError
 from fastapi import Request
@@ -709,6 +710,31 @@ async def test_on_message_send_non_blocking_tracks_background_work(monkeypatch) 
         "cleanup_producer:task-1",
     }
     await asyncio.gather(*handler.background_tasks, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_output_modes_without_text_plain() -> None:
+    class _Handler(OpencodeRequestHandler):
+        def __init__(self) -> None:
+            super().__init__(agent_executor=MagicMock(), task_store=MagicMock())
+            self.setup_called = False
+
+        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+            del params, context
+            self.setup_called = True
+            raise AssertionError("_setup_message_execution should not be called")
+
+    handler = _Handler()
+    params = types.SimpleNamespace(
+        configuration=types.SimpleNamespace(accepted_output_modes=["application/json"])
+    )
+
+    with pytest.raises(ServerError) as exc_info:
+        await handler.on_message_send(params)
+
+    assert isinstance(exc_info.value.error, UnsupportedOperationError)
+    assert "require text/plain" in exc_info.value.error.message
+    assert handler.setup_called is False
 
 
 def test_normalize_log_level_configure_logging_and_main(monkeypatch) -> None:

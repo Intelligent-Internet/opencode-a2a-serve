@@ -90,6 +90,8 @@ from .upstream_error_translator import (
 )
 
 logger = logging.getLogger(__name__)
+_TEXT_PLAIN_MEDIA_TYPE = "text/plain"
+_APPLICATION_JSON_MEDIA_TYPE = "application/json"
 
 __all__ = [
     "_build_output_metadata",
@@ -148,6 +150,8 @@ class _PreparedExecution:
     directory: str | None
     workspace_id: str | None
     session_binding_context_id: str
+    accepted_output_modes: frozenset[str] | None
+    allow_structured_output: bool
 
 
 def _build_session_binding_context_id(
@@ -162,6 +166,27 @@ def _build_session_binding_context_id(
     if use_directory_binding and isinstance(directory, str) and directory.strip():
         return f"{context_id}::directory:{directory.strip()}"
     return context_id
+
+
+def _extract_accepted_output_modes(context: RequestContext) -> frozenset[str] | None:
+    configuration = getattr(context, "configuration", None)
+    accepted = getattr(configuration, "accepted_output_modes", None) or getattr(
+        configuration, "acceptedOutputModes", None
+    )
+    if not isinstance(accepted, list):
+        return None
+
+    normalized = {
+        value.strip().lower() for value in accepted if isinstance(value, str) and value.strip()
+    }
+    return frozenset(normalized) or None
+
+
+def _accepts_output_mode(
+    accepted_output_modes: frozenset[str] | None,
+    media_type: str,
+) -> bool:
+    return accepted_output_modes is None or media_type in accepted_output_modes
 
 
 class _ExecutionCoordinator:
@@ -368,6 +393,7 @@ class _ExecutionCoordinator:
                     directory=self._prepared.directory,
                     workspace_id=self._prepared.workspace_id,
                     terminal_signal=self._stream_terminal_signal,
+                    allow_structured_output=self._prepared.allow_structured_output,
                 )
             )
 
@@ -775,6 +801,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         identity = (call_context.state.get("identity") if call_context else None) or "anonymous"
 
         streaming_request = self._should_stream(context)
+        accepted_output_modes = _extract_accepted_output_modes(context)
         message_parts = (
             getattr(context.message, "parts", None) if context.message is not None else None
         )
@@ -853,6 +880,22 @@ class OpencodeAgentExecutor(AgentExecutor):
             )
             return
 
+        if not _accepts_output_mode(accepted_output_modes, _TEXT_PLAIN_MEDIA_TYPE):
+            await self._emit_error(
+                event_queue,
+                task_id=task_id,
+                context_id=context_id,
+                message="acceptedOutputModes must include text/plain for OpenCode chat responses.",
+                state=TaskState.failed,
+                streaming_request=streaming_request,
+            )
+            return
+
+        allow_structured_output = _accepts_output_mode(
+            accepted_output_modes,
+            _APPLICATION_JSON_MEDIA_TYPE,
+        )
+
         logger.debug(
             (
                 "Received message identity=%s task_id=%s context_id=%s "
@@ -877,6 +920,8 @@ class OpencodeAgentExecutor(AgentExecutor):
             directory=directory,
             workspace_id=workspace_id,
             session_binding_context_id=session_binding_context_id,
+            accepted_output_modes=accepted_output_modes,
+            allow_structured_output=allow_structured_output,
         )
         coordinator = _ExecutionCoordinator(
             self,
@@ -1097,6 +1142,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         terminal_signal: asyncio.Future[_StreamTerminalSignal],
         directory: str | None = None,
         workspace_id: str | None = None,
+        allow_structured_output: bool = True,
     ) -> None:
         await self._stream_runtime.consume(
             session_id=session_id,
@@ -1110,6 +1156,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             terminal_signal=terminal_signal,
             directory=directory,
             workspace_id=workspace_id,
+            allow_structured_output=allow_structured_output,
         )
 
 

@@ -36,7 +36,9 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
+    UnsupportedOperationError,
 )
+from a2a.utils import are_modalities_compatible
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     EXTENDED_AGENT_CARD_PATH,
@@ -77,6 +79,7 @@ from ..jsonrpc.application import (
 from ..opencode_upstream_client import OpencodeUpstreamClient
 from ..profile.runtime import build_runtime_profile
 from .agent_card import (
+    _CHAT_OUTPUT_MODES,
     _build_agent_card_description,
     _build_chat_examples,
     _build_session_query_skill_examples,
@@ -256,6 +259,57 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             getattr(message, "contextId", None) or getattr(message, "context_id", None) or task_id
         )
 
+    @staticmethod
+    def _extract_accepted_output_modes(params) -> list[str] | None:  # noqa: ANN001
+        configuration = getattr(params, "configuration", None)
+        accepted = getattr(configuration, "accepted_output_modes", None) or getattr(
+            configuration, "acceptedOutputModes", None
+        )
+        if not isinstance(accepted, list):
+            return None
+
+        normalized: list[str] = []
+        for value in accepted:
+            if not isinstance(value, str):
+                continue
+            mode = value.strip().lower()
+            if not mode or mode in normalized:
+                continue
+            normalized.append(mode)
+        return normalized or None
+
+    @classmethod
+    def _validate_chat_output_modes(cls, params) -> None:  # noqa: ANN001
+        accepted_output_modes = cls._extract_accepted_output_modes(params)
+        if not accepted_output_modes:
+            return
+
+        if not are_modalities_compatible(list(_CHAT_OUTPUT_MODES), accepted_output_modes):
+            raise ServerError(
+                error=UnsupportedOperationError(
+                    message=(
+                        "Requested acceptedOutputModes are not compatible "
+                        "with OpenCode chat responses."
+                    ),
+                    data={
+                        "accepted_output_modes": accepted_output_modes,
+                        "supported_output_modes": list(_CHAT_OUTPUT_MODES),
+                    },
+                )
+            )
+
+        if "text/plain" not in accepted_output_modes:
+            raise ServerError(
+                error=UnsupportedOperationError(
+                    message="OpenCode chat responses require text/plain in acceptedOutputModes.",
+                    data={
+                        "accepted_output_modes": accepted_output_modes,
+                        "required_output_modes": ["text/plain"],
+                        "supported_output_modes": list(_CHAT_OUTPUT_MODES),
+                    },
+                )
+            )
+
     async def on_get_task(
         self,
         params: TaskQueryParams,
@@ -320,6 +374,7 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             raise self._task_store_server_error(exc) from exc
 
     async def on_message_send_stream(self, params, context=None):
+        self._validate_chat_output_modes(params)
         (
             _task_manager,
             task_id,
@@ -369,6 +424,7 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             self._track_background_task(cleanup_task)
 
     async def on_message_send(self, params, context=None):
+        self._validate_chat_output_modes(params)
         (
             _task_manager,
             task_id,
