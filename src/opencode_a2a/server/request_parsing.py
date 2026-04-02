@@ -11,6 +11,7 @@ from ..contracts.extensions import (
     SESSION_QUERY_METHODS,
     WORKSPACE_CONTROL_METHODS,
 )
+from ..jsonrpc.error_responses import build_http_error_body
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ def _request_body_too_large_response(
     path: str,
     method: str,
     error: _RequestBodyTooLargeError,
+    protocol_version: str = "0.3",
 ) -> JSONResponse:
     logger.warning(
         "A2A request %s %s rejected: body_size=%s exceeds max_request_body_bytes=%s",
@@ -112,6 +114,14 @@ def _request_body_too_large_response(
         error.limit,
     )
     return JSONResponse(
-        {"error": "Request body too large", "max_bytes": error.limit},
+        build_http_error_body(
+            protocol_version=protocol_version,
+            status_code=413,
+            status="RESOURCE_EXHAUSTED",
+            message="Request body too large",
+            legacy_payload={"error": "Request body too large", "max_bytes": error.limit},
+            reason="REQUEST_BODY_TOO_LARGE",
+            metadata={"max_bytes": error.limit, "actual_size": error.actual_size},
+        ),
         status_code=413,
     )

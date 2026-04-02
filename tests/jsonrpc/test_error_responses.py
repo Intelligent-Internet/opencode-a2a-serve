@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from a2a.types import InvalidParamsError
+from a2a.types import A2AError, InvalidParamsError, UnsupportedOperationError
 
 from opencode_a2a.jsonrpc.error_responses import (
+    GOOGLE_RPC_ERROR_INFO_TYPE,
+    adapt_jsonrpc_error_for_protocol,
     interrupt_not_found_error,
     interrupt_type_mismatch_error,
     invalid_params_error,
@@ -117,3 +119,67 @@ def test_version_not_supported_error_includes_supported_versions() -> None:
         "supported_protocol_versions": ["0.3", "1.0"],
         "default_protocol_version": "0.3",
     }
+
+
+def test_adapt_standard_jsonrpc_error_for_v1_uses_standard_message_and_camel_case_data() -> None:
+    adapted = adapt_jsonrpc_error_for_protocol(
+        "1.0",
+        method_not_supported_error(
+            method="unsupported.method",
+            supported_methods=["message/send", "tasks/get"],
+            protocol_version="1.0",
+        ),
+    )
+
+    assert adapted.message == "Method not found"
+    assert adapted.data == {
+        "method": "unsupported.method",
+        "supportedMethods": ["message/send", "tasks/get"],
+        "protocolVersion": "1.0",
+    }
+
+
+def test_adapt_a2a_specific_error_for_v1_uses_error_info_details() -> None:
+    adapted = adapt_jsonrpc_error_for_protocol(
+        "1.0",
+        version_not_supported_error(
+            requested_version="1.1",
+            supported_protocol_versions=["0.3", "1.0"],
+            default_protocol_version="0.3",
+        ),
+    )
+
+    assert adapted.code == -32001
+    assert adapted.data[0] == {
+        "@type": GOOGLE_RPC_ERROR_INFO_TYPE,
+        "reason": "VERSION_NOT_SUPPORTED",
+        "domain": "a2a-protocol.org",
+        "metadata": {
+            "requestedVersion": "1.1",
+            "supportedProtocolVersions": '["0.3","1.0"]',
+            "defaultProtocolVersion": "0.3",
+        },
+    }
+    assert adapted.data[1] == {
+        "@type": "type.googleapis.com/opencode_a2a.ErrorContext",
+        "requestedVersion": "1.1",
+        "supportedProtocolVersions": ["0.3", "1.0"],
+        "defaultProtocolVersion": "0.3",
+    }
+
+
+def test_adapt_a2a_root_error_for_v1_uses_error_type_reason() -> None:
+    adapted = adapt_jsonrpc_error_for_protocol(
+        "1.0",
+        A2AError(root=UnsupportedOperationError()),
+    )
+
+    assert adapted.code == -32004
+    assert adapted.message == "This operation is not supported"
+    assert adapted.data == [
+        {
+            "@type": GOOGLE_RPC_ERROR_INFO_TYPE,
+            "reason": "UNSUPPORTED_OPERATION",
+            "domain": "a2a-protocol.org",
+        }
+    ]

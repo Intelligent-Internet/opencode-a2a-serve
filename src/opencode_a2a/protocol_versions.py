@@ -38,9 +38,7 @@ def normalize_protocol_version(value: str) -> str:
         raise ValueError("Protocol version must be a non-empty string.")
     match = _PROTOCOL_VERSION_PATTERN.fullmatch(normalized)
     if match is None:
-        raise ValueError(
-            "Protocol version must use Major.Minor or Major.Minor.Patch format."
-        )
+        raise ValueError("Protocol version must use Major.Minor or Major.Minor.Patch format.")
     return f"{match.group('major')}.{match.group('minor')}"
 
 

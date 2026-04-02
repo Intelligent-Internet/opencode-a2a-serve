@@ -5,6 +5,7 @@ import json
 import logging
 import secrets
 from contextvars import ContextVar, Token
+from typing import cast
 
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
@@ -16,10 +17,15 @@ from fastapi.responses import JSONResponse, Response
 from starlette.responses import StreamingResponse
 
 from ..execution.metrics import emit_metric
-from ..jsonrpc.error_responses import version_not_supported_error
+from ..jsonrpc.error_responses import (
+    adapt_jsonrpc_error_for_protocol,
+    build_http_error_body,
+    version_not_supported_error,
+)
 from ..protocol_versions import (
     UnsupportedProtocolVersionError,
     negotiate_protocol_version,
+    normalize_protocol_version,
 )
 from .request_parsing import (
     _decode_payload_preview,
@@ -105,6 +111,18 @@ def install_runtime_middlewares(
             return request_id
         return None
 
+    def _error_protocol_version(request: Request) -> str:
+        negotiated = getattr(request.state, "a2a_protocol_version", None)
+        if isinstance(negotiated, str) and negotiated.strip():
+            return negotiated
+        raw_value = request.headers.get("A2A-Version") or request.query_params.get("A2A-Version")
+        if isinstance(raw_value, str) and raw_value.strip():
+            try:
+                return normalize_protocol_version(raw_value)
+            except ValueError:
+                return raw_value.strip()
+        return cast(str, settings.a2a_protocol_version)
+
     @app.middleware("http")
     async def negotiate_a2a_protocol_version(request: Request, call_next):
         token: Token | None = None
@@ -128,27 +146,43 @@ def install_runtime_middlewares(
                         path=request.url.path,
                         method=request.method,
                         error=request_error,
+                        protocol_version=_error_protocol_version(request),
                     )
                 return JSONResponse(
                     {
                         "jsonrpc": "2.0",
                         "id": _extract_jsonrpc_request_id(payload),
-                        "error": version_not_supported_error(
-                            requested_version=error.requested_version,
-                            supported_protocol_versions=list(error.supported_protocol_versions),
-                            default_protocol_version=error.default_protocol_version,
+                        "error": adapt_jsonrpc_error_for_protocol(
+                            error.requested_version,
+                            version_not_supported_error(
+                                requested_version=error.requested_version,
+                                supported_protocol_versions=list(error.supported_protocol_versions),
+                                default_protocol_version=error.default_protocol_version,
+                            ),
                         ).model_dump(mode="json", exclude_none=True),
                     },
                     status_code=200,
                 )
             return JSONResponse(
-                {
-                    "error": "Unsupported A2A version",
-                    "type": "VERSION_NOT_SUPPORTED",
-                    "requested_version": error.requested_version,
-                    "supported_protocol_versions": list(error.supported_protocol_versions),
-                    "default_protocol_version": error.default_protocol_version,
-                },
+                build_http_error_body(
+                    protocol_version=error.requested_version,
+                    status_code=400,
+                    status="INVALID_ARGUMENT",
+                    message="Unsupported A2A version",
+                    legacy_payload={
+                        "error": "Unsupported A2A version",
+                        "type": "VERSION_NOT_SUPPORTED",
+                        "requested_version": error.requested_version,
+                        "supported_protocol_versions": list(error.supported_protocol_versions),
+                        "default_protocol_version": error.default_protocol_version,
+                    },
+                    reason="VERSION_NOT_SUPPORTED",
+                    metadata={
+                        "requested_version": error.requested_version,
+                        "supported_protocol_versions": list(error.supported_protocol_versions),
+                        "default_protocol_version": error.default_protocol_version,
+                    },
+                ),
                 status_code=400,
             )
         finally:
@@ -278,6 +312,7 @@ def install_runtime_middlewares(
                 path=request.url.path,
                 method=request.method,
                 error=error,
+                protocol_version=_error_protocol_version(request),
             )
         finally:
             if token is not None:
@@ -299,13 +334,25 @@ def install_runtime_middlewares(
                 payload
             ):
                 return JSONResponse(
-                    {
-                        "error": (
+                    build_http_error_body(
+                        protocol_version=_error_protocol_version(request),
+                        status_code=400,
+                        status="INVALID_ARGUMENT",
+                        message=(
                             "Invalid HTTP+JSON payload for REST endpoint. "
                             "Use message.content with ROLE_* role values, or call "
                             "POST / with method=message/send or method=message/stream."
-                        )
-                    },
+                        ),
+                        legacy_payload={
+                            "error": (
+                                "Invalid HTTP+JSON payload for REST endpoint. "
+                                "Use message.content with ROLE_* role values, or call "
+                                "POST / with method=message/send or method=message/stream."
+                            )
+                        },
+                        reason="INVALID_HTTP_JSON_PAYLOAD",
+                        metadata={"path": request.url.path},
+                    ),
                     status_code=400,
                 )
             return await call_next(request)
@@ -314,6 +361,7 @@ def install_runtime_middlewares(
                 path=request.url.path,
                 method=request.method,
                 error=error,
+                protocol_version=_error_protocol_version(request),
             )
         finally:
             if token is not None:
@@ -419,6 +467,7 @@ def install_runtime_middlewares(
                 path=request.url.path,
                 method=request.method,
                 error=error,
+                protocol_version=_error_protocol_version(request),
             )
         finally:
             if token is not None:

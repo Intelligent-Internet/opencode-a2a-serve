@@ -265,6 +265,9 @@ Consumer guidance:
 - Unsupported or invalid versions are rejected before request routing:
   - JSON-RPC returns a unified `VERSION_NOT_SUPPORTED` error envelope.
   - REST returns HTTP `400` with the same contract fields.
+- Error shaping now follows the negotiated major line:
+  - `0.3` keeps the existing legacy `error.data={...}` and flat REST error payloads.
+  - `1.0` keeps standard JSON-RPC error codes for standard failures, but moves A2A-specific JSON-RPC errors to `google.rpc.ErrorInfo`-style `error.data[]` details and REST errors to AIP-193 `error.details[]`.
 - The current transport payloads still follow the SDK-owned request/response shapes; version negotiation is introduced first so later issues can evolve error and payload compatibility without scattering version checks across handlers.
 
 ## Compatibility Profile
