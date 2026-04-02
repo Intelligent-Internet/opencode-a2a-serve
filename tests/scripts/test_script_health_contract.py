@@ -58,6 +58,13 @@ def test_smoke_test_requires_explicit_wheel_selection_when_dist_is_ambiguous() -
     assert 'uv tool install "${artifact_path}" --python "${python_bin}"' in SMOKE_TEST_TEXT
 
 
+def test_smoke_test_imports_installed_package_before_health_check() -> None:
+    assert "find \"${tool_dir}\" \\( -type f -o -type l \\) -path '*/bin/python'" in SMOKE_TEST_TEXT
+    assert '"${installed_python}" -c "import opencode_a2a; print(opencode_a2a.__version__)"' in (
+        SMOKE_TEST_TEXT
+    )
+
+
 def test_coverage_policy_tracks_overall_and_critical_file_thresholds() -> None:
     assert "OVERALL_MINIMUM = 90.0" in COVERAGE_GATE_TEXT
     assert '"src/opencode_a2a/execution/executor.py": 90.0' in COVERAGE_GATE_TEXT

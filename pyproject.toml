@@ -71,6 +71,9 @@ package = true
 fallback_version = "0+unknown"
 tag_regex = "^v?(?P<version>.+)$"
 
+[tool.setuptools.package-data]
+opencode_a2a = ["py.typed"]
+
 [tool.mypy]
 python_version = "3.11"
 files = ["src/opencode_a2a"]
