@@ -383,7 +383,9 @@ def _build_agent_skills(
                 name="OpenCode Chat",
                 description=(
                     "Handle core A2A chat turns with shared session binding and optional "
-                    "request-scoped model selection."
+                    "request-scoped model selection. Chat clients should continue accepting "
+                    "text/plain responses; application/json is additive structured-output "
+                    "support."
                 ),
                 input_modes=list(_CHAT_INPUT_MODES),
                 output_modes=list(_CHAT_OUTPUT_MODES),
@@ -453,7 +455,9 @@ def _build_agent_skills(
             description=(
                 "Handle core A2A message/send and message/stream requests by routing "
                 "TextPart and FilePart inputs to OpenCode sessions with shared session "
-                "binding and optional request-scoped model selection."
+                "binding and optional request-scoped model selection. Chat clients "
+                "should continue accepting text/plain responses; application/json is "
+                "additive structured-output support."
             ),
             input_modes=list(_CHAT_INPUT_MODES),
             output_modes=list(_CHAT_OUTPUT_MODES),

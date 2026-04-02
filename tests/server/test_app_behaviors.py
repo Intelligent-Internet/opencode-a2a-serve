@@ -734,6 +734,40 @@ async def test_on_message_send_rejects_output_modes_without_text_plain() -> None
 
     assert isinstance(exc_info.value.error, UnsupportedOperationError)
     assert "require text/plain" in exc_info.value.error.message
+    assert exc_info.value.error.data == {
+        "accepted_output_modes": ["application/json"],
+        "required_output_modes": ["text/plain"],
+        "supported_output_modes": ["text/plain", "application/json"],
+    }
+    assert handler.setup_called is False
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_rejects_incompatible_output_modes_before_execution() -> None:
+    class _Handler(OpencodeRequestHandler):
+        def __init__(self) -> None:
+            super().__init__(agent_executor=MagicMock(), task_store=MagicMock())
+            self.setup_called = False
+
+        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+            del params, context
+            self.setup_called = True
+            raise AssertionError("_setup_message_execution should not be called")
+
+    handler = _Handler()
+    params = types.SimpleNamespace(
+        configuration=types.SimpleNamespace(accepted_output_modes=["image/png"])
+    )
+
+    with pytest.raises(ServerError) as exc_info:
+        await handler.on_message_send_stream(params).__anext__()
+
+    assert isinstance(exc_info.value.error, UnsupportedOperationError)
+    assert "not compatible" in exc_info.value.error.message
+    assert exc_info.value.error.data == {
+        "accepted_output_modes": ["image/png"],
+        "supported_output_modes": ["text/plain", "application/json"],
+    }
     assert handler.setup_called is False
 
 
