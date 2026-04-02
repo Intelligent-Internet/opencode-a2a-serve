@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from opencode_a2a.server import application as app_module
+from opencode_a2a.server import client_manager as client_manager_module
 
 
 def _make_settings(**overrides: object) -> SimpleNamespace:
@@ -40,9 +40,9 @@ async def test_client_manager_evicts_lru_idle_clients(monkeypatch: pytest.Monkey
         async def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(app_module, "A2AClient", _FakeClient)
+    monkeypatch.setattr(client_manager_module, "A2AClient", _FakeClient)
 
-    manager = app_module.A2AClientManager(_make_settings(a2a_client_cache_maxsize=2))
+    manager = client_manager_module.A2AClientManager(_make_settings(a2a_client_cache_maxsize=2))
 
     async with manager.borrow_client("http://peer-1"):
         pass
@@ -75,9 +75,9 @@ async def test_client_manager_defers_busy_client_eviction(monkeypatch: pytest.Mo
         async def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(app_module, "A2AClient", _FakeClient)
+    monkeypatch.setattr(client_manager_module, "A2AClient", _FakeClient)
 
-    manager = app_module.A2AClientManager(_make_settings(a2a_client_cache_maxsize=1))
+    manager = client_manager_module.A2AClientManager(_make_settings(a2a_client_cache_maxsize=1))
 
     async with manager.borrow_client("http://peer-1") as first_client:
         first_client.busy = True
@@ -111,9 +111,9 @@ async def test_client_manager_preserves_borrowed_client_before_operation_starts(
         async def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(app_module, "A2AClient", _FakeClient)
+    monkeypatch.setattr(client_manager_module, "A2AClient", _FakeClient)
 
-    manager = app_module.A2AClientManager(_make_settings(a2a_client_cache_maxsize=1))
+    manager = client_manager_module.A2AClientManager(_make_settings(a2a_client_cache_maxsize=1))
 
     async with manager.borrow_client("http://peer-1"):
         async with manager.borrow_client("http://peer-2"):
@@ -144,10 +144,12 @@ async def test_client_manager_evicts_expired_clients(monkeypatch: pytest.MonkeyP
         async def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(app_module, "A2AClient", _FakeClient)
+    monkeypatch.setattr(client_manager_module, "A2AClient", _FakeClient)
 
     now = 100.0
-    manager = app_module.A2AClientManager(_make_settings(a2a_client_cache_ttl_seconds=10.0))
+    manager = client_manager_module.A2AClientManager(
+        _make_settings(a2a_client_cache_ttl_seconds=10.0)
+    )
     manager._now = lambda: now
 
     async with manager.borrow_client("http://peer-1"):
@@ -182,10 +184,12 @@ async def test_client_manager_rebuilds_expired_entry_for_same_url(
         async def close(self) -> None:
             self.closed = True
 
-    monkeypatch.setattr(app_module, "A2AClient", _FakeClient)
+    monkeypatch.setattr(client_manager_module, "A2AClient", _FakeClient)
 
     now = 100.0
-    manager = app_module.A2AClientManager(_make_settings(a2a_client_cache_ttl_seconds=10.0))
+    manager = client_manager_module.A2AClientManager(
+        _make_settings(a2a_client_cache_ttl_seconds=10.0)
+    )
     manager._now = lambda: now
 
     async with manager.borrow_client("http://peer-1") as first_client:
@@ -201,6 +205,8 @@ async def test_client_manager_rebuilds_expired_entry_for_same_url(
 
 
 def test_client_manager_loads_basic_auth_into_client_settings() -> None:
-    manager = app_module.A2AClientManager(_make_settings(a2a_client_basic_auth="user:pass"))
+    manager = client_manager_module.A2AClientManager(
+        _make_settings(a2a_client_basic_auth="user:pass")
+    )
 
     assert manager.client_settings.basic_auth == "user:pass"

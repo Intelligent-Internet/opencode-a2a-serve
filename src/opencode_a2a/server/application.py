@@ -1,12 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 import logging
-import secrets
-from contextlib import asynccontextmanager
-from contextvars import ContextVar, Token
 from functools import partial
 from typing import TYPE_CHECKING, cast
 
@@ -38,19 +33,11 @@ from a2a.types import (
     UnsupportedOperationError,
 )
 from a2a.utils import are_modalities_compatible
-from a2a.utils.constants import (
-    AGENT_CARD_WELL_KNOWN_PATH,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
-)
 from a2a.utils.errors import ServerError
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
 from pydantic_settings import BaseSettings
 from starlette.middleware.gzip import GZipMiddleware
-from starlette.responses import StreamingResponse
 
-from ..client import A2AClient
 from ..config import Settings
 from ..contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
@@ -71,7 +58,7 @@ from ..contracts.extensions import (
     WORKSPACE_CONTROL_METHODS,
     build_capability_snapshot,
 )
-from ..execution.executor import OpencodeAgentExecutor, _emit_metric
+from ..execution.executor import OpencodeAgentExecutor
 from ..invocation import call_with_supported_kwargs
 from ..jsonrpc.application import (
     OpencodeSessionQueryJSONRPCApplication,
@@ -86,6 +73,15 @@ from .agent_card import (
     _build_session_query_skill_examples,
     build_agent_card,
     build_authenticated_extended_agent_card,
+)
+from .client_manager import A2AClientManager
+from .lifespan import build_lifespan
+from .middleware import (
+    AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL,
+    PUBLIC_AGENT_CARD_CACHE_CONTROL,
+    build_agent_card_etag,
+    emit_stream_request_metrics,
+    install_runtime_middlewares,
 )
 from .openapi import (
     _build_jsonrpc_extension_openapi_description,
@@ -108,19 +104,15 @@ from .request_parsing import (
 from .state_store import (
     build_interrupt_request_repository,
     build_session_state_repository,
-    initialize_state_repository,
 )
 from .task_store import (
     TaskStoreOperationError,
     build_database_engine,
     build_task_store,
-    initialize_task_store,
 )
 
 logger = logging.getLogger(__name__)
 TASK_STORE_ERROR_TYPE = "TASK_STORE_UNAVAILABLE"
-PUBLIC_AGENT_CARD_CACHE_CONTROL = "public, max-age=300"
-AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL = "private, max-age=300"
 
 __all__ = [
     "_RequestBodyTooLargeError",
@@ -130,6 +122,8 @@ __all__ = [
     "INTERRUPT_RECOVERY_EXTENSION_URI",
     "INTERRUPT_RECOVERY_METHODS",
     "MODEL_SELECTION_EXTENSION_URI",
+    "PUBLIC_AGENT_CARD_CACHE_CONTROL",
+    "AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL",
     "PROVIDER_DISCOVERY_EXTENSION_URI",
     "PROVIDER_DISCOVERY_METHODS",
     "SESSION_BINDING_EXTENSION_URI",
@@ -160,11 +154,6 @@ __all__ = [
     "_request_body_too_large_response",
     "build_agent_card",
 ]
-
-_REQUEST_BODY_BYTES: ContextVar[bytes | None] = ContextVar(
-    "_REQUEST_BODY_BYTES",
-    default=None,
-)
 
 if TYPE_CHECKING:
     from a2a.server.context import ServerCallContext
@@ -370,8 +359,8 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             result_aggregator,
             producer_task,
         ) = await self._setup_message_execution(params, context)
-        _emit_metric("a2a_stream_requests_total")
-        _emit_metric("a2a_stream_active")
+        emit_stream_request_metrics()
+        emit_stream_request_metrics(active_delta=1.0)
         consumer = EventConsumer(queue)
         producer_task.add_done_callback(consumer.agent_task_callback)
         stream_completed = False
@@ -401,7 +390,7 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             await queue.close(immediate=True)
             raise
         finally:
-            _emit_metric("a2a_stream_active", -1)
+            emit_stream_request_metrics(active_delta=-1.0)
             logger.debug(
                 "A2A stream request closed task_id=%s completed=%s",
                 task_id,
@@ -519,221 +508,6 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
         return context
 
 
-def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
-    token = settings.a2a_bearer_token
-
-    def _unauthorized_response() -> JSONResponse:
-        return JSONResponse(
-            {"error": "Unauthorized"},
-            status_code=401,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    @app.middleware("http")
-    async def bearer_auth(request: Request, call_next):
-        if request.method == "OPTIONS" or request.url.path in {
-            AGENT_CARD_WELL_KNOWN_PATH,
-            PREV_AGENT_CARD_WELL_KNOWN_PATH,
-        }:
-            return await call_next(request)
-
-        auth_header = request.headers.get("authorization", "")
-        if not auth_header.lower().startswith("bearer "):
-            return _unauthorized_response()
-        provided = auth_header.split(" ", 1)[1].strip()
-        if not secrets.compare_digest(provided, token):
-            return _unauthorized_response()
-        request.state.user_identity = f"bearer:{hashlib.sha256(provided.encode()).hexdigest()[:12]}"
-
-        return await call_next(request)
-
-
-def _agent_card_response_bytes(card) -> bytes:
-    payload = card.model_dump(mode="json", by_alias=True, exclude_none=True)
-    return json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-
-
-def _build_agent_card_etag(card) -> str:
-    return f'W/"{hashlib.sha256(_agent_card_response_bytes(card)).hexdigest()}"'
-
-
-def _etag_matches(if_none_match: str | None, etag: str) -> bool:
-    if not if_none_match:
-        return False
-    candidates = {item.strip() for item in if_none_match.split(",") if item.strip()}
-    return "*" in candidates or etag in candidates
-
-
-def _merge_vary(*values: str) -> str:
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        for item in value.split(","):
-            normalized = item.strip()
-            if not normalized:
-                continue
-            key = normalized.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            ordered.append(normalized)
-    return ", ".join(ordered)
-
-
-class A2AClientManager:
-    def __init__(self, settings: Settings) -> None:
-        import time
-
-        from ..client.config import load_settings as load_client_settings
-
-        self.client_settings = load_client_settings(
-            {
-                "A2A_CLIENT_TIMEOUT_SECONDS": settings.a2a_client_timeout_seconds,
-                "A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS": (
-                    settings.a2a_client_card_fetch_timeout_seconds
-                ),
-                "A2A_CLIENT_USE_CLIENT_PREFERENCE": settings.a2a_client_use_client_preference,
-                "A2A_CLIENT_BEARER_TOKEN": settings.a2a_client_bearer_token,
-                "A2A_CLIENT_BASIC_AUTH": settings.a2a_client_basic_auth,
-                "A2A_CLIENT_SUPPORTED_TRANSPORTS": settings.a2a_client_supported_transports,
-            }
-        )
-        self._cache_ttl_seconds = float(settings.a2a_client_cache_ttl_seconds)
-        self._cache_maxsize = int(settings.a2a_client_cache_maxsize)
-        self._now = time.monotonic
-        self.clients: dict[str, _ClientCacheEntry] = {}
-        self._lock = asyncio.Lock()
-
-    @asynccontextmanager
-    async def borrow_client(self, agent_url: str):
-        url = agent_url.rstrip("/")
-        if self._cache_maxsize <= 0:
-            client = A2AClient(url, settings=self.client_settings)
-            try:
-                yield client
-            finally:
-                await client.close()
-            return
-
-        to_close: list[A2AClient] = []
-        async with self._lock:
-            now = self._now()
-            entry = self.clients.get(url)
-            if entry is not None and entry.expires_at is not None and entry.expires_at <= now:
-                if entry.borrow_count > 0 or entry.client.is_busy():
-                    entry.pending_eviction = True
-                else:
-                    self.clients.pop(url, None)
-                    to_close.append(entry.client)
-                    entry = None
-            to_close.extend(self._evict_locked(now=now, protected_keys={url}))
-            if entry is None:
-                entry = _ClientCacheEntry(
-                    client=A2AClient(url, settings=self.client_settings),
-                    last_used=now,
-                    expires_at=None
-                    if self._cache_ttl_seconds <= 0
-                    else now + self._cache_ttl_seconds,
-                )
-                self.clients[url] = entry
-            else:
-                entry.last_used = now
-                entry.expires_at = (
-                    None if self._cache_ttl_seconds <= 0 else now + self._cache_ttl_seconds
-                )
-                entry.pending_eviction = False
-            entry.borrow_count += 1
-            to_close.extend(self._evict_locked(now=now, protected_keys={url}))
-        await self._close_clients(to_close)
-
-        try:
-            yield entry.client
-        finally:
-            async with self._lock:
-                now = self._now()
-                current = self.clients.get(url)
-                if current is entry:
-                    if current.borrow_count > 0:
-                        current.borrow_count -= 1
-                    current.last_used = now
-                    current.expires_at = (
-                        None if self._cache_ttl_seconds <= 0 else now + self._cache_ttl_seconds
-                    )
-                to_close = self._evict_locked(now=now)
-            await self._close_clients(to_close)
-
-    async def close_all(self) -> None:
-        async with self._lock:
-            clients = [entry.client for entry in self.clients.values()]
-            self.clients.clear()
-        for client in clients:
-            await client.close()
-
-    def _evict_locked(
-        self,
-        *,
-        now: float,
-        protected_keys: set[str] | None = None,
-    ) -> list[A2AClient]:
-        protected = protected_keys or set()
-        to_close: list[A2AClient] = []
-
-        for key, entry in list(self.clients.items()):
-            expired = entry.expires_at is not None and entry.expires_at <= now
-            if not expired and not entry.pending_eviction:
-                continue
-            if key in protected or entry.borrow_count > 0 or entry.client.is_busy():
-                entry.pending_eviction = True
-                continue
-            self.clients.pop(key, None)
-            to_close.append(entry.client)
-
-        if self._cache_maxsize <= 0 or len(self.clients) <= self._cache_maxsize:
-            return to_close
-
-        if any(entry.pending_eviction for entry in self.clients.values()):
-            return to_close
-
-        for key, entry in sorted(self.clients.items(), key=lambda item: item[1].last_used):
-            if len(self.clients) <= self._cache_maxsize:
-                break
-            if key in protected:
-                continue
-            if entry.borrow_count > 0 or entry.client.is_busy():
-                entry.pending_eviction = True
-                continue
-            self.clients.pop(key, None)
-            to_close.append(entry.client)
-
-        return to_close
-
-    async def _close_clients(self, clients: list[A2AClient]) -> None:
-        for client in clients:
-            await client.close()
-
-
-class _ClientCacheEntry:
-    def __init__(
-        self,
-        *,
-        client: A2AClient,
-        last_used: float,
-        expires_at: float | None,
-        borrow_count: int = 0,
-        pending_eviction: bool = False,
-    ) -> None:
-        self.client = client
-        self.last_used = last_used
-        self.expires_at = expires_at
-        self.borrow_count = borrow_count
-        self.pending_eviction = pending_eviction
-
-
 def create_app(settings: Settings) -> FastAPI:
     database_engine = (
         build_database_engine(settings) if settings.a2a_task_store_backend == "database" else None
@@ -813,19 +587,16 @@ def create_app(settings: Settings) -> FastAPI:
         http_handler=handler,
         context_builder=context_builder,
     )
-    public_card_etag = _build_agent_card_etag(agent_card)
-    extended_card_etag = _build_agent_card_etag(extended_agent_card)
-
-    @asynccontextmanager
-    async def lifespan(_app: FastAPI):
-        await initialize_task_store(task_store)
-        await initialize_state_repository(session_state_repository)
-        await initialize_state_repository(interrupt_request_repository)
-        yield
-        if database_engine is not None:
-            await database_engine.dispose()
-        await client_manager.close_all()
-        await upstream_client.close()
+    public_card_etag = build_agent_card_etag(agent_card)
+    extended_card_etag = build_agent_card_etag(extended_agent_card)
+    lifespan = build_lifespan(
+        database_engine=database_engine,
+        task_store=task_store,
+        session_state_repository=session_state_repository,
+        interrupt_request_repository=interrupt_request_repository,
+        client_manager=client_manager,
+        upstream_client=upstream_client,
+    )
 
     app = A2AFastAPI(
         title=settings.a2a_title,
@@ -842,6 +613,12 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.upstream_client = upstream_client
     app.state.a2a_client_manager = client_manager
     _patch_jsonrpc_openapi_contract(app, settings, runtime_profile=runtime_profile)
+    install_runtime_middlewares(
+        app,
+        settings,
+        public_card_etag=public_card_etag,
+        extended_card_etag=extended_card_etag,
+    )
 
     @app.get("/health")
     async def health_check():
@@ -850,250 +627,6 @@ def create_app(settings: Settings) -> FastAPI:
             version=settings.a2a_version,
             protocol_version=settings.a2a_protocol_version,
         )
-
-    async def _get_request_body(request: Request) -> tuple[bytes, Token | None]:
-        cached = _REQUEST_BODY_BYTES.get()
-        if cached is not None:
-            return cached, None
-
-        limit = settings.a2a_max_request_body_bytes
-        content_length = _parse_content_length(request.headers.get("content-length"))
-        if limit > 0 and content_length is not None and content_length > limit:
-            raise _RequestBodyTooLargeError(limit=limit, actual_size=content_length)
-
-        if hasattr(request, "_body"):
-            body = request._body
-            if limit > 0 and len(body) > limit:
-                raise _RequestBodyTooLargeError(limit=limit, actual_size=len(body))
-        elif limit <= 0:
-            body = await request.body()
-        else:
-            total = 0
-            chunks: list[bytes] = []
-            async for chunk in request.stream():
-                if not chunk:
-                    continue
-                total += len(chunk)
-                if total > limit:
-                    raise _RequestBodyTooLargeError(limit=limit, actual_size=total)
-                chunks.append(chunk)
-            body = b"".join(chunks)
-            request._body = body
-
-        token = _REQUEST_BODY_BYTES.set(body)
-        return body, token
-
-    @app.middleware("http")
-    async def cache_agent_card_responses(request: Request, call_next):
-        if request.method != "GET":
-            return await call_next(request)
-
-        path = request.url.path
-        is_public_card = path in {
-            AGENT_CARD_WELL_KNOWN_PATH,
-            PREV_AGENT_CARD_WELL_KNOWN_PATH,
-        }
-        is_extended_card = path == EXTENDED_AGENT_CARD_PATH
-        if not is_public_card and not is_extended_card:
-            return await call_next(request)
-
-        if is_public_card and _etag_matches(request.headers.get("if-none-match"), public_card_etag):
-            return Response(
-                status_code=304,
-                headers={
-                    "ETag": public_card_etag,
-                    "Cache-Control": PUBLIC_AGENT_CARD_CACHE_CONTROL,
-                    "Vary": "Accept-Encoding",
-                },
-            )
-
-        response = await call_next(request)
-        if response.status_code != 200:
-            return response
-
-        if is_public_card:
-            response.headers["ETag"] = public_card_etag
-            response.headers["Cache-Control"] = PUBLIC_AGENT_CARD_CACHE_CONTROL
-            response.headers["Vary"] = _merge_vary(
-                response.headers.get("Vary", ""),
-                "Accept-Encoding",
-            )
-            return response
-
-        response.headers["ETag"] = extended_card_etag
-        response.headers["Cache-Control"] = AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
-        response.headers["Vary"] = _merge_vary(
-            response.headers.get("Vary", ""),
-            "Authorization",
-            "Accept-Encoding",
-        )
-        if _etag_matches(request.headers.get("if-none-match"), extended_card_etag):
-            return Response(status_code=304, headers=dict(response.headers))
-        return response
-
-    @app.middleware("http")
-    async def enforce_request_body_limit(request: Request, call_next):
-        token: Token | None = None
-        limit = settings.a2a_max_request_body_bytes
-        if limit <= 0 or request.method not in {"POST", "PUT", "PATCH"}:
-            return await call_next(request)
-
-        try:
-            _, token = await _get_request_body(request)
-            return await call_next(request)
-        except _RequestBodyTooLargeError as error:
-            return _request_body_too_large_response(
-                path=request.url.path,
-                method=request.method,
-                error=error,
-            )
-        finally:
-            if token is not None:
-                _REQUEST_BODY_BYTES.reset(token)
-
-    @app.middleware("http")
-    async def guard_rest_payload_shape(request: Request, call_next):
-        token: Token | None = None
-        if request.method != "POST" or request.url.path not in {
-            "/v1/message:send",
-            "/v1/message:stream",
-        }:
-            return await call_next(request)
-
-        try:
-            body, token = await _get_request_body(request)
-            payload = _parse_json_body(body)
-            if _looks_like_jsonrpc_envelope(payload) or _looks_like_jsonrpc_message_payload(
-                payload
-            ):
-                return JSONResponse(
-                    {
-                        "error": (
-                            "Invalid HTTP+JSON payload for REST endpoint. "
-                            "Use message.content with ROLE_* role values, or call "
-                            "POST / with method=message/send or method=message/stream."
-                        )
-                    },
-                    status_code=400,
-                )
-            return await call_next(request)
-        except _RequestBodyTooLargeError as error:
-            return _request_body_too_large_response(
-                path=request.url.path,
-                method=request.method,
-                error=error,
-            )
-        finally:
-            if token is not None:
-                _REQUEST_BODY_BYTES.reset(token)
-
-    @app.middleware("http")
-    async def log_payloads(request: Request, call_next):
-        token: Token | None = None
-        if not settings.a2a_log_payloads:
-            return await call_next(request)
-
-        try:
-            path = request.url.path
-            limit = settings.a2a_log_body_limit
-            content_type = _normalize_content_type(request.headers.get("content-type"))
-            content_length = _parse_content_length(request.headers.get("content-length"))
-
-            sensitive_method: str | None = None
-            request_omit_reason: str | None = None
-
-            if not _is_json_content_type(content_type):
-                request_omit_reason = f"non-json content-type={content_type or 'unknown'}"
-            elif limit > 0 and content_length is None:
-                request_omit_reason = f"missing content-length with limit={limit}"
-            elif limit > 0 and content_length is not None and content_length > limit:
-                request_omit_reason = f"content-length={content_length} exceeds limit={limit}"
-            else:
-                body, token = await _get_request_body(request)
-                # Detect session-query JSON-RPC methods regardless of deployment prefixes/root_path.
-                payload = _parse_json_body(body)
-                sensitive_method = _detect_sensitive_extension_method(payload)
-
-                if sensitive_method:
-                    logger.debug(
-                        "A2A request %s %s method=%s",
-                        request.method,
-                        path,
-                        sensitive_method,
-                    )
-                else:
-                    logger.debug(
-                        "A2A request %s %s body=%s",
-                        request.method,
-                        path,
-                        _decode_payload_preview(body, limit=limit),
-                    )
-
-            if request_omit_reason:
-                logger.debug(
-                    "A2A request %s %s body=[omitted %s]",
-                    request.method,
-                    path,
-                    request_omit_reason,
-                )
-
-            response = await call_next(request)
-            if isinstance(response, StreamingResponse):
-                if sensitive_method:
-                    logger.debug("A2A response %s streaming method=%s", path, sensitive_method)
-                else:
-                    logger.debug("A2A response %s streaming", path)
-                return response
-
-            response_body = getattr(response, "body", b"") or b""
-            if sensitive_method:
-                logger.debug(
-                    "A2A response %s status=%s bytes=%s method=%s",
-                    path,
-                    response.status_code,
-                    len(response_body),
-                    sensitive_method,
-                )
-                return response
-
-            if request_omit_reason:
-                logger.debug(
-                    "A2A response %s status=%s bytes=%s body=[omitted request_%s]",
-                    path,
-                    response.status_code,
-                    len(response_body),
-                    request_omit_reason,
-                )
-                return response
-            response_content_type = _normalize_content_type(response.headers.get("content-type"))
-            if not _is_json_content_type(response_content_type):
-                logger.debug(
-                    "A2A response %s status=%s bytes=%s body=[omitted non-json content-type=%s]",
-                    path,
-                    response.status_code,
-                    len(response_body),
-                    response_content_type or "unknown",
-                )
-                return response
-
-            logger.debug(
-                "A2A response %s status=%s body=%s",
-                path,
-                response.status_code,
-                _decode_payload_preview(response_body, limit=limit),
-            )
-            return response
-        except _RequestBodyTooLargeError as error:
-            return _request_body_too_large_response(
-                path=request.url.path,
-                method=request.method,
-                error=error,
-            )
-        finally:
-            if token is not None:
-                _REQUEST_BODY_BYTES.reset(token)
-
-    add_auth_middleware(app, settings)
 
     return app
 
