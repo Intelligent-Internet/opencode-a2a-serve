@@ -30,7 +30,7 @@ from opencode_a2a.client.errors import (
 from opencode_a2a.execution.executor import OpencodeAgentExecutor
 from opencode_a2a.execution.tool_error_mapping import map_a2a_tool_exception
 from opencode_a2a.opencode_upstream_client import OpencodeMessage
-from opencode_a2a.server import application as app_module
+from opencode_a2a.server.client_manager import A2AClientManager
 from tests.support.helpers import (
     DummyChatOpencodeUpstreamClient,
     DummyEventQueue,
@@ -575,7 +575,7 @@ async def test_agent_a2a_call_uses_server_side_basic_auth_headers(
     )
     monkeypatch.setattr(A2AClient, "_build_client", AsyncMock(return_value=fake_sdk_client))
 
-    manager = app_module.A2AClientManager(
+    manager = A2AClientManager(
         SimpleNamespace(
             a2a_client_timeout_seconds=30.0,
             a2a_client_card_fetch_timeout_seconds=5.0,
