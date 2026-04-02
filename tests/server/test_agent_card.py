@@ -41,8 +41,15 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert card.security == [{"bearerAuth": []}]
     assert skills_by_id["opencode.chat"].input_modes == ["text/plain", "application/octet-stream"]
     assert skills_by_id["opencode.chat"].output_modes == ["text/plain", "application/json"]
-    assert skills_by_id["opencode.sessions.query"].input_modes == ["application/json"]
-    assert skills_by_id["opencode.sessions.query"].output_modes == ["application/json"]
+    assert skills_by_id["opencode.sessions.query"].input_modes == [
+        "application/json",
+        "text/plain",
+        "application/octet-stream",
+    ]
+    assert skills_by_id["opencode.sessions.query"].output_modes == [
+        "application/json",
+        "text/plain",
+    ]
     assert skills_by_id["opencode.interrupt.callback"].input_modes == ["application/json"]
     assert skills_by_id["opencode.interrupt.callback"].output_modes == ["application/json"]
 

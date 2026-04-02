@@ -12,6 +12,7 @@ from a2a.types import (
     SecurityScheme,
     TransportProtocol,
 )
+from pydantic import Field
 
 from ..config import Settings
 from ..contracts.extensions import (
@@ -45,6 +46,13 @@ from ..profile.runtime import RuntimeProfile, build_runtime_profile
 _CHAT_INPUT_MODES = ["text/plain", "application/octet-stream"]
 _CHAT_OUTPUT_MODES = ["text/plain", "application/json"]
 _JSON_RPC_MODES = ["application/json"]
+
+
+class OpencodeAgentCard(AgentCard):
+    """Custom AgentCard that explicitly includes top-level inputModes and outputModes."""
+
+    input_modes: list[str] | None = Field(default=None, alias="inputModes")
+    output_modes: list[str] | None = Field(default=None, alias="outputModes")
 
 
 def _select_public_extension_params(
@@ -396,8 +404,8 @@ def _build_agent_skills(
                     "Inspect OpenCode session status, history, and low-risk lifecycle actions "
                     "through provider-private JSON-RPC extensions."
                 ),
-                input_modes=list(_JSON_RPC_MODES),
-                output_modes=list(_JSON_RPC_MODES),
+                input_modes=["application/json", "text/plain", "application/octet-stream"],
+                output_modes=["application/json", "text/plain"],
                 tags=["opencode", "sessions", "history", "provider-private"],
             ),
             AgentSkill(
@@ -467,8 +475,8 @@ def _build_agent_skills(
                 "provider-private OpenCode session/history and session-control surface "
                 "exposed through JSON-RPC extensions."
             ),
-            input_modes=list(_JSON_RPC_MODES),
-            output_modes=list(_JSON_RPC_MODES),
+            input_modes=["application/json", "text/plain", "application/octet-stream"],
+            output_modes=["application/json", "text/plain"],
             tags=["opencode", "sessions", "history", "provider-private"],
             examples=_build_session_query_skill_examples(
                 capability_snapshot=capability_snapshot,
@@ -551,7 +559,7 @@ def _build_agent_card(
     security: list[dict[str, list[str]]] = [{"bearerAuth": []}]
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
 
-    return AgentCard(
+    return OpencodeAgentCard(
         name=settings.a2a_title,
         description=_build_agent_card_description(
             settings,
@@ -565,6 +573,8 @@ def _build_agent_card(
         preferred_transport=TransportProtocol.http_json,
         default_input_modes=list(_CHAT_INPUT_MODES),
         default_output_modes=list(_CHAT_OUTPUT_MODES),
+        inputModes=list(_CHAT_INPUT_MODES),
+        outputModes=list(_CHAT_OUTPUT_MODES),
         capabilities=AgentCapabilities(
             streaming=True,
             extensions=_build_agent_extensions(
