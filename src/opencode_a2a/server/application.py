@@ -77,6 +77,7 @@ from ..jsonrpc.application import (
     OpencodeSessionQueryJSONRPCApplication,
 )
 from ..opencode_upstream_client import OpencodeUpstreamClient
+from ..output_modes import normalize_accepted_output_modes
 from ..profile.runtime import build_runtime_profile
 from .agent_card import (
     _CHAT_OUTPUT_MODES,
@@ -262,21 +263,8 @@ class OpencodeRequestHandler(DefaultRequestHandler):
     @staticmethod
     def _extract_accepted_output_modes(params) -> list[str] | None:  # noqa: ANN001
         configuration = getattr(params, "configuration", None)
-        accepted = getattr(configuration, "accepted_output_modes", None) or getattr(
-            configuration, "acceptedOutputModes", None
-        )
-        if not isinstance(accepted, list):
-            return None
-
-        normalized: list[str] = []
-        for value in accepted:
-            if not isinstance(value, str):
-                continue
-            mode = value.strip().lower()
-            if not mode or mode in normalized:
-                continue
-            normalized.append(mode)
-        return normalized or None
+        normalized = normalize_accepted_output_modes(configuration)
+        return list(normalized) if normalized is not None else None
 
     @classmethod
     def _validate_chat_output_modes(cls, params) -> None:  # noqa: ANN001

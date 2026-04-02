@@ -34,6 +34,7 @@ from ..opencode_upstream_client import (
     UpstreamConcurrencyLimitError,
     UpstreamContractError,
 )
+from ..output_modes import accepts_output_mode, normalize_accepted_output_modes
 from ..parts.mapping import (
     UnsupportedA2AInputError,
     extract_text_from_a2a_parts,
@@ -150,7 +151,6 @@ class _PreparedExecution:
     directory: str | None
     workspace_id: str | None
     session_binding_context_id: str
-    accepted_output_modes: frozenset[str] | None
     allow_structured_output: bool
 
 
@@ -166,27 +166,6 @@ def _build_session_binding_context_id(
     if use_directory_binding and isinstance(directory, str) and directory.strip():
         return f"{context_id}::directory:{directory.strip()}"
     return context_id
-
-
-def _extract_accepted_output_modes(context: RequestContext) -> frozenset[str] | None:
-    configuration = getattr(context, "configuration", None)
-    accepted = getattr(configuration, "accepted_output_modes", None) or getattr(
-        configuration, "acceptedOutputModes", None
-    )
-    if not isinstance(accepted, list):
-        return None
-
-    normalized = {
-        value.strip().lower() for value in accepted if isinstance(value, str) and value.strip()
-    }
-    return frozenset(normalized) or None
-
-
-def _accepts_output_mode(
-    accepted_output_modes: frozenset[str] | None,
-    media_type: str,
-) -> bool:
-    return accepted_output_modes is None or media_type in accepted_output_modes
 
 
 class _ExecutionCoordinator:
@@ -801,7 +780,7 @@ class OpencodeAgentExecutor(AgentExecutor):
         identity = (call_context.state.get("identity") if call_context else None) or "anonymous"
 
         streaming_request = self._should_stream(context)
-        accepted_output_modes = _extract_accepted_output_modes(context)
+        accepted_output_modes = normalize_accepted_output_modes(context.configuration)
         message_parts = (
             getattr(context.message, "parts", None) if context.message is not None else None
         )
@@ -880,7 +859,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             )
             return
 
-        if not _accepts_output_mode(accepted_output_modes, _TEXT_PLAIN_MEDIA_TYPE):
+        if not accepts_output_mode(accepted_output_modes, _TEXT_PLAIN_MEDIA_TYPE):
             await self._emit_error(
                 event_queue,
                 task_id=task_id,
@@ -891,7 +870,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             )
             return
 
-        allow_structured_output = _accepts_output_mode(
+        allow_structured_output = accepts_output_mode(
             accepted_output_modes,
             _APPLICATION_JSON_MEDIA_TYPE,
         )
@@ -920,7 +899,6 @@ class OpencodeAgentExecutor(AgentExecutor):
             directory=directory,
             workspace_id=workspace_id,
             session_binding_context_id=session_binding_context_id,
-            accepted_output_modes=accepted_output_modes,
             allow_structured_output=allow_structured_output,
         )
         coordinator = _ExecutionCoordinator(
