@@ -166,6 +166,37 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
 
 
 @pytest.mark.asyncio
+async def test_rest_endpoints_reject_unsupported_protocol_version() -> None:
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/message:send",
+            headers={
+                "Authorization": "Bearer test-token",
+                "A2A-Version": "2.0",
+            },
+            json={
+                "message": {
+                    "messageId": "req-1",
+                    "role": "ROLE_USER",
+                    "content": [{"text": "hello"}],
+                }
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "Unsupported A2A version",
+        "type": "VERSION_NOT_SUPPORTED",
+        "requested_version": "2.0",
+        "supported_protocol_versions": ["0.3", "1.0"],
+        "default_protocol_version": "0.3",
+    }
+
+
+@pytest.mark.asyncio
 async def test_global_http_gzip_applies_to_eligible_non_streaming_responses(monkeypatch) -> None:
     import opencode_a2a.server.application as app_module
 

@@ -226,10 +226,14 @@ def _build_agent_extensions(
     compatibility_profile_params = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
     wire_contract_params = build_wire_contract_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
 
     return [

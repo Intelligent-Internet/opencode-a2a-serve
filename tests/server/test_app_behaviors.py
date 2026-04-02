@@ -272,7 +272,7 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch) -> None:
             "version": settings.a2a_version,
             "profile": {
                 "profile_id": "opencode-a2a-single-tenant-coding-v1",
-                "protocol_version": "0.3.0",
+                "protocol_version": settings.a2a_protocol_version,
                 "deployment": {
                     "id": "single_tenant_shared_workspace",
                     "single_tenant": True,

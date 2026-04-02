@@ -205,13 +205,18 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 return await super()._handle_requests(request)
             if base_request.id is None:
                 return Response(status_code=204)
+            negotiated_protocol_version = getattr(
+                request.state,
+                "a2a_protocol_version",
+                self._protocol_version,
+            )
 
             return self._generate_error_response(
                 base_request.id,
                 method_not_supported_error(
                     method=base_request.method,
                     supported_methods=self._supported_methods,
-                    protocol_version=self._protocol_version,
+                    protocol_version=negotiated_protocol_version,
                 ),
             )
 

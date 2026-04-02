@@ -257,6 +257,16 @@ Consumer guidance:
 - Discover custom JSON-RPC methods from Agent Card / OpenAPI before calling them.
 - Treat `supported_methods` in `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 
+## Protocol Version Negotiation
+
+- The runtime accepts `A2A-Version` from either the HTTP header or the query parameter of A2A transport requests.
+- If both are omitted, the runtime falls back to the configured default protocol version.
+- Current defaults declare `default_protocol_version=0.3` and `supported_protocol_versions=["0.3", "1.0"]`.
+- Unsupported or invalid versions are rejected before request routing:
+  - JSON-RPC returns a unified `VERSION_NOT_SUPPORTED` error envelope.
+  - REST returns HTTP `400` with the same contract fields.
+- The current transport payloads still follow the SDK-owned request/response shapes; version negotiation is introduced first so later issues can evolve error and payload compatibility without scattering version checks across handlers.
+
 ## Compatibility Profile
 
 The service also publishes a machine-readable compatibility profile through Agent Card and OpenAPI metadata.
@@ -271,6 +281,8 @@ Its purpose is to declare:
 Current profile shape:
 
 - `profile_id=opencode-a2a-single-tenant-coding-v1`
+- `default_protocol_version`
+- `supported_protocol_versions`
 - Deployment semantics are declared under `deployment`:
   - `id=single_tenant_shared_workspace`
   - `single_tenant=true`

@@ -31,6 +31,24 @@ def method_not_supported_error(
     )
 
 
+def version_not_supported_error(
+    *,
+    requested_version: str,
+    supported_protocol_versions: list[str],
+    default_protocol_version: str,
+) -> JSONRPCError:
+    return JSONRPCError(
+        code=-32001,
+        message=f"Unsupported A2A version: {requested_version}",
+        data={
+            "type": "VERSION_NOT_SUPPORTED",
+            "requested_version": requested_version,
+            "supported_protocol_versions": supported_protocol_versions,
+            "default_protocol_version": default_protocol_version,
+        },
+    )
+
+
 def session_forbidden_error(code: int, *, session_id: str) -> JSONRPCError:
     return JSONRPCError(
         code=code,
@@ -157,4 +175,5 @@ __all__ = [
     "upstream_http_error",
     "upstream_payload_error",
     "upstream_unreachable_error",
+    "version_not_supported_error",
 ]

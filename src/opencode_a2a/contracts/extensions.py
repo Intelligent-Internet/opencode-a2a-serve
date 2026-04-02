@@ -1225,7 +1225,13 @@ def build_compatibility_profile_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
+    supported_protocol_versions: tuple[str, ...] | list[str] | None = None,
+    default_protocol_version: str | None = None,
 ) -> dict[str, Any]:
+    declared_default_protocol_version = default_protocol_version or protocol_version
+    declared_supported_protocol_versions = list(
+        supported_protocol_versions or (declared_default_protocol_version,)
+    )
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     service_behaviors = build_service_behavior_contract_params()
     method_retention: dict[str, dict[str, Any]] = {
@@ -1295,6 +1301,8 @@ def build_compatibility_profile_params(
     )
     return {
         **runtime_profile.summary_dict(protocol_version=protocol_version),
+        "default_protocol_version": declared_default_protocol_version,
+        "supported_protocol_versions": declared_supported_protocol_versions,
         "core": {
             "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
             "http_endpoints": list(CORE_HTTP_ENDPOINTS),
@@ -1380,12 +1388,20 @@ def build_wire_contract_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
+    supported_protocol_versions: tuple[str, ...] | list[str] | None = None,
+    default_protocol_version: str | None = None,
 ) -> dict[str, Any]:
+    declared_default_protocol_version = default_protocol_version or protocol_version
+    declared_supported_protocol_versions = list(
+        supported_protocol_versions or (declared_default_protocol_version,)
+    )
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     service_behaviors = build_service_behavior_contract_params()
 
     return {
         "protocol_version": protocol_version,
+        "default_protocol_version": declared_default_protocol_version,
+        "supported_protocol_versions": declared_supported_protocol_versions,
         "profile": runtime_profile.summary_dict(protocol_version=protocol_version),
         "preferred_transport": "HTTP+JSON",
         "additional_transports": ["JSON-RPC"],

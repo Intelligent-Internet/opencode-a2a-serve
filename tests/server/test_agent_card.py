@@ -35,6 +35,7 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert "Single-tenant deployment" in card.description
     assert card.capabilities.streaming is True
     assert card.supports_authenticated_extended_card is True
+    assert card.protocol_version == "0.3"
     assert card.default_input_modes == ["text/plain", "application/octet-stream"]
     assert card.default_output_modes == ["text/plain", "application/json"]
     assert list(card.security_schemes.keys()) == ["bearerAuth"]
@@ -625,6 +626,8 @@ def test_agent_card_injects_profile_into_extensions() -> None:
 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     assert wire_contract.params["profile"]["profile_id"] == "opencode-a2a-single-tenant-coding-v1"
+    assert wire_contract.params["default_protocol_version"] == "0.3"
+    assert wire_contract.params["supported_protocol_versions"] == ["0.3", "1.0"]
     assert MODEL_SELECTION_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert PROVIDER_DISCOVERY_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]
     assert WORKSPACE_CONTROL_EXTENSION_URI in wire_contract.params["extensions"]["extension_uris"]

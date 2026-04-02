@@ -16,6 +16,11 @@ from fastapi.responses import JSONResponse, Response
 from starlette.responses import StreamingResponse
 
 from ..execution.metrics import emit_metric
+from ..jsonrpc.error_responses import version_not_supported_error
+from ..protocol_versions import (
+    UnsupportedProtocolVersionError,
+    negotiate_protocol_version,
+)
 from .request_parsing import (
     _decode_payload_preview,
     _detect_sensitive_extension_method,
@@ -85,6 +90,78 @@ def install_runtime_middlewares(
     public_card_etag: str,
     extended_card_etag: str,
 ) -> None:
+    def _requires_protocol_negotiation(request: Request) -> bool:
+        if request.url.path == "/" and request.method == "POST":
+            return True
+        if request.url.path.startswith("/v1/"):
+            return True
+        return False
+
+    def _extract_jsonrpc_request_id(payload: object) -> str | int | None:
+        if not isinstance(payload, dict):
+            return None
+        request_id = payload.get("id")
+        if isinstance(request_id, str | int):
+            return request_id
+        return None
+
+    @app.middleware("http")
+    async def negotiate_a2a_protocol_version(request: Request, call_next):
+        token: Token | None = None
+        if not _requires_protocol_negotiation(request):
+            return await call_next(request)
+
+        try:
+            negotiated = negotiate_protocol_version(
+                header_value=request.headers.get("A2A-Version"),
+                query_value=request.query_params.get("A2A-Version"),
+                default_protocol_version=settings.a2a_protocol_version,
+                supported_protocol_versions=settings.a2a_supported_protocol_versions,
+            )
+        except UnsupportedProtocolVersionError as error:
+            if request.url.path == "/" and request.method == "POST":
+                try:
+                    body, token = await _get_request_body(request)
+                    payload = _parse_json_body(body)
+                except _RequestBodyTooLargeError as request_error:
+                    return _request_body_too_large_response(
+                        path=request.url.path,
+                        method=request.method,
+                        error=request_error,
+                    )
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": _extract_jsonrpc_request_id(payload),
+                        "error": version_not_supported_error(
+                            requested_version=error.requested_version,
+                            supported_protocol_versions=list(error.supported_protocol_versions),
+                            default_protocol_version=error.default_protocol_version,
+                        ).model_dump(mode="json", exclude_none=True),
+                    },
+                    status_code=200,
+                )
+            return JSONResponse(
+                {
+                    "error": "Unsupported A2A version",
+                    "type": "VERSION_NOT_SUPPORTED",
+                    "requested_version": error.requested_version,
+                    "supported_protocol_versions": list(error.supported_protocol_versions),
+                    "default_protocol_version": error.default_protocol_version,
+                },
+                status_code=400,
+            )
+        finally:
+            if token is not None:
+                _REQUEST_BODY_BYTES.reset(token)
+
+        request.state.a2a_protocol_version = negotiated.negotiated_version
+        request.state.a2a_requested_protocol_version = negotiated.requested_version
+        request.state.a2a_protocol_version_explicit = negotiated.explicit
+        response = await call_next(request)
+        response.headers["A2A-Version"] = negotiated.negotiated_version
+        return response
+
     async def _get_request_body(request: Request) -> tuple[bytes, Token | None]:
         cached = _REQUEST_BODY_BYTES.get()
         if cached is not None:

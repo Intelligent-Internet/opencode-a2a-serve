@@ -12,6 +12,7 @@ from opencode_a2a.jsonrpc.error_responses import (
     upstream_http_error,
     upstream_payload_error,
     upstream_unreachable_error,
+    version_not_supported_error,
 )
 
 
@@ -19,7 +20,7 @@ def test_jsonrpc_error_mapping_helpers_preserve_business_contract_fields() -> No
     unsupported = method_not_supported_error(
         method="unsupported.method",
         supported_methods=["message/send", "tasks/get"],
-        protocol_version="0.3.0",
+        protocol_version="0.3",
     )
     assert unsupported.code == -32601
     assert unsupported.data["type"] == "METHOD_NOT_SUPPORTED"
@@ -99,3 +100,20 @@ def test_invalid_error_helper_wraps_a2a_error() -> None:
     assert isinstance(invalid.root, InvalidParamsError)
     assert invalid.root.message == "bad field"
     assert invalid.root.data == {"type": "INVALID_FIELD", "field": "request"}
+
+
+def test_version_not_supported_error_includes_supported_versions() -> None:
+    error = version_not_supported_error(
+        requested_version="2.0",
+        supported_protocol_versions=["0.3", "1.0"],
+        default_protocol_version="0.3",
+    )
+
+    assert error.code == -32001
+    assert error.message == "Unsupported A2A version: 2.0"
+    assert error.data == {
+        "type": "VERSION_NOT_SUPPORTED",
+        "requested_version": "2.0",
+        "supported_protocol_versions": ["0.3", "1.0"],
+        "default_protocol_version": "0.3",
+    }

@@ -84,10 +84,14 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     expected_compatibility_profile = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
     expected_wire_contract = build_wire_contract_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
 
     assert session_binding.params == expected_session_binding, (
@@ -170,10 +174,14 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     expected_compatibility_profile = build_compatibility_profile_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
     expected_wire_contract = build_wire_contract_params(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
+        supported_protocol_versions=settings.a2a_supported_protocol_versions,
+        default_protocol_version=settings.a2a_protocol_version,
     )
 
     assert session_binding == expected_session_binding, (
