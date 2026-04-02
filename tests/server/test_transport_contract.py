@@ -108,7 +108,13 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         assert public_card.headers["cache-control"] == PUBLIC_AGENT_CARD_CACHE_CONTROL
         assert public_card.headers["etag"]
         assert public_card.headers["vary"] == "Accept-Encoding"
-        assert public_card.json()["supportsAuthenticatedExtendedCard"] is True
+
+        card_json = public_card.json()
+        assert card_json["supportsAuthenticatedExtendedCard"] is True
+        assert "inputModes" in card_json
+        assert "outputModes" in card_json
+        assert card_json["inputModes"] == card_json["defaultInputModes"]
+        assert card_json["outputModes"] == card_json["defaultOutputModes"]
 
         public_cached = await client.get(
             "/.well-known/agent-card.json",
