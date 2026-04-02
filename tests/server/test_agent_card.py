@@ -652,6 +652,7 @@ def test_agent_card_chat_examples_include_project_hint_when_configured() -> None
     chat_skill = next(skill for skill in card.skills if skill.id == "opencode.chat")
     assert chat_skill.examples is None
     assert "shared session binding" in chat_skill.description
+    assert "text/plain responses" in chat_skill.description
     assert "core-a2a" in chat_skill.tags
     assert "portable" in chat_skill.tags
 

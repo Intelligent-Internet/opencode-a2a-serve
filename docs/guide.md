@@ -172,6 +172,9 @@ If one deployment works while another fails against the same upstream provider, 
 - The service forwards A2A `message:send` to OpenCode session/message calls.
 - Main chat requests may override the upstream model for one request through `metadata.shared.model`.
 - Provider/model catalog discovery is available through `opencode.providers.list` and `opencode.models.list`.
+- Main chat requests that explicitly send `configuration.acceptedOutputModes` must stay compatible with the declared chat output modes.
+- Current main chat requests must continue accepting `text/plain`; requests that only accept `application/json` or other incompatible modes are rejected before execution starts.
+- `application/json` is additive structured-output support for incremental `tool_call` payloads. It does not guarantee that ordinary assistant prose can always be losslessly represented as JSON, so consumers that expect normal chat text should keep accepting `text/plain`.
 - Main chat input supports structured A2A `parts` passthrough:
   - `TextPart` is forwarded as an OpenCode text part.
   - `FilePart(FileWithBytes)` is forwarded as a `file` part with a `data:` URL.
