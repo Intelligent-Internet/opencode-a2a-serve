@@ -145,6 +145,10 @@ With the default `database` backend, the service persists:
 - session binding / ownership state
 - interrupt request bindings and tombstones
 
+The runtime automatically applies lightweight schema migrations for its custom state tables and records the applied version in `a2a_schema_version`. This built-in path currently targets the local SQLite deployment profile and does not require Alembic.
+
+The A2A SDK task table remains managed by the SDK's own `DatabaseTaskStore` initialization path. The internal migration runner only owns the additional `opencode-a2a` state tables listed above.
+
 In-flight asyncio locks, outbound A2A client caches, and stream-local aggregation buffers remain process-local runtime state.
 
 To opt into an ephemeral development profile, set:
