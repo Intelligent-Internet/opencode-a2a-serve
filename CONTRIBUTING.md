@@ -55,6 +55,14 @@ bash -n scripts/doctor.sh
 bash -n scripts/lint.sh
 ```
 
+External interoperability experiments stay outside the default regression baseline. When you need to reproduce current official-tool behavior, run:
+
+```bash
+bash ./scripts/conformance.sh
+```
+
+Treat that output as investigation input. Do not fold it into `doctor.sh` or the default CI quality gate unless the repository explicitly decides to promote a specific experiment into a maintained policy.
+
 If you change extension methods, extension metadata, or Agent Card/OpenAPI contract surfaces, also run:
 
 ```bash
