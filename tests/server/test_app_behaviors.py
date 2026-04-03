@@ -420,6 +420,39 @@ async def test_push_notification_routes_are_explicitly_unsupported(monkeypatch) 
 
 
 @pytest.mark.asyncio
+async def test_push_notification_jsonrpc_methods_remain_unsupported(monkeypatch) -> None:
+    monkeypatch.setattr(
+        app_module,
+        "OpencodeUpstreamClient",
+        DummyChatOpencodeUpstreamClient,
+    )
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tasks/pushNotificationConfig/get",
+                "params": {"id": "task-1"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "error": {
+            "code": -32004,
+            "message": "This operation is not supported",
+        },
+        "id": 1,
+        "jsonrpc": "2.0",
+    }
+
+
+@pytest.mark.asyncio
 async def test_on_cancel_task_and_resubscribe_cover_race_paths(monkeypatch) -> None:
     task_store = MagicMock()
     handler = OpencodeRequestHandler(agent_executor=MagicMock(), task_store=task_store)
