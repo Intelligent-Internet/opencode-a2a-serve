@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 from sqlalchemy.exc import IntegrityError
 
@@ -37,6 +37,31 @@ async def _read_state_store_schema_row_count(engine) -> int:  # noqa: ANN001
             text("SELECT COUNT(*) FROM a2a_schema_version WHERE name = 'state_store'")
         )
         return int(result.scalar_one())
+
+
+async def _read_table_index_names(engine, table_name: str) -> set[str]:  # noqa: ANN001
+    async with engine.begin() as conn:
+        return await conn.run_sync(
+            lambda sync_conn: {
+                index["name"] for index in inspect(sync_conn).get_indexes(table_name)
+            }
+        )
+
+
+async def _read_pending_claim_row(engine, session_id: str) -> dict[str, object] | None:  # noqa: ANN001
+    async with engine.begin() as conn:
+        result = await conn.execute(
+            text(
+                """
+                SELECT session_id, identity, updated_at, expires_at
+                FROM a2a_pending_session_claims
+                WHERE session_id = :session_id
+                """
+            ),
+            {"session_id": session_id},
+        )
+        row = result.mappings().one_or_none()
+        return None if row is None else dict(row)
 
 
 def test_add_missing_nullable_column_supports_non_sqlite_dialects(monkeypatch) -> None:
@@ -201,6 +226,49 @@ async def test_database_pending_session_claim_expires(tmp_path: Path) -> None:
 
     now = 106.0
     assert await repository.get_pending_claim(session_id="ses-1") is None
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_pending_session_claim_keeps_absolute_expiry_when_runtime_ttl_changes(
+    tmp_path: Path,
+) -> None:
+    now = 100.0
+
+    def _now() -> float:
+        return now
+
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'pending-claim-expires-at.db'}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=database_url,
+    )
+    engine = build_database_engine(settings)
+    writer = DatabaseSessionStateRepository(
+        engine=engine,
+        pending_claim_ttl_seconds=5.0,
+        clock=_now,
+    )
+    await initialize_state_repository(writer)
+    await writer.set_pending_claim(session_id="ses-1", identity="user-1")
+
+    stored_row = await _read_pending_claim_row(engine, "ses-1")
+    assert stored_row is not None
+    assert stored_row["expires_at"] == pytest.approx(105.0)
+
+    reader = DatabaseSessionStateRepository(
+        engine=engine,
+        pending_claim_ttl_seconds=1.0,
+        clock=_now,
+    )
+    await initialize_state_repository(reader)
+
+    now = 104.0
+    assert await reader.get_pending_claim(session_id="ses-1") == "user-1"
+
+    now = 106.0
+    assert await reader.get_pending_claim(session_id="ses-1") is None
 
     await engine.dispose()
 
@@ -476,6 +544,14 @@ async def test_database_state_store_records_schema_version_for_existing_current_
     await initialize_state_repository(session_repository)
 
     assert await _read_state_store_schema_version(engine) == CURRENT_STATE_STORE_SCHEMA_VERSION
+    assert await _read_table_index_names(engine, "a2a_pending_session_claims") == {
+        "ix_a2a_pending_session_claims_expires_at"
+    }
+    assert await _read_table_index_names(engine, "a2a_interrupt_requests") == {
+        "ix_a2a_interrupt_requests_identity_expires_at",
+        "ix_a2a_interrupt_requests_identity_type_expires_at",
+        "ix_a2a_interrupt_requests_tombstone_expires_at",
+    }
 
     await engine.dispose()
 

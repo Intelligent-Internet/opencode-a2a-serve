@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy import (
     Column,
     Float,
+    Index,
     MetaData,
     String,
     Table,
     and_,
     delete,
     insert,
+    or_,
     select,
     update,
 )
@@ -51,7 +53,8 @@ _PENDING_SESSION_CLAIMS = Table(
     _STATE_METADATA,
     Column("session_id", String, primary_key=True),
     Column("identity", String, nullable=False),
-    Column("updated_at", Float, nullable=False),
+    Column("updated_at", Float, nullable=True),
+    Column("expires_at", Float, nullable=True),
 )
 
 _INTERRUPT_REQUESTS = Table(
@@ -66,6 +69,26 @@ _INTERRUPT_REQUESTS = Table(
     Column("details_json", String, nullable=True),
     Column("expires_at", Float, nullable=True),
     Column("tombstone_expires_at", Float, nullable=True),
+)
+
+Index(
+    "ix_a2a_pending_session_claims_expires_at",
+    _PENDING_SESSION_CLAIMS.c.expires_at,
+)
+Index(
+    "ix_a2a_interrupt_requests_identity_expires_at",
+    _INTERRUPT_REQUESTS.c.identity,
+    _INTERRUPT_REQUESTS.c.expires_at,
+)
+Index(
+    "ix_a2a_interrupt_requests_identity_type_expires_at",
+    _INTERRUPT_REQUESTS.c.identity,
+    _INTERRUPT_REQUESTS.c.interrupt_type,
+    _INTERRUPT_REQUESTS.c.expires_at,
+)
+Index(
+    "ix_a2a_interrupt_requests_tombstone_expires_at",
+    _INTERRUPT_REQUESTS.c.tombstone_expires_at,
 )
 
 _MEMORY_SESSION_BINDING_TTL_SECONDS = 3600
@@ -93,8 +116,23 @@ def _initialize_state_store_schema(connection) -> None:  # noqa: ANN001
     migrate_state_store_schema(
         connection,
         state_metadata=_STATE_METADATA,
+        pending_session_claims_table=_PENDING_SESSION_CLAIMS,
         interrupt_requests_table=_INTERRUPT_REQUESTS,
     )
+
+
+def _pending_claim_expires_at(
+    row: Mapping[str, Any],
+    *,
+    legacy_ttl_seconds: float,
+) -> float | None:
+    expires_at = row.get("expires_at")
+    if expires_at is not None:
+        return float(expires_at)
+    updated_at = row.get("updated_at")
+    if updated_at is None:
+        return None
+    return float(updated_at) + max(0.0, legacy_ttl_seconds)
 
 
 class SessionStateRepository(ABC):
@@ -262,10 +300,24 @@ class DatabaseSessionStateRepository(SessionStateRepository):
         if self._pending_claim_ttl_seconds <= 0:
             await session.execute(delete(_PENDING_SESSION_CLAIMS))
             return
-        expires_before = now - self._pending_claim_ttl_seconds
         await session.execute(
             delete(_PENDING_SESSION_CLAIMS).where(
-                _PENDING_SESSION_CLAIMS.c.updated_at <= expires_before
+                or_(
+                    and_(
+                        _PENDING_SESSION_CLAIMS.c.expires_at.is_not(None),
+                        _PENDING_SESSION_CLAIMS.c.expires_at <= now,
+                    ),
+                    and_(
+                        _PENDING_SESSION_CLAIMS.c.expires_at.is_(None),
+                        _PENDING_SESSION_CLAIMS.c.updated_at.is_not(None),
+                        _PENDING_SESSION_CLAIMS.c.updated_at
+                        <= now - self._pending_claim_ttl_seconds,
+                    ),
+                    and_(
+                        _PENDING_SESSION_CLAIMS.c.expires_at.is_(None),
+                        _PENDING_SESSION_CLAIMS.c.updated_at.is_(None),
+                    ),
+                )
             )
         )
 
@@ -331,11 +383,25 @@ class DatabaseSessionStateRepository(SessionStateRepository):
         async with self._session_maker.begin() as session:
             await self._prune_expired_pending_claims(session, now=now)
             result = await session.execute(
-                select(_PENDING_SESSION_CLAIMS.c.identity).where(
+                select(_PENDING_SESSION_CLAIMS).where(
                     _PENDING_SESSION_CLAIMS.c.session_id == session_id
                 )
             )
-            return cast("str | None", result.scalar_one_or_none())
+            row = cast("Mapping[str, Any] | None", result.mappings().one_or_none())
+            if row is None:
+                return None
+            expires_at = _pending_claim_expires_at(
+                row,
+                legacy_ttl_seconds=self._pending_claim_ttl_seconds,
+            )
+            if expires_at is None or expires_at <= now:
+                await session.execute(
+                    delete(_PENDING_SESSION_CLAIMS).where(
+                        _PENDING_SESSION_CLAIMS.c.session_id == session_id
+                    )
+                )
+                return None
+            return cast("str", row["identity"])
 
     async def set_pending_claim(self, *, session_id: str, identity: str) -> None:
         await self._ensure_initialized()
@@ -356,6 +422,7 @@ class DatabaseSessionStateRepository(SessionStateRepository):
                 update_values={
                     "identity": identity,
                     "updated_at": now,
+                    "expires_at": now + self._pending_claim_ttl_seconds,
                 },
             )
 

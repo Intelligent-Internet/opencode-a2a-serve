@@ -109,6 +109,7 @@ from .task_store import (
     TaskStoreOperationError,
     build_database_engine,
     build_task_store,
+    describe_lightweight_persistence_backend,
 )
 
 logger = logging.getLogger(__name__)
@@ -595,6 +596,7 @@ def create_app(settings: Settings) -> FastAPI:
     )
     public_card_etag = build_agent_card_etag(agent_card)
     extended_card_etag = build_agent_card_etag(extended_agent_card)
+    persistence_summary = describe_lightweight_persistence_backend(settings)
     lifespan = build_lifespan(
         database_engine=database_engine,
         task_store=task_store,
@@ -602,6 +604,7 @@ def create_app(settings: Settings) -> FastAPI:
         interrupt_request_repository=interrupt_request_repository,
         client_manager=client_manager,
         upstream_client=upstream_client,
+        persistence_summary=persistence_summary,
     )
 
     app = A2AFastAPI(
@@ -615,6 +618,7 @@ def create_app(settings: Settings) -> FastAPI:
         app.add_api_route(route[0], callback, methods=[route[1]])
     app.state._jsonrpc_app = jsonrpc_app
     app.state.task_store = task_store
+    app.state.persistence_summary = persistence_summary
     app.state.agent_executor = executor
     app.state.upstream_client = upstream_client
     app.state.a2a_client_manager = client_manager

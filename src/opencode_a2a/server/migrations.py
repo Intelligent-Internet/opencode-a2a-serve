@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Column,
+    Index,
     Integer,
     MetaData,
     String,
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 STATE_STORE_SCHEMA_NAME = "state_store"
-CURRENT_STATE_STORE_SCHEMA_VERSION = 1
+CURRENT_STATE_STORE_SCHEMA_VERSION = 3
 
 _SCHEMA_VERSION_METADATA = MetaData()
 
@@ -64,6 +65,51 @@ def _migration_1_add_interrupt_details_json(
         table=interrupt_requests_table,
         column_name="details_json",
     )
+
+
+def _migration_2_add_pending_claim_expires_at(
+    connection: Connection,
+    *,
+    pending_session_claims_table: Table,
+) -> None:
+    _add_missing_nullable_column(
+        connection,
+        table=pending_session_claims_table,
+        column_name="expires_at",
+    )
+
+
+def _create_missing_index(
+    connection: Connection,
+    *,
+    index: Index,
+) -> None:
+    table = index.table
+    if table is None:
+        raise RuntimeError("State-store index is missing table metadata")
+    existing_indexes = {
+        existing_index["name"] for existing_index in inspect(connection).get_indexes(table.name)
+    }
+    if index.name in existing_indexes:
+        return
+    index.create(connection)
+
+
+def _migration_3_add_lightweight_state_indexes(
+    connection: Connection,
+    *,
+    pending_session_claims_table: Table,
+    interrupt_requests_table: Table,
+) -> None:
+    indexes = sorted(
+        [
+            *pending_session_claims_table.indexes,
+            *interrupt_requests_table.indexes,
+        ],
+        key=lambda index: index.name or "",
+    )
+    for index in indexes:
+        _create_missing_index(connection, index=index)
 
 
 def _read_schema_version(
@@ -147,6 +193,7 @@ def migrate_state_store_schema(
     connection: Connection,
     *,
     state_metadata: MetaData,
+    pending_session_claims_table: Table,
     interrupt_requests_table: Table,
     current_version: int = CURRENT_STATE_STORE_SCHEMA_VERSION,
 ) -> int:
@@ -156,6 +203,15 @@ def migrate_state_store_schema(
     migrations: dict[int, Callable[[Connection], None]] = {
         1: lambda conn: _migration_1_add_interrupt_details_json(
             conn,
+            interrupt_requests_table=interrupt_requests_table,
+        ),
+        2: lambda conn: _migration_2_add_pending_claim_expires_at(
+            conn,
+            pending_session_claims_table=pending_session_claims_table,
+        ),
+        3: lambda conn: _migration_3_add_lightweight_state_indexes(
+            conn,
+            pending_session_claims_table=pending_session_claims_table,
             interrupt_requests_table=interrupt_requests_table,
         ),
     }

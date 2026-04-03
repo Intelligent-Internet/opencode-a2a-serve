@@ -19,6 +19,7 @@ from opencode_a2a.server.task_store import (
     TaskWritePolicy,
     build_database_engine,
     build_task_store,
+    describe_lightweight_persistence_backend,
     initialize_task_store,
     unwrap_task_store,
 )
@@ -54,6 +55,32 @@ def test_build_task_store_allows_explicit_memory_backend() -> None:
     assert isinstance(store, GuardedTaskStore)
     assert isinstance(store._inner, TaskStoreOperationWrappingDecorator)
     assert isinstance(store._inner._inner, InMemoryTaskStore)
+
+
+def test_describe_lightweight_persistence_backend_marks_sqlite_first_scope() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url="sqlite+aiosqlite:///./opencode-a2a.db",
+    )
+
+    assert describe_lightweight_persistence_backend(settings) == {
+        "backend": "database",
+        "scope": "sdk_tasks_and_adapter_state",
+        "database_url": "sqlite+aiosqlite:///./opencode-a2a.db",
+        "sqlite_tuning": "local_durability_defaults",
+    }
+
+
+def test_describe_lightweight_persistence_backend_supports_memory_backend() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_backend="memory",
+    )
+
+    assert describe_lightweight_persistence_backend(settings) == {
+        "backend": "memory",
+        "scope": "sdk_tasks_and_adapter_state",
+    }
 
 
 @pytest.mark.asyncio

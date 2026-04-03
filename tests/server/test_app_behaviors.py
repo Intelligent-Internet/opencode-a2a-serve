@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import types
 from unittest.mock import AsyncMock, MagicMock
 
@@ -238,7 +239,7 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
 
 
 @pytest.mark.asyncio
-async def test_auth_health_lifespan_and_openapi_cache(monkeypatch) -> None:
+async def test_auth_health_lifespan_and_openapi_cache(monkeypatch, caplog) -> None:
     class _ClosableClient(DummyChatOpencodeUpstreamClient):
         def __init__(self, settings=None) -> None:
             super().__init__(settings)
@@ -327,9 +328,16 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch) -> None:
             },
         }
 
-    async with app.router.lifespan_context(app):
-        pass
+    with caplog.at_level(logging.INFO, logger="opencode_a2a.server.lifespan"):
+        async with app.router.lifespan_context(app):
+            pass
     assert closable.closed is True
+    assert any(
+        "Lightweight persistence configured" in record.message
+        and "backend=database" in record.message
+        and "scope=sdk_tasks_and_adapter_state" in record.message
+        for record in caplog.records
+    )
 
     openapi_first = app.openapi()
     openapi_second = app.openapi()
