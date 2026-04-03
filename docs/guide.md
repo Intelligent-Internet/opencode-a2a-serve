@@ -669,6 +669,14 @@ curl -sS http://127.0.0.1:8000/ \
 
 ### Session Prompt Async (`opencode.sessions.prompt_async`)
 
+Topology note:
+
+- `A2A Task` remains the protocol-level execution object exposed by the adapter.
+- `opencode.sessions.prompt_async` is a provider-private extension method, not part of the A2A core baseline.
+- `request.parts[].type=subtask` is an upstream-compatible OpenCode input shape carried through that extension method.
+- Downstream execution may fan out into upstream OpenCode task-tool / subagent runtime behavior, but that internal orchestration remains provider-private.
+- The adapter documents passthrough compatibility and observable `tool_call` output blocks; it does not promote subtask/subagent execution into a first-class A2A orchestration API.
+
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
