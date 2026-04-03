@@ -241,6 +241,7 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
     )
     assert "Deployment project: alpha." in extended_description
     assert "Workspace root: /workspace." in extended_description
+    assert "currently return unsupported" in extended_description
     assert any("project alpha" in item for item in _build_chat_examples("alpha"))
     assert all(
         "shell" not in item
@@ -395,6 +396,27 @@ async def test_rest_adapter_routes_and_preconsume_error() -> None:
 
     with pytest.raises(ServerError, match="Failed to pre-consume request body: broken body"):
         await adapter._handle_streaming_request(_stream, _BrokenRequest())
+
+
+@pytest.mark.asyncio
+async def test_push_notification_routes_are_explicitly_unsupported(monkeypatch) -> None:
+    monkeypatch.setattr(
+        app_module,
+        "OpencodeUpstreamClient",
+        DummyChatOpencodeUpstreamClient,
+    )
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/tasks/task-1/pushNotificationConfigs",
+            headers={"Authorization": "Bearer test-token"},
+            json={"pushNotificationConfig": {"url": "https://example.com/hook"}},
+        )
+
+    assert response.status_code == 501
+    assert response.json() == {"message": "Push notifications are not supported by the agent"}
 
 
 @pytest.mark.asyncio

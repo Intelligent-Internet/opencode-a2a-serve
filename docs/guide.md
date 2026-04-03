@@ -246,6 +246,7 @@ Current behavior:
 - `all_jsonrpc_methods` is the runtime truth for the current deployment.
 - The current SDK-owned core JSON-RPC surface includes `agent/getAuthenticatedExtendedCard` and `tasks/pushNotificationConfig/*`.
 - The current SDK-owned REST surface also includes `GET /v1/tasks` and the task push notification config routes.
+- Push notification config routes/methods are currently exposed only because they are part of the SDK-owned core surface. This runtime does not configure a push config store or push sender, so push notification operations currently return `501` / unsupported.
 
 When `A2A_ENABLE_SESSION_SHELL=false`, `opencode.sessions.shell` is omitted from `all_jsonrpc_methods` and exposed only through `extensions.conditionally_available_methods`.
 
@@ -286,7 +287,7 @@ Current compatibility matrix:
 | Transport payloads and enums | Supported | Partial | Request/response payloads, enums, and schema details still follow the SDK-owned `0.3` baseline. |
 | Error model | Supported | Partial | `0.3` keeps legacy `error.data={...}` / flat REST payloads; `1.0` uses protocol-aware JSON-RPC details and AIP-193-style REST errors. |
 | Pagination and list semantics | Supported | Partial | Cursor/list behavior is stable, but the declared shape still follows the `0.3` SDK baseline. |
-| Push notification surfaces | Supported | Partial | Core task push-notification routes are available, but no extra `1.0`-specific compatibility layer is declared yet. |
+| Push notification surfaces | Unsupported | Unsupported | SDK-owned task push-notification routes are still exposed, but this runtime does not enable push sender/config-store support and currently returns `501` / unsupported. |
 | Signatures and authenticated data | Supported | Partial | Security schemes and authenticated extended card discovery follow the shipped SDK schema rather than a dedicated `1.0` compatibility layer. |
 
 ## Compatibility Profile
@@ -564,6 +565,7 @@ This service exposes OpenCode session lifecycle inspection, list/message-history
 - Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still suppressed for `method=opencode.sessions.*`
 - Endpoint discovery: prefer `additional_interfaces[]` with `transport=jsonrpc` from Agent Card
 - The runtime still delegates SDK-owned JSON-RPC methods such as `agent/getAuthenticatedExtendedCard` and `tasks/pushNotificationConfig/*` to the base A2A implementation; they are not OpenCode-specific extensions.
+- Push notification config methods remain effectively unsupported in the current runtime because no push config store or push sender is configured.
 - Notification behavior: for `opencode.sessions.*`, requests without `id` return HTTP `204 No Content`
 - Result format:
   - `opencode.sessions.status` => provider-private status summaries in `result.items`
