@@ -177,6 +177,79 @@ async def test_list_tasks_route_returns_paginated_results(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_tasks_route_cursor_stays_stable_when_newer_task_is_inserted(
+    monkeypatch,
+) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_task_store_backend="memory",
+        )
+    )
+    task_store = app.state.task_store
+    now = datetime.now(UTC)
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-page-1",
+            context_id="ctx-cursor",
+            timestamp=(now + timedelta(seconds=3)).isoformat(),
+        )
+    )
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-page-2",
+            context_id="ctx-cursor",
+            timestamp=(now + timedelta(seconds=2)).isoformat(),
+        )
+    )
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-page-3",
+            context_id="ctx-cursor",
+            timestamp=(now + timedelta(seconds=1)).isoformat(),
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        first_page = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={"contextId": "ctx-cursor", "pageSize": "1"},
+        )
+        first_payload = first_page.json()
+        assert first_payload["tasks"][0]["id"] == "task-page-1"
+
+        await task_store.save(
+            _task_for_listing(
+                task_id="task-inserted-later",
+                context_id="ctx-cursor",
+                timestamp=(now + timedelta(seconds=4)).isoformat(),
+            )
+        )
+
+        second_page = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={
+                "contextId": "ctx-cursor",
+                "pageSize": "1",
+                "pageToken": first_payload["nextPageToken"],
+            },
+        )
+
+    assert second_page.status_code == 200
+    second_payload = second_page.json()
+    assert second_payload["totalSize"] == 4
+    assert second_payload["pageSize"] == 1
+    assert second_payload["tasks"][0]["id"] == "task-page-2"
+
+
+@pytest.mark.asyncio
 async def test_list_tasks_route_supports_history_artifacts_and_filters(monkeypatch) -> None:
     import opencode_a2a.server.application as app_module
 
@@ -233,6 +306,49 @@ async def test_list_tasks_route_supports_history_artifacts_and_filters(monkeypat
     assert returned_task["id"] == "task-filtered"
     assert len(returned_task["history"]) == 2
     assert returned_task["artifacts"][0]["artifactId"] == "task-filtered-artifact"
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_route_tolerates_invalid_stored_status_timestamp(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_task_store_backend="memory",
+        )
+    )
+    task_store = app.state.task_store
+    now = datetime.now(UTC)
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-valid-ts",
+            context_id="ctx-invalid-ts",
+            timestamp=now.isoformat(),
+        )
+    )
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-invalid-ts",
+            context_id="ctx-invalid-ts",
+            timestamp="not-a-timestamp",
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={"contextId": "ctx-invalid-ts"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["totalSize"] == 2
+    assert [task["id"] for task in payload["tasks"]] == ["task-valid-ts", "task-invalid-ts"]
 
 
 @pytest.mark.asyncio

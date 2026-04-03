@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import Task, TaskState
@@ -13,17 +14,24 @@ from fastapi.responses import JSONResponse
 from ..jsonrpc.error_responses import build_http_error_body
 from .task_store import TaskStoreOperationError, list_stored_tasks
 
+logger = logging.getLogger(__name__)
 _DEFAULT_LIST_TASKS_PAGE_SIZE = 50
 _MAX_LIST_TASKS_PAGE_SIZE = 100
 _MIN_LIST_TASKS_PAGE_SIZE = 1
 
 
 @dataclass(frozen=True)
+class _TaskCursor:
+    task_id: str
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
 class _ListTasksQuery:
+    cursor: _TaskCursor | None
     context_id: str | None
     include_artifacts: bool
     history_length: int
-    page_offset: int
     requested_page_size: int
     status: TaskState | None
     status_timestamp_after: datetime | None
@@ -75,9 +83,11 @@ def build_list_tasks_route(
 
         filtered_tasks = _filter_tasks(tasks, query=query)
         total_size = len(filtered_tasks)
-        end_offset = min(query.page_offset + query.requested_page_size, total_size)
-        page_tasks = filtered_tasks[query.page_offset:end_offset]
-        next_page_token = _encode_page_token(end_offset) if end_offset < total_size else ""
+        paged_tasks = _apply_cursor(filtered_tasks, cursor=query.cursor)
+        page_tasks = paged_tasks[: query.requested_page_size]
+        next_page_token = ""
+        if len(paged_tasks) > len(page_tasks) and page_tasks:
+            next_page_token = _encode_page_token(page_tasks[-1])
 
         return JSONResponse(
             {
@@ -109,16 +119,20 @@ def _filter_tasks(tasks: list[Task], *, query: _ListTasksQuery) -> list[Task]:
 
     if query.status_timestamp_after is not None:
         filtered = [
-            task
-            for task in filtered
-            if _task_status_timestamp(task) >= query.status_timestamp_after
+            task for task in filtered if _task_sort_key(task)[0] >= query.status_timestamp_after
         ]
 
     return sorted(
         filtered,
-        key=lambda task: (_task_status_timestamp(task), task.id),
+        key=_task_sort_key,
         reverse=True,
     )
+
+
+def _apply_cursor(tasks: list[Task], *, cursor: _TaskCursor | None) -> list[Task]:
+    if cursor is None:
+        return tasks
+    return [task for task in tasks if _task_sort_key(task) < _cursor_sort_key(cursor)]
 
 
 def _serialize_task(
@@ -169,7 +183,7 @@ def _parse_list_tasks_query(request: Request) -> _ListTasksQuery:
         field="includeArtifacts",
         default=False,
     )
-    page_offset = _decode_page_token(request.query_params.get("pageToken"))
+    cursor = _decode_page_token(request.query_params.get("pageToken"))
 
     status_value = request.query_params.get("status")
     status = None
@@ -191,10 +205,10 @@ def _parse_list_tasks_query(request: Request) -> _ListTasksQuery:
         )
 
     return _ListTasksQuery(
+        cursor=cursor,
         context_id=request.query_params.get("contextId"),
         include_artifacts=include_artifacts,
         history_length=history_length,
-        page_offset=page_offset,
         requested_page_size=requested_page_size,
         status=status,
         status_timestamp_after=status_timestamp_after,
@@ -237,40 +251,65 @@ def _parse_timestamp(raw_value: str, *, field: str) -> datetime:
             message=f"{field} must be a valid ISO 8601 timestamp.",
         ) from exc
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _task_status_timestamp(task: Task) -> datetime:
     timestamp = task.status.timestamp
     if not timestamp:
-        return datetime.min.replace(tzinfo=timezone.utc)
-    return _parse_timestamp(timestamp, field="status.timestamp")
+        return datetime.min.replace(tzinfo=UTC)
+    try:
+        return _parse_timestamp(timestamp, field="status.timestamp")
+    except _ListTasksValidationError:
+        logger.warning(
+            "Ignoring invalid task status timestamp while listing tasks task_id=%s timestamp=%r",
+            task.id,
+            timestamp,
+        )
+        return datetime.min.replace(tzinfo=UTC)
 
 
-def _decode_page_token(raw_value: str | None) -> int:
+def _task_sort_key(task: Task) -> tuple[datetime, str]:
+    return (_task_status_timestamp(task), task.id)
+
+
+def _cursor_sort_key(cursor: _TaskCursor) -> tuple[datetime, str]:
+    return (cursor.timestamp, cursor.task_id)
+
+
+def _decode_page_token(raw_value: str | None) -> _TaskCursor | None:
     if raw_value is None or not raw_value.strip():
-        return 0
+        return None
 
     normalized = raw_value.strip()
     padding = "=" * (-len(normalized) % 4)
     try:
         decoded = base64.urlsafe_b64decode(normalized + padding).decode("utf-8")
         payload = json.loads(decoded)
-        offset = payload["offset"]
-        if not isinstance(offset, int) or offset < 0:
-            raise ValueError("offset must be a non-negative integer")
+        task_id = payload["id"]
+        timestamp = payload["timestamp"]
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise ValueError("id must be a non-empty string")
+        if not isinstance(timestamp, str) or not timestamp.strip():
+            raise ValueError("timestamp must be a non-empty string")
+        return _TaskCursor(
+            task_id=task_id,
+            timestamp=_parse_timestamp(timestamp, field="pageToken.timestamp"),
+        )
     except Exception as exc:
         raise _ListTasksValidationError(
             field="pageToken",
             message="pageToken is invalid.",
         ) from exc
-    return offset
 
 
-def _encode_page_token(offset: int) -> str:
+def _encode_page_token(task: Task) -> str:
     payload = json.dumps(
-        {"offset": offset},
+        {
+            "id": task.id,
+            "timestamp": _task_status_timestamp(task).isoformat(),
+        },
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
