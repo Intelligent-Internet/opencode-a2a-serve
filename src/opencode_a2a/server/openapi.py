@@ -35,7 +35,7 @@ def _build_jsonrpc_extension_openapi_description(
 ) -> str:
     session_methods = list(capability_snapshot.session_query_methods().values())
     provider_methods = ", ".join(sorted(PROVIDER_DISCOVERY_METHODS.values()))
-    workspace_methods = ", ".join(sorted(WORKSPACE_CONTROL_METHODS.values()))
+    workspace_methods = ", ".join(sorted(capability_snapshot.workspace_control_methods().values()))
     interrupt_recovery_methods = ", ".join(sorted(INTERRUPT_RECOVERY_METHODS.values()))
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
@@ -391,24 +391,6 @@ def _build_jsonrpc_extension_openapi_examples(
                 "params": {},
             },
         },
-        "workspaces_create": {
-            "summary": "Create a workspace for the active project",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 291,
-                "method": WORKSPACE_CONTROL_METHODS["create_workspace"],
-                "params": {"request": {"type": "git", "branch": "main"}},
-            },
-        },
-        "workspaces_remove": {
-            "summary": "Remove a workspace",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 292,
-                "method": WORKSPACE_CONTROL_METHODS["remove_workspace"],
-                "params": {"workspace_id": "wrk-1"},
-            },
-        },
         "worktrees_list": {
             "summary": "List worktrees for the active project",
             "value": {
@@ -416,38 +398,6 @@ def _build_jsonrpc_extension_openapi_examples(
                 "id": 293,
                 "method": WORKSPACE_CONTROL_METHODS["list_worktrees"],
                 "params": {},
-            },
-        },
-        "worktrees_create": {
-            "summary": "Create a new worktree",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 30,
-                "method": WORKSPACE_CONTROL_METHODS["create_worktree"],
-                "params": {
-                    "request": {
-                        "name": "feature-branch",
-                        "startCommand": "pnpm install",
-                    }
-                },
-            },
-        },
-        "worktrees_remove": {
-            "summary": "Remove a worktree",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 301,
-                "method": WORKSPACE_CONTROL_METHODS["remove_worktree"],
-                "params": {"request": {"directory": "/tmp/worktrees/feature-branch"}},
-            },
-        },
-        "worktrees_reset": {
-            "summary": "Reset a worktree branch",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 302,
-                "method": WORKSPACE_CONTROL_METHODS["reset_worktree"],
-                "params": {"request": {"directory": "/tmp/worktrees/feature-branch"}},
             },
         },
         "permissions_list": {
@@ -510,6 +460,57 @@ def _build_jsonrpc_extension_openapi_examples(
                         "command": "git status --short",
                     },
                 },
+            },
+        }
+    if capability_snapshot.is_method_enabled(WORKSPACE_CONTROL_METHODS["create_workspace"]):
+        examples["workspaces_create"] = {
+            "summary": "Create a workspace for the active project",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 291,
+                "method": WORKSPACE_CONTROL_METHODS["create_workspace"],
+                "params": {"request": {"type": "git", "branch": "main"}},
+            },
+        }
+        examples["workspaces_remove"] = {
+            "summary": "Remove a workspace",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 292,
+                "method": WORKSPACE_CONTROL_METHODS["remove_workspace"],
+                "params": {"workspace_id": "wrk-1"},
+            },
+        }
+        examples["worktrees_create"] = {
+            "summary": "Create a new worktree",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 30,
+                "method": WORKSPACE_CONTROL_METHODS["create_worktree"],
+                "params": {
+                    "request": {
+                        "name": "feature-branch",
+                        "startCommand": "pnpm install",
+                    }
+                },
+            },
+        }
+        examples["worktrees_remove"] = {
+            "summary": "Remove a worktree",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 301,
+                "method": WORKSPACE_CONTROL_METHODS["remove_worktree"],
+                "params": {"request": {"directory": "/tmp/worktrees/feature-branch"}},
+            },
+        }
+        examples["worktrees_reset"] = {
+            "summary": "Reset a worktree branch",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 302,
+                "method": WORKSPACE_CONTROL_METHODS["reset_worktree"],
+                "params": {"request": {"directory": "/tmp/worktrees/feature-branch"}},
             },
         }
     return examples

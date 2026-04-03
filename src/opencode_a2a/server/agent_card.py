@@ -190,12 +190,14 @@ def _build_interrupt_recovery_skill_examples() -> list[str]:
     ]
 
 
-def _build_workspace_control_skill_examples() -> list[str]:
-    return [
+def _build_workspace_control_skill_examples(*, capability_snapshot) -> list[str]:  # noqa: ANN001
+    examples = [
         "List OpenCode projects (method opencode.projects.list).",
         "List workspaces for the active project (method opencode.workspaces.list).",
-        "Create a worktree (method opencode.worktrees.create).",
     ]
+    if capability_snapshot.is_method_enabled("opencode.worktrees.create"):
+        examples.append("Create a worktree (method opencode.worktrees.create).")
+    return examples
 
 
 def _build_agent_extensions(
@@ -325,8 +327,9 @@ def _build_agent_extensions(
             uri=WORKSPACE_CONTROL_EXTENSION_URI,
             required=False,
             description=(
-                "Expose OpenCode-specific project/workspace/worktree control-plane "
-                "methods through JSON-RPC extensions."
+                "Expose OpenCode-specific project/workspace/worktree discovery methods "
+                "plus deployment-conditional control-plane mutations through JSON-RPC "
+                "extensions."
             ),
             params=workspace_control_extension_params if include_detailed_contracts else None,
         ),
@@ -505,13 +508,16 @@ def _build_agent_skills(
             id="opencode.workspace.control",
             name="OpenCode Workspace Control",
             description=(
-                "provider-private OpenCode project/workspace/worktree control surface "
-                "exposed through JSON-RPC extensions."
+                "provider-private OpenCode project/workspace/worktree discovery surface "
+                "with deployment-conditional mutation methods exposed through JSON-RPC "
+                "extensions."
             ),
             input_modes=list(_JSON_RPC_MODES),
             output_modes=list(_JSON_RPC_MODES),
             tags=["opencode", "project", "workspace", "worktree", "provider-private"],
-            examples=_build_workspace_control_skill_examples(),
+            examples=_build_workspace_control_skill_examples(
+                capability_snapshot=capability_snapshot,
+            ),
         ),
         AgentSkill(
             id="opencode.interrupt.recovery",

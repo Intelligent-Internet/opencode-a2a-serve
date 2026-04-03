@@ -5,7 +5,6 @@ from opencode_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
-    WORKSPACE_CONTROL_METHODS,
     build_capability_snapshot,
     build_compatibility_profile_params,
     build_interrupt_callback_extension_params,
@@ -245,7 +244,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     expected_methods |= {
         "opencode.providers.list",
         "opencode.models.list",
-        *WORKSPACE_CONTROL_METHODS.values(),
+        *workspace_control["methods"].values(),
         "opencode.permissions.list",
         "opencode.questions.list",
     }
@@ -267,12 +266,15 @@ def test_openapi_jsonrpc_examples_use_declared_default_session_limit() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("session_shell_enabled", [False, True])
+@pytest.mark.parametrize("workspace_mutations_enabled", [False, True])
 async def test_runtime_supported_methods_align_with_capability_snapshot(
     session_shell_enabled: bool,
+    workspace_mutations_enabled: bool,
 ) -> None:
     settings = make_settings(
         a2a_bearer_token="test-token",
         a2a_enable_session_shell=session_shell_enabled,
+        a2a_enable_workspace_mutations=workspace_mutations_enabled,
     )
     app = create_app(settings)
     runtime_profile = build_runtime_profile(settings)

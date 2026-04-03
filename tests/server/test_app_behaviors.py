@@ -189,6 +189,11 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
                 "availability": "enabled",
                 "toggle": "A2A_ENABLE_SESSION_SHELL",
             },
+            "workspace_mutations": {
+                "enabled": False,
+                "availability": "disabled",
+                "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+            },
             "execution_environment": {
                 "sandbox": {
                     "mode": "unknown",
@@ -259,6 +264,9 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
     assert "session_shell" in _build_jsonrpc_extension_openapi_examples(
         capability_snapshot=capability_snapshot
     )
+    assert "worktrees_create" not in _build_jsonrpc_extension_openapi_examples(
+        capability_snapshot=capability_snapshot
+    )
     assert "continue_session" in _build_rest_message_openapi_examples()
 
 
@@ -321,6 +329,11 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch, caplog) -> No
                         "availability": "enabled",
                         "toggle": "A2A_ENABLE_SESSION_SHELL",
                     },
+                    "workspace_mutations": {
+                        "enabled": False,
+                        "availability": "disabled",
+                        "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+                    },
                     "execution_environment": {
                         "sandbox": {
                             "mode": "unknown",
@@ -370,6 +383,7 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch, caplog) -> No
         "application/json"
     ]["examples"]
     assert "session_shell" in root_examples
+    assert "worktrees_create" not in root_examples
     assert "opencode.sessions.shell" in openapi_first["paths"]["/"]["post"]["description"]
 
 

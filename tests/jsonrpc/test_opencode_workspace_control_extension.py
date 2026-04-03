@@ -68,7 +68,12 @@ async def test_workspace_control_extension_supports_mutating_methods(monkeypatch
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            a2a_enable_workspace_mutations=True,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -143,7 +148,12 @@ async def test_workspace_control_extension_validates_request_shape(monkeypatch) 
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyOpencodeUpstreamClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            a2a_enable_workspace_mutations=True,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -163,6 +173,35 @@ async def test_workspace_control_extension_validates_request_shape(monkeypatch) 
     payload = response.json()
     assert payload["error"]["code"] == -32602
     assert payload["error"]["data"]["field"] == "request"
+
+
+@pytest.mark.asyncio
+async def test_workspace_control_mutations_are_disabled_by_default(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 22,
+                "method": "opencode.worktrees.create",
+                "params": {"request": {"name": "feature-branch"}},
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error"]["code"] == -32601
+    assert payload["error"]["data"]["type"] == "METHOD_NOT_SUPPORTED"
+    assert payload["error"]["data"]["method"] == "opencode.worktrees.create"
 
 
 @pytest.mark.asyncio

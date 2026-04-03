@@ -5,7 +5,11 @@ from typing import Any
 
 from a2a.server.apps.jsonrpc.jsonrpc_app import JSONRPCApplication
 
-from ..profile.runtime import SESSION_SHELL_TOGGLE, RuntimeProfile
+from ..profile.runtime import (
+    SESSION_SHELL_TOGGLE,
+    WORKSPACE_MUTATIONS_TOGGLE,
+    RuntimeProfile,
+)
 
 EXTENSION_SPECIFICATIONS_DOCUMENT_URL = (
     "https://github.com/Intelligent-Internet/opencode-a2a/blob/main/"
@@ -580,6 +584,25 @@ WORKSPACE_CONTROL_METHOD_CONTRACTS: dict[str, WorkspaceControlMethodContract] = 
 WORKSPACE_CONTROL_METHODS: dict[str, str] = {
     key: contract.method for key, contract in WORKSPACE_CONTROL_METHOD_CONTRACTS.items()
 }
+WORKSPACE_DISCOVERY_METHOD_KEYS: tuple[str, ...] = (
+    "list_projects",
+    "get_current_project",
+    "list_workspaces",
+    "list_worktrees",
+)
+WORKSPACE_DISCOVERY_METHODS: dict[str, str] = {
+    key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_DISCOVERY_METHOD_KEYS
+}
+WORKSPACE_MUTATION_METHOD_KEYS: tuple[str, ...] = (
+    "create_workspace",
+    "remove_workspace",
+    "create_worktree",
+    "remove_worktree",
+    "reset_worktree",
+)
+WORKSPACE_MUTATION_METHODS: dict[str, str] = {
+    key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_MUTATION_METHOD_KEYS
+}
 
 INTERRUPT_SUCCESS_RESULT_FIELDS: tuple[str, ...] = ("ok", "request_id")
 INTERRUPT_ERROR_BUSINESS_CODES: dict[str, int] = {
@@ -716,14 +739,18 @@ class JsonRpcCapabilitySnapshot:
         return dict(INTERRUPT_CALLBACK_METHODS)
 
     def workspace_control_methods(self) -> dict[str, str]:
-        return dict(WORKSPACE_CONTROL_METHODS)
+        methods = dict(WORKSPACE_DISCOVERY_METHODS)
+        for key, method in WORKSPACE_MUTATION_METHODS.items():
+            if self.is_method_enabled(method):
+                methods[key] = method
+        return methods
 
     def supported_jsonrpc_methods(self) -> list[str]:
         methods = [
             *CORE_JSONRPC_METHODS,
             *(method for key, method in SESSION_QUERY_METHODS.items() if key != "shell"),
             *PROVIDER_DISCOVERY_METHODS.values(),
-            *WORKSPACE_CONTROL_METHODS.values(),
+            *self.workspace_control_methods().values(),
             *INTERRUPT_RECOVERY_METHODS.values(),
             *INTERRUPT_CALLBACK_METHODS.values(),
         ]
@@ -735,7 +762,7 @@ class JsonRpcCapabilitySnapshot:
         methods = [
             *(method for key, method in SESSION_QUERY_METHODS.items() if key != "shell"),
             *PROVIDER_DISCOVERY_METHODS.values(),
-            *WORKSPACE_CONTROL_METHODS.values(),
+            *self.workspace_control_methods().values(),
             *INTERRUPT_RECOVERY_METHODS.values(),
             *INTERRUPT_CALLBACK_METHODS.values(),
         ]
@@ -757,6 +784,13 @@ class JsonRpcCapabilitySnapshot:
             if method in SESSION_CONTROL_METHODS.values()
         }
 
+    def workspace_mutation_method_flags(self) -> dict[str, dict[str, Any]]:
+        return {
+            method: conditional_method.control_method_flag()
+            for method, conditional_method in self.conditional_methods.items()
+            if method in WORKSPACE_MUTATION_METHODS.values()
+        }
+
     def conditional_method_retention(self) -> dict[str, dict[str, Any]]:
         return {
             method: conditional_method.method_retention()
@@ -765,16 +799,26 @@ class JsonRpcCapabilitySnapshot:
 
 
 def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> JsonRpcCapabilitySnapshot:
-    return JsonRpcCapabilitySnapshot(
-        conditional_methods={
-            SESSION_CONTROL_METHODS["shell"]: DeploymentConditionalMethod(
-                method=SESSION_CONTROL_METHODS["shell"],
-                enabled=runtime_profile.session_shell.enabled,
-                extension_uri=SESSION_QUERY_EXTENSION_URI,
-                toggle=SESSION_SHELL_TOGGLE,
+    conditional_methods = {
+        SESSION_CONTROL_METHODS["shell"]: DeploymentConditionalMethod(
+            method=SESSION_CONTROL_METHODS["shell"],
+            enabled=runtime_profile.session_shell.enabled,
+            extension_uri=SESSION_QUERY_EXTENSION_URI,
+            toggle=SESSION_SHELL_TOGGLE,
+        )
+    }
+    conditional_methods.update(
+        {
+            method: DeploymentConditionalMethod(
+                method=method,
+                enabled=runtime_profile.workspace_mutations.enabled,
+                extension_uri=WORKSPACE_CONTROL_EXTENSION_URI,
+                toggle=WORKSPACE_MUTATIONS_TOGGLE,
             )
+            for method in WORKSPACE_MUTATION_METHODS.values()
         }
     )
+    return JsonRpcCapabilitySnapshot(conditional_methods=conditional_methods)
 
 
 def _build_method_contract_params(
@@ -1239,9 +1283,14 @@ def build_workspace_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
+    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    methods = capability_snapshot.workspace_control_methods()
+    active_workspace_methods = set(methods.values())
     method_contracts: dict[str, Any] = {}
 
     for method_contract in WORKSPACE_CONTROL_METHOD_CONTRACTS.values():
+        if method_contract.method not in active_workspace_methods:
+            continue
         params_contract = _build_method_contract_params(
             required=method_contract.required_params,
             optional=method_contract.optional_params,
@@ -1261,7 +1310,8 @@ def build_workspace_control_extension_params(
         method_contracts[method_contract.method] = contract_doc
 
     return {
-        "methods": dict(WORKSPACE_CONTROL_METHODS),
+        "methods": methods,
+        "control_method_flags": capability_snapshot.workspace_mutation_method_flags(),
         "method_contracts": method_contracts,
         "supported_metadata": ["opencode.workspace.id", "opencode.directory"],
         "provider_private_metadata": ["opencode.workspace.id", "opencode.directory"],
@@ -1279,6 +1329,10 @@ def build_workspace_control_extension_params(
             (
                 "Workspace control methods expose the OpenCode project/workspace/worktree "
                 "control plane through provider-private JSON-RPC methods."
+            ),
+            (
+                "Mutation methods are deployment-conditional and disabled by default; "
+                "discover availability from the declared wire contract before calling them."
             ),
             (
                 "Workspace routing metadata is declared for consistency, but the current "
@@ -1346,7 +1400,7 @@ def build_compatibility_profile_params(
                 "retention": "stable",
                 "extension_uri": WORKSPACE_CONTROL_EXTENSION_URI,
             }
-            for method in WORKSPACE_CONTROL_METHODS.values()
+            for method in WORKSPACE_DISCOVERY_METHODS.values()
         }
     )
     method_retention.update(
@@ -1448,6 +1502,11 @@ def build_compatibility_profile_params(
             (
                 "Treat opencode.sessions.shell as deployment-conditional and discover it from "
                 "the declared profile and current wire contract before calling it."
+            ),
+            (
+                "Treat opencode.workspaces.create/remove and opencode.worktrees.create/remove/"
+                "reset as deployment-conditional operator surfaces rather than baseline "
+                "workspace discovery methods."
             ),
             (
                 "Treat declared service behaviors as stable server-level semantic "

@@ -79,7 +79,7 @@ URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extens
 
 URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#opencode-workspace-control-v1`
 
-- Scope: provider-private project, workspace, and worktree control-plane methods
+- Scope: provider-private project/workspace/worktree discovery plus deployment-conditional operator mutation methods
 - Public Agent Card: capability declaration only
 - Authenticated extended card: full method contracts, error surface, and routing notes
 - Transport: A2A JSON-RPC extension methods
