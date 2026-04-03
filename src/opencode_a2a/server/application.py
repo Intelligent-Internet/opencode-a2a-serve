@@ -102,6 +102,7 @@ from .request_parsing import (
     _request_body_too_large_response,
     _RequestBodyTooLargeError,
 )
+from .rest_tasks import build_list_tasks_route
 from .state_store import (
     build_interrupt_request_repository,
     build_session_state_repository,
@@ -616,7 +617,12 @@ def create_app(settings: Settings) -> FastAPI:
     )
     app.add_middleware(GZipMiddleware, minimum_size=settings.a2a_http_gzip_minimum_size)
     jsonrpc_app.add_routes_to_app(app)
-    for route, callback in rest_adapter.routes().items():
+    rest_routes = rest_adapter.routes()
+    rest_routes[("/v1/tasks", "GET")] = build_list_tasks_route(
+        task_store=task_store,
+        default_protocol_version=settings.a2a_protocol_version,
+    )
+    for route, callback in rest_routes.items():
         app.add_api_route(route[0], callback, methods=[route[1]])
     app.state._jsonrpc_app = jsonrpc_app
     app.state.task_store = task_store

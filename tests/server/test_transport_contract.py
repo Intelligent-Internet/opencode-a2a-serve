@@ -1,11 +1,22 @@
 import logging
 import types
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
-from a2a.types import TransportProtocol
+from a2a.types import (
+    Artifact,
+    Message,
+    Part,
+    Role,
+    Task,
+    TaskState,
+    TaskStatus,
+    TextPart,
+    TransportProtocol,
+)
 
 from opencode_a2a.server.application import (
     AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL,
@@ -16,6 +27,41 @@ from opencode_a2a.server.application import (
     create_app,
 )
 from tests.support.helpers import DummyChatOpencodeUpstreamClient, make_settings
+
+
+def _task_for_listing(
+    *,
+    task_id: str,
+    context_id: str,
+    state: TaskState = TaskState.completed,
+    timestamp: str,
+    include_artifacts: bool = False,
+    history_size: int = 0,
+) -> Task:
+    task = Task(
+        id=task_id,
+        context_id=context_id,
+        status=TaskStatus(state=state, timestamp=timestamp),
+    )
+    if include_artifacts:
+        task.artifacts = [
+            Artifact(
+                artifact_id=f"{task_id}-artifact",
+                parts=[Part(root=TextPart(text=f"artifact:{task_id}"))],
+            )
+        ]
+    if history_size > 0:
+        task.history = [
+            Message(
+                message_id=f"{task_id}-history-{index}",
+                role=Role.agent,
+                parts=[Part(root=TextPart(text=f"history:{task_id}:{index}"))],
+                context_id=context_id,
+                task_id=task_id,
+            )
+            for index in range(history_size)
+        ]
+    return task
 
 
 def test_agent_card_declares_dual_stack_with_http_json_preferred() -> None:
@@ -51,6 +97,180 @@ def test_rest_adapter_exposes_sdk_rest_routes() -> None:
     assert "/v1/tasks/{id}" in route_paths
     assert "/v1/tasks/{id}:cancel" in route_paths
     assert "/v1/tasks/{id}:subscribe" in route_paths
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_route_returns_paginated_results(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_task_store_backend="memory",
+        )
+    )
+    task_store = app.state.task_store
+    now = datetime.now(UTC)
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-new",
+            context_id="ctx-list",
+            timestamp=(now + timedelta(seconds=2)).isoformat(),
+            include_artifacts=True,
+            history_size=3,
+        )
+    )
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-old",
+            context_id="ctx-list",
+            timestamp=(now + timedelta(seconds=1)).isoformat(),
+            include_artifacts=True,
+            history_size=2,
+        )
+    )
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-other",
+            context_id="ctx-other",
+            state=TaskState.working,
+            timestamp=now.isoformat(),
+            history_size=1,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        first_page = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={"contextId": "ctx-list", "pageSize": "1"},
+        )
+
+        assert first_page.status_code == 200
+        first_payload = first_page.json()
+        assert first_payload["totalSize"] == 2
+        assert first_payload["pageSize"] == 1
+        assert first_payload["tasks"][0]["id"] == "task-new"
+        assert "artifacts" not in first_payload["tasks"][0]
+        assert "history" not in first_payload["tasks"][0]
+        assert first_payload["nextPageToken"]
+
+        second_page = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={
+                "contextId": "ctx-list",
+                "pageSize": "1",
+                "pageToken": first_payload["nextPageToken"],
+            },
+        )
+
+    assert second_page.status_code == 200
+    second_payload = second_page.json()
+    assert second_payload["totalSize"] == 2
+    assert second_payload["pageSize"] == 1
+    assert second_payload["tasks"][0]["id"] == "task-old"
+    assert second_payload["nextPageToken"] == ""
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_route_supports_history_artifacts_and_filters(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_task_store_backend="memory",
+        )
+    )
+    task_store = app.state.task_store
+    now = datetime.now(UTC)
+    target_task = _task_for_listing(
+        task_id="task-filtered",
+        context_id="ctx-filtered",
+        state=TaskState.completed,
+        timestamp=(now + timedelta(seconds=1)).isoformat(),
+        include_artifacts=True,
+        history_size=4,
+    )
+    await task_store.save(target_task)
+    await task_store.save(
+        _task_for_listing(
+            task_id="task-excluded-status",
+            context_id="ctx-filtered",
+            state=TaskState.failed,
+            timestamp=now.isoformat(),
+            include_artifacts=True,
+            history_size=2,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={
+                "contextId": "ctx-filtered",
+                "status": "completed",
+                "historyLength": "2",
+                "includeArtifacts": "true",
+                "statusTimestampAfter": now.isoformat(),
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["totalSize"] == 1
+    assert payload["pageSize"] == 1
+    assert payload["nextPageToken"] == ""
+    returned_task = payload["tasks"][0]
+    assert returned_task["id"] == "task-filtered"
+    assert len(returned_task["history"]) == 2
+    assert returned_task["artifacts"][0]["artifactId"] == "task-filtered-artifact"
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_route_validates_query_parameters(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_task_store_backend="memory",
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        page_size_error = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={"pageSize": "0"},
+        )
+        page_token_error = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={"pageToken": "invalid-token"},
+        )
+
+    assert page_size_error.status_code == 400
+    assert page_size_error.json() == {
+        "error": "pageSize must be between 1 and 100.",
+        "field": "pageSize",
+    }
+    assert page_token_error.status_code == 400
+    assert page_token_error.json() == {
+        "error": "pageToken is invalid.",
+        "field": "pageToken",
+    }
 
 
 def test_openapi_rest_message_routes_include_schema_and_examples() -> None:
