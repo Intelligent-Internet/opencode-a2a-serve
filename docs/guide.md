@@ -51,8 +51,8 @@ Key variables to understand protocol behavior:
 - `A2A_CLIENT_BEARER_TOKEN`: optional bearer token attached to outbound peer calls made by the embedded A2A client and `a2a_call` tool path.
 - `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential attached to outbound peer calls made by the embedded A2A client and `a2a_call` tool path.
 - `A2A_CLIENT_SUPPORTED_TRANSPORTS`: ordered outbound transport preference list.
-- `A2A_TASK_STORE_BACKEND`: runtime state backend. Supported values: `database`, `memory`. Default: `database`.
-- `A2A_TASK_STORE_DATABASE_URL`: database URL used by the default durable backend. Default: `sqlite+aiosqlite:///./opencode-a2a.db`.
+- `A2A_TASK_STORE_BACKEND`: unified lightweight persistence backend for SDK task rows plus adapter-managed session / interrupt state. Supported values: `database`, `memory`. Default: `database`.
+- `A2A_TASK_STORE_DATABASE_URL`: database URL used by the unified durable backend when `A2A_TASK_STORE_BACKEND=database`. Default: `sqlite+aiosqlite:///./opencode-a2a.db`.
 - Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
 - Runtime authentication also applies to `/health`; the public unauthenticated discovery surface remains `/.well-known/agent-card.json` and `/.well-known/agent.json`.
 - The authenticated extended card endpoint `/agent/authenticatedExtendedCard` is bearer-token protected.
@@ -139,15 +139,22 @@ A2A_TASK_STORE_DATABASE_URL=sqlite+aiosqlite:///./opencode-a2a.db \
 opencode-a2a
 ```
 
-With the default `database` backend, the service persists:
+With the default `database` backend, the unified lightweight persistence layer persists:
 
 - task records
 - session binding / ownership state
+- pending preferred-session claims
 - interrupt request bindings and tombstones
 
-The runtime automatically applies lightweight schema migrations for its custom state tables and records the applied version in `a2a_schema_version`. This built-in path currently targets the local SQLite deployment profile and does not require Alembic.
+This project is SQLite-first for local single-instance deployments. The runtime configures local durability-oriented SQLite connection settings (`WAL`, `busy_timeout`, `synchronous=NORMAL`) and creates missing parent directories for file-backed database paths.
 
-The A2A SDK task table remains managed by the SDK's own `DatabaseTaskStore` initialization path. The internal migration runner only owns the additional `opencode-a2a` state tables listed above.
+The runtime automatically applies lightweight schema migrations for its custom state tables and records the applied version in `a2a_schema_version`. Schema-version writes are idempotent across concurrent first-start races, pending preferred-session claims now persist absolute `expires_at` timestamps while remaining backward-compatible with legacy `updated_at` rows, and the built-in path currently targets the local SQLite deployment profile without requiring Alembic.
+
+Database-backed task persistence also keeps the existing first-terminal-state-wins contract while tightening the SQLite path with an atomic terminal-write guard instead of relying only on process-local read-before-write checks. Any wider SQLAlchemy dialect compatibility should be treated as incidental implementation latitude rather than a documented deployment target.
+
+At startup, the runtime logs a concise persistence summary covering the active backend, the redacted database URL when applicable, the shared persistence scope, and whether the SQLite local durability profile is active.
+
+The A2A SDK task table remains managed by the SDK's own `DatabaseTaskStore` initialization path. The internal migration runner only owns the additional `opencode-a2a` state tables listed above, but both layers still share the same configured lightweight persistence backend.
 
 In-flight asyncio locks, outbound A2A client caches, and stream-local aggregation buffers remain process-local runtime state.
 

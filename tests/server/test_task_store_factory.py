@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 import warnings
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
+from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.types import Task, TaskState, TaskStatus
 
 from opencode_a2a.server.task_store import (
@@ -15,8 +17,11 @@ from opencode_a2a.server.task_store import (
     TaskStoreOperationError,
     TaskStoreOperationWrappingDecorator,
     TaskWritePolicy,
+    build_database_engine,
     build_task_store,
+    describe_lightweight_persistence_backend,
     initialize_task_store,
+    unwrap_task_store,
 )
 from tests.support.helpers import make_settings
 
@@ -50,6 +55,32 @@ def test_build_task_store_allows_explicit_memory_backend() -> None:
     assert isinstance(store, GuardedTaskStore)
     assert isinstance(store._inner, TaskStoreOperationWrappingDecorator)
     assert isinstance(store._inner._inner, InMemoryTaskStore)
+
+
+def test_describe_lightweight_persistence_backend_marks_sqlite_first_scope() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url="sqlite+aiosqlite:///./opencode-a2a.db",
+    )
+
+    assert describe_lightweight_persistence_backend(settings) == {
+        "backend": "database",
+        "scope": "sdk_tasks_and_adapter_state",
+        "database_url": "sqlite+aiosqlite:///./opencode-a2a.db",
+        "sqlite_tuning": "local_durability_defaults",
+    }
+
+
+def test_describe_lightweight_persistence_backend_supports_memory_backend() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_backend="memory",
+    )
+
+    assert describe_lightweight_persistence_backend(settings) == {
+        "backend": "memory",
+        "scope": "sdk_tasks_and_adapter_state",
+    }
 
 
 @pytest.mark.asyncio
@@ -104,6 +135,50 @@ async def test_database_task_store_can_build_multiple_instances_without_warnings
 
 
 @pytest.mark.asyncio
+async def test_build_database_engine_configures_sqlite_pragmas_and_parent_dir(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "nested" / "runtime.db"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+    engine = build_database_engine(settings)
+
+    try:
+        async with engine.connect() as conn:
+            journal_mode = (await conn.exec_driver_sql("PRAGMA journal_mode")).scalar_one()
+            busy_timeout = (await conn.exec_driver_sql("PRAGMA busy_timeout")).scalar_one()
+            synchronous = (await conn.exec_driver_sql("PRAGMA synchronous")).scalar_one()
+    finally:
+        await engine.dispose()
+
+    assert database_path.parent.exists()
+    assert str(journal_mode).lower() == "wal"
+    assert int(busy_timeout) == 30_000
+    assert int(synchronous) == 1
+
+
+@pytest.mark.asyncio
+async def test_build_task_store_does_not_dispose_shared_engine(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'shared-engine.db'}",
+    )
+    engine = build_database_engine(settings)
+    dispose_spy = AsyncMock()
+    monkeypatch.setattr(type(engine), "dispose", dispose_spy)
+
+    store = build_task_store(settings, engine=engine)
+    await initialize_task_store(store)
+
+    dispose_spy.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("backend", ["memory", "database"])
 async def test_task_store_preserves_first_terminal_state(
     tmp_path: Path,
@@ -132,6 +207,40 @@ async def test_task_store_preserves_first_terminal_state(
     engine = getattr(store, "engine", None)
     if engine is not None:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_task_store_keeps_first_terminal_state_across_independent_instances(
+    tmp_path: Path,
+) -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'terminal-guard.db'}",
+    )
+    first = build_task_store(settings)
+    second = build_task_store(settings)
+    await initialize_task_store(first)
+    await initialize_task_store(second)
+
+    try:
+        working = _task("task-1")
+        await first.save(working)
+
+        completed = _task("task-1")
+        completed.status = TaskStatus(state=TaskState.completed)
+        await first.save(completed)
+
+        late_failed = _task("task-1")
+        late_failed.status = TaskStatus(state=TaskState.failed)
+        await second.save(late_failed)
+
+        restored = await first.get("task-1")
+    finally:
+        await first.engine.dispose()
+        await second.engine.dispose()
+
+    assert restored is not None
+    assert restored.status.state == TaskState.completed
 
 
 @pytest.mark.asyncio
@@ -165,6 +274,56 @@ async def test_task_store_rejects_late_mutation_after_terminal_state(
     engine = getattr(store, "engine", None)
     if engine is not None:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_task_store_atomic_guard_does_not_depend_on_stale_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'stale-read.db'}",
+    )
+    first = build_task_store(settings)
+    second = build_task_store(settings)
+    await initialize_task_store(first)
+    await initialize_task_store(second)
+
+    try:
+        working = _task("task-1")
+        await first.save(working)
+
+        completed = _task("task-1")
+        completed.status = TaskStatus(state=TaskState.completed)
+        await first.save(completed)
+
+        late_completed = _task("task-1")
+        late_completed.status = TaskStatus(state=TaskState.completed)
+        late_completed.metadata = {"opencode": {"late_mutation": True}}
+
+        raw_second = unwrap_task_store(second)
+        assert isinstance(raw_second, DatabaseTaskStore)
+        original_get = DatabaseTaskStore.get.__get__(raw_second, DatabaseTaskStore)
+
+        async def _stale_get(task_id: str, context=None) -> Task | None:  # noqa: ANN001
+            del context
+            if task_id == "task-1":
+                return working
+            return None
+
+        monkeypatch.setattr(raw_second, "get", _stale_get)
+        await second.save(late_completed)
+        monkeypatch.setattr(raw_second, "get", original_get)
+
+        restored = await first.get("task-1")
+    finally:
+        await first.engine.dispose()
+        await second.engine.dispose()
+
+    assert restored is not None
+    assert restored.status.state == TaskState.completed
+    assert restored.metadata is None
 
 
 @pytest.mark.asyncio
