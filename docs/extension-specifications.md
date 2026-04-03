@@ -43,8 +43,10 @@ URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extens
 
 - Scope: provider-private OpenCode session lifecycle, history, and low-risk control methods
 - Public Agent Card: capability declaration only
-- Authenticated extended card: full method matrix, pagination rules, errors, and context semantics
+- Authenticated extended card: full method matrix, pagination rules, errors, context semantics, and existing `opencode.sessions.prompt_async` input-part contracts
 - Transport: A2A JSON-RPC extension methods
+- `opencode.sessions.prompt_async` includes a provider-private `request.parts[]` compatibility surface for upstream OpenCode part types `text`, `file`, `agent`, and `subtask`
+- `subtask` support is declared as passthrough-compatible only: subagent selection and task-tool execution remain upstream OpenCode runtime behavior, not a separate `opencode-a2a` orchestration API
 
 ## OpenCode Provider Discovery v1
 

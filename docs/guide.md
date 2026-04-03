@@ -713,7 +713,37 @@ Validation notes:
 - `metadata.opencode.directory` follows the same normalization and boundary rules as message send (`realpath` + workspace boundary check).
 - `metadata.opencode.workspace.id` is a provider-private routing hint. When it is present, the adapter routes the request to that workspace and does not apply directory override resolution for the same call.
 - `request.model` uses the same shape as `metadata.shared.model` and is scoped only to the current session-control request.
+- `request.parts[]` currently accepts upstream-compatible provider-private part types `text`, `file`, `agent`, and `subtask`.
+- `subtask` parts require `prompt`, `description`, and `agent`; they may also include optional `model` and `command`.
+- For `subtask` parts, `request.parts[].agent` is the upstream subagent selector. `opencode-a2a` validates and forwards the shape but does not define a separate subagent discovery or orchestration API.
 - Control methods enforce session owner guard based on request identity.
+
+Example (`opencode.sessions.prompt_async` with a provider-private `subtask` part):
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 211,
+    "method": "opencode.sessions.prompt_async",
+    "params": {
+      "session_id": "<session_id>",
+      "request": {
+        "parts": [
+          {
+            "type": "subtask",
+            "prompt": "Inspect the auth middleware and list the highest-risk gaps.",
+            "description": "Security-focused pass over request auth flow",
+            "agent": "explore",
+            "command": "review"
+          }
+        ]
+      }
+    }
+  }'
+```
 
 ### Session Command (`opencode.sessions.command`)
 

@@ -388,6 +388,41 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert revert_contract["result"]["items_type"] == "SessionSummary"
     assert unrevert_contract["result"]["fields"] == ["item"]
     assert prompt_contract["params"]["required"] == ["session_id", "request.parts"]
+    assert prompt_contract["request_parts"] == {
+        "items_type": "PromptAsyncPart[]",
+        "type_field": "type",
+        "accepted_types": ["text", "file", "agent", "subtask"],
+        "part_contracts": {
+            "text": {"required": ["type", "text"]},
+            "file": {"required": ["type", "mime", "url"]},
+            "agent": {"required": ["type", "name"]},
+            "subtask": {
+                "required": ["type", "prompt", "description", "agent"],
+                "optional": ["model", "command"],
+            },
+        },
+    }
+    assert prompt_contract["subtask_support"] == {
+        "support_level": "passthrough-compatible",
+        "invocation_path": "request.parts[]",
+        "part_type": "subtask",
+        "subagent_selector_field": "request.parts[].agent",
+        "execution_model": "upstream-provider-private-subagent-runtime",
+        "notes": [
+            (
+                "opencode-a2a validates and forwards provider-private subtask parts to "
+                "the upstream OpenCode session runtime."
+            ),
+            (
+                "The adapter does not define a separate subagent discovery or "
+                "orchestration JSON-RPC method surface."
+            ),
+            (
+                "Subtask execution semantics, available subagent names, and any task-tool "
+                "fan-out remain upstream OpenCode behavior."
+            ),
+        ],
+    }
     assert prompt_contract["result"]["fields"] == ["ok", "session_id"]
     assert command_contract["params"]["required"] == [
         "session_id",

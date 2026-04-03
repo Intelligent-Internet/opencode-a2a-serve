@@ -44,6 +44,10 @@ def _build_jsonrpc_extension_openapi_description(
         "plus shared model-selection metadata, OpenCode session/provider extensions, "
         "interrupt recovery extensions, and shared interrupt callback methods.\n\n"
         f"OpenCode session lifecycle/query/control methods: {', '.join(session_methods)}.\n"
+        "The existing prompt_async extension also accepts provider-private OpenCode "
+        "request.parts[] item types such as text, file, agent, and subtask; subtask "
+        "execution remains upstream runtime behavior rather than a separate A2A "
+        "orchestration API.\n"
         f"OpenCode provider/model discovery methods: {provider_methods}.\n"
         f"OpenCode project/workspace/worktree control methods: {workspace_methods}.\n"
         f"OpenCode interrupt recovery methods: {interrupt_recovery_methods}.\n"
@@ -234,6 +238,28 @@ def _build_jsonrpc_extension_openapi_examples(
                     "session_id": "s-1",
                     "request": {
                         "parts": [{"type": "text", "text": "Continue and summarize next steps."}]
+                    },
+                },
+            },
+        },
+        "session_prompt_async_subtask": {
+            "summary": "Send a provider-private subtask part to an existing session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 211,
+                "method": SESSION_QUERY_METHODS["prompt_async"],
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "parts": [
+                            {
+                                "type": "subtask",
+                                "prompt": "Inspect the auth middleware and list gaps.",
+                                "description": "Security-focused pass over request auth flow",
+                                "agent": "explore",
+                                "command": "review",
+                            }
+                        ]
                     },
                 },
             },
