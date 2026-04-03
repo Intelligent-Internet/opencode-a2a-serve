@@ -114,6 +114,22 @@ PROMPT_ASYNC_REQUEST_ALLOWED_FIELDS: tuple[str, ...] = (
     *PROMPT_ASYNC_REQUEST_REQUIRED_FIELDS,
     *PROMPT_ASYNC_REQUEST_OPTIONAL_FIELDS,
 )
+PROMPT_ASYNC_SUPPORTED_PART_TYPES: tuple[str, ...] = ("text", "file", "agent", "subtask")
+PROMPT_ASYNC_PART_CONTRACTS: dict[str, dict[str, Any]] = {
+    "text": {
+        "required": ("type", "text"),
+    },
+    "file": {
+        "required": ("type", "mime", "url"),
+    },
+    "agent": {
+        "required": ("type", "name"),
+    },
+    "subtask": {
+        "required": ("type", "prompt", "description", "agent"),
+        "optional": ("model", "command"),
+    },
+}
 COMMAND_REQUEST_REQUIRED_FIELDS: tuple[str, ...] = ("command", "arguments")
 COMMAND_REQUEST_OPTIONAL_FIELDS: tuple[str, ...] = (
     "messageID",
@@ -777,6 +793,48 @@ def _build_method_contract_params(
     return params
 
 
+def _build_prompt_async_part_contracts() -> dict[str, Any]:
+    part_contracts: dict[str, Any] = {}
+    for part_type, contract in PROMPT_ASYNC_PART_CONTRACTS.items():
+        part_contract_doc: dict[str, Any] = {
+            "required": list(contract["required"]),
+        }
+        optional = contract.get("optional")
+        if optional:
+            part_contract_doc["optional"] = list(optional)
+        part_contracts[part_type] = part_contract_doc
+    return {
+        "items_type": "PromptAsyncPart[]",
+        "type_field": "type",
+        "accepted_types": list(PROMPT_ASYNC_SUPPORTED_PART_TYPES),
+        "part_contracts": part_contracts,
+    }
+
+
+def _build_prompt_async_subtask_support() -> dict[str, Any]:
+    return {
+        "support_level": "passthrough-compatible",
+        "invocation_path": "request.parts[]",
+        "part_type": "subtask",
+        "subagent_selector_field": "request.parts[].agent",
+        "execution_model": "upstream-provider-private-subagent-runtime",
+        "notes": [
+            (
+                "opencode-a2a validates and forwards provider-private subtask parts to "
+                "the upstream OpenCode session runtime."
+            ),
+            (
+                "The adapter does not define a separate subagent discovery or "
+                "orchestration JSON-RPC method surface."
+            ),
+            (
+                "Subtask execution semantics, available subagent names, and any task-tool "
+                "fan-out remain upstream OpenCode behavior."
+            ),
+        ],
+    }
+
+
 def build_session_binding_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -946,6 +1004,9 @@ def build_session_query_extension_params(
             "params": params_contract,
             "result": result_contract,
         }
+        if method_contract.method == SESSION_QUERY_METHODS["prompt_async"]:
+            contract_doc["request_parts"] = _build_prompt_async_part_contracts()
+            contract_doc["subtask_support"] = _build_prompt_async_subtask_support()
         if method_contract.notification_response_status is not None:
             contract_doc["notification_response_status"] = (
                 method_contract.notification_response_status

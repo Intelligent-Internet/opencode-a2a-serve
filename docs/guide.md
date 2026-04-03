@@ -347,6 +347,20 @@ Retention guidance:
 - Treat `opencode.sessions.shell` as deployment-conditional and discover it from the declared profile and current wire contract before calling it.
 - Treat `protocol_compatibility` as the runtime truth for which protocol line is fully supported versus only partially adapted.
 
+Extension boundary principles:
+
+- Expose OpenCode-specific capabilities through A2A only when they fit the adapter boundary: the adapter may document, validate, route, and normalize stable upstream-facing behavior, but it should not become a general replacement for upstream private runtime internals or host-level control planes.
+- Default new `opencode.*` methods to provider-private extension status. Do not present them as portable A2A baseline capabilities unless they truly align with shared protocol semantics.
+- Prefer read-only discovery, stable compatibility surfaces, and low-risk control methods before introducing stronger mutating or destructive operations.
+- Map results to A2A core objects only when the upstream payload is a stable, low-ambiguity read projection such as session-to-`Task` or message-to-`Message`. Otherwise prefer provider-private summary/result envelopes.
+- Treat upstream internal execution mechanisms, including subtask/subagent fan-out and task-tool internals, as provider-private runtime behavior. The adapter may expose passthrough compatibility and observable output metadata, but should not promote those internals into a first-class A2A orchestration API by default.
+- For any new extension proposal, require an explicit answer to all of the following before implementation:
+  - What client value is added beyond the existing chat/session flow?
+  - Is the upstream behavior stable enough to document as a maintained contract?
+  - Should the surface remain provider-private, deployment-conditional, or not be exposed at all?
+  - Are authorization, workspace/session ownership, and destructive-side-effect boundaries clear enough to enforce?
+  - Can the result shape be expressed without overfitting OpenCode internals into fake A2A core semantics?
+
 ## Multipart Input Example
 
 Minimal JSON-RPC example with text + file input:
@@ -669,6 +683,14 @@ curl -sS http://127.0.0.1:8000/ \
 
 ### Session Prompt Async (`opencode.sessions.prompt_async`)
 
+Topology note:
+
+- `A2A Task` remains the protocol-level execution object exposed by the adapter.
+- `opencode.sessions.prompt_async` is a provider-private extension method, not part of the A2A core baseline.
+- `request.parts[].type=subtask` is an upstream-compatible OpenCode input shape carried through that extension method.
+- Downstream execution may fan out into upstream OpenCode task-tool / subagent runtime behavior, but that internal orchestration remains provider-private.
+- The adapter documents passthrough compatibility and observable `tool_call` output blocks; it does not promote subtask/subagent execution into a first-class A2A orchestration API.
+
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
@@ -713,7 +735,37 @@ Validation notes:
 - `metadata.opencode.directory` follows the same normalization and boundary rules as message send (`realpath` + workspace boundary check).
 - `metadata.opencode.workspace.id` is a provider-private routing hint. When it is present, the adapter routes the request to that workspace and does not apply directory override resolution for the same call.
 - `request.model` uses the same shape as `metadata.shared.model` and is scoped only to the current session-control request.
+- `request.parts[]` currently accepts upstream-compatible provider-private part types `text`, `file`, `agent`, and `subtask`.
+- `subtask` parts require `prompt`, `description`, and `agent`; they may also include optional `model` and `command`.
+- For `subtask` parts, `request.parts[].agent` is the upstream subagent selector. `opencode-a2a` validates and forwards the shape but does not define a separate subagent discovery or orchestration API.
 - Control methods enforce session owner guard based on request identity.
+
+Example (`opencode.sessions.prompt_async` with a provider-private `subtask` part):
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 211,
+    "method": "opencode.sessions.prompt_async",
+    "params": {
+      "session_id": "<session_id>",
+      "request": {
+        "parts": [
+          {
+            "type": "subtask",
+            "prompt": "Inspect the auth middleware and list the highest-risk gaps.",
+            "description": "Security-focused pass over request auth flow",
+            "agent": "explore",
+            "command": "review"
+          }
+        ]
+      }
+    }
+  }'
+```
 
 ### Session Command (`opencode.sessions.command`)
 

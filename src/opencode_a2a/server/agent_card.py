@@ -165,7 +165,10 @@ def _build_session_query_skill_examples(
         "Read one session diff (method opencode.sessions.diff).",
         ("List messages with cursor pagination (method opencode.sessions.messages.list)."),
         "Get one session message (method opencode.sessions.messages.get).",
-        "Send async prompt to a session (method opencode.sessions.prompt_async).",
+        (
+            "Send async prompt to a session, including provider-private agent/subtask "
+            "parts (method opencode.sessions.prompt_async)."
+        ),
         "Send command to a session (method opencode.sessions.command).",
         "Fork a session at a message boundary (method opencode.sessions.fork).",
         "Share or unshare a session (methods opencode.sessions.share / opencode.sessions.unshare).",
