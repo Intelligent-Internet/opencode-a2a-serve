@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
+from sqlalchemy.exc import IntegrityError
 
 import opencode_a2a.server.migrations as migrations_module
+import opencode_a2a.server.state_store as state_store_module
 from opencode_a2a.server.migrations import CURRENT_STATE_STORE_SCHEMA_VERSION
 from opencode_a2a.server.state_store import (
     _INTERRUPT_REQUESTS,
@@ -60,6 +62,69 @@ def test_add_missing_nullable_column_supports_non_sqlite_dialects(monkeypatch) -
     )
 
     assert executed == ["ALTER TABLE a2a_interrupt_requests ADD COLUMN details_json VARCHAR"]
+
+
+def test_write_schema_version_recovers_from_concurrent_first_insert_race() -> None:
+    executed: list[str] = []
+
+    class _FakeResult:
+        def __init__(self, value: int | None) -> None:
+            self._value = value
+
+        def scalar_one_or_none(self) -> int | None:
+            return self._value
+
+    class _FakeConnection:
+        def execute(self, clause):  # noqa: ANN001
+            executed.append(clause.__visit_name__)
+            if clause.__visit_name__ == "select":
+                return _FakeResult(None)
+            if clause.__visit_name__ == "insert":
+                raise IntegrityError("insert", {}, Exception("duplicate key"))
+            if clause.__visit_name__ == "update":
+                return None
+            raise AssertionError(f"Unexpected clause type: {clause.__visit_name__}")
+
+    migrations_module._write_schema_version(
+        _FakeConnection(),
+        version_table=migrations_module._SCHEMA_VERSIONS,
+        scope=migrations_module.STATE_STORE_SCHEMA_NAME,
+        version=1,
+    )
+
+    assert executed == ["select", "insert", "update"]
+
+
+@pytest.mark.asyncio
+async def test_state_store_write_helper_recovers_from_concurrent_first_insert_race() -> None:
+    executed: list[str] = []
+
+    class _FakeSession:
+        async def execute(self, clause):  # noqa: ANN001
+            executed.append(clause.__visit_name__)
+            if clause.__visit_name__ == "insert":
+                raise IntegrityError("insert", {}, Exception("duplicate key"))
+            if clause.__visit_name__ == "update":
+                return None
+            raise AssertionError(f"Unexpected clause type: {clause.__visit_name__}")
+
+    await state_store_module._insert_then_update_on_conflict(
+        _FakeSession(),
+        table=_INTERRUPT_REQUESTS,
+        key_values={"request_id": "perm-1"},
+        update_values={
+            "session_id": "ses-1",
+            "interrupt_type": "permission",
+            "identity": "user-1",
+            "task_id": "task-1",
+            "context_id": "ctx-1",
+            "details_json": None,
+            "expires_at": 1.0,
+            "tombstone_expires_at": None,
+        },
+    )
+
+    assert executed == ["insert", "update"]
 
 
 @pytest.mark.asyncio

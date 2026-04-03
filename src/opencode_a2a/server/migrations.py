@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -15,6 +15,7 @@ from sqlalchemy import (
     text,
     update,
 )
+from sqlalchemy.exc import IntegrityError
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
@@ -65,24 +66,81 @@ def _migration_1_add_interrupt_details_json(
     )
 
 
-def _read_schema_version(connection: Connection, *, name: str) -> int:
+def _read_schema_version(
+    connection: Connection,
+    *,
+    version_table: Table,
+    scope: str,
+) -> int | None:
     result = connection.execute(
-        select(_SCHEMA_VERSIONS.c.version).where(_SCHEMA_VERSIONS.c.name == name)
+        select(version_table.c.version).where(version_table.c.name == scope)
     )
     version = result.scalar_one_or_none()
-    return int(version) if version is not None else 0
+    return int(version) if version is not None else None
 
 
-def _write_schema_version(connection: Connection, *, name: str, version: int) -> None:
-    exists = connection.execute(
-        select(_SCHEMA_VERSIONS.c.name).where(_SCHEMA_VERSIONS.c.name == name)
-    ).scalar_one_or_none()
-    if exists is None:
-        connection.execute(insert(_SCHEMA_VERSIONS).values(name=name, version=version))
-        return
-    connection.execute(
-        update(_SCHEMA_VERSIONS).where(_SCHEMA_VERSIONS.c.name == name).values(version=version)
+def _write_schema_version(
+    connection: Connection,
+    *,
+    version_table: Table,
+    scope: str,
+    version: int,
+) -> None:
+    existing_version = _read_schema_version(
+        connection,
+        version_table=version_table,
+        scope=scope,
     )
+    if existing_version is not None:
+        connection.execute(
+            update(version_table).where(version_table.c.name == scope).values(version=version)
+        )
+        return
+    try:
+        connection.execute(insert(version_table).values(name=scope, version=version))
+    except IntegrityError:
+        connection.execute(
+            update(version_table).where(version_table.c.name == scope).values(version=version)
+        )
+
+
+def _apply_schema_migrations(
+    connection: Connection,
+    *,
+    version_table: Table,
+    scope: str,
+    current_version: int,
+    migrations: Mapping[int, Callable[[Connection], None]],
+) -> int:
+    if current_version < 0:
+        raise ValueError("current_version must be non-negative")
+
+    stored_version = _read_schema_version(
+        connection,
+        version_table=version_table,
+        scope=scope,
+    )
+    if stored_version is not None and stored_version > current_version:
+        raise RuntimeError(
+            f"Database schema scope {scope!r} is newer than this application supports"
+        )
+
+    starting_version = stored_version or 0
+    for next_version in range(starting_version + 1, current_version + 1):
+        migration = migrations.get(next_version)
+        if migration is None:
+            raise RuntimeError(
+                f"Missing migration for schema scope {scope!r} version {next_version}"
+            )
+        migration(connection)
+        _write_schema_version(
+            connection,
+            version_table=version_table,
+            scope=scope,
+            version=next_version,
+        )
+
+    return current_version
 
 
 def migrate_state_store_schema(
@@ -95,24 +153,16 @@ def migrate_state_store_schema(
     _SCHEMA_VERSION_METADATA.create_all(connection)
     state_metadata.create_all(connection)
 
-    stored_version = _read_schema_version(connection, name=STATE_STORE_SCHEMA_NAME)
-    if stored_version > current_version:
-        raise RuntimeError(
-            "Database state-store schema version is newer than this application supports"
-        )
-
     migrations: dict[int, Callable[[Connection], None]] = {
         1: lambda conn: _migration_1_add_interrupt_details_json(
             conn,
             interrupt_requests_table=interrupt_requests_table,
         ),
     }
-
-    for next_version in range(stored_version + 1, current_version + 1):
-        migration = migrations.get(next_version)
-        if migration is None:
-            raise RuntimeError(f"Missing state-store migration for version {next_version}")
-        migration(connection)
-        _write_schema_version(connection, name=STATE_STORE_SCHEMA_NAME, version=next_version)
-
-    return current_version
+    return _apply_schema_migrations(
+        connection,
+        version_table=_SCHEMA_VERSIONS,
+        scope=STATE_STORE_SCHEMA_NAME,
+        current_version=current_version,
+        migrations=migrations,
+    )
