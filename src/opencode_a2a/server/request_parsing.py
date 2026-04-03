@@ -15,6 +15,18 @@ from ..jsonrpc.error_responses import build_http_error_body
 
 logger = logging.getLogger(__name__)
 
+_V1_JSONRPC_METHOD_ALIASES = {
+    "CancelTask": "tasks/cancel",
+    "CreateTaskPushNotificationConfig": "tasks/pushNotificationConfig/set",
+    "DeleteTaskPushNotificationConfig": "tasks/pushNotificationConfig/delete",
+    "GetExtendedAgentCard": "agent/getAuthenticatedExtendedCard",
+    "GetTask": "tasks/get",
+    "GetTaskPushNotificationConfig": "tasks/pushNotificationConfig/get",
+    "ListTaskPushNotificationConfigs": "tasks/pushNotificationConfig/list",
+    "SendMessage": "message/send",
+    "SendStreamingMessage": "message/stream",
+}
+
 
 def _parse_json_body(body_bytes: bytes) -> dict | None:
     try:
@@ -90,6 +102,22 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     method = payload.get("method")
     version = payload.get("jsonrpc")
     return isinstance(method, str) and isinstance(version, str)
+
+
+def _normalize_v1_jsonrpc_method_alias(
+    payload: dict | None, *, protocol_version: str
+) -> dict | None:
+    if payload is None or protocol_version != "1.0":
+        return payload
+    method = payload.get("method")
+    if not isinstance(method, str):
+        return payload
+    canonical_method = _V1_JSONRPC_METHOD_ALIASES.get(method)
+    if canonical_method is None or canonical_method == method:
+        return payload
+    normalized_payload = dict(payload)
+    normalized_payload["method"] = canonical_method
+    return normalized_payload
 
 
 class _RequestBodyTooLargeError(Exception):

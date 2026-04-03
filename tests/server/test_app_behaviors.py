@@ -40,6 +40,7 @@ from opencode_a2a.server.application import (
     _looks_like_jsonrpc_message_payload,
     _normalize_content_type,
     _normalize_log_level,
+    _normalize_v1_jsonrpc_method_alias,
     _parse_content_length,
     _parse_json_body,
     _request_body_too_large_response,
@@ -113,6 +114,28 @@ def test_request_payload_helpers_cover_edge_cases() -> None:
     assert _looks_like_jsonrpc_envelope(None) is False
     assert _looks_like_jsonrpc_envelope({"jsonrpc": "2.0", "method": "message/send"}) is True
     assert _looks_like_jsonrpc_envelope({"jsonrpc": 2, "method": "message/send"}) is False
+    assert _normalize_v1_jsonrpc_method_alias(None, protocol_version="1.0") is None
+    assert _normalize_v1_jsonrpc_method_alias(
+        {"jsonrpc": "2.0", "method": "SendMessage"},
+        protocol_version="1.0",
+    ) == {
+        "jsonrpc": "2.0",
+        "method": "message/send",
+    }
+    assert _normalize_v1_jsonrpc_method_alias(
+        {"jsonrpc": "2.0", "method": "SendMessage"},
+        protocol_version="0.3",
+    ) == {
+        "jsonrpc": "2.0",
+        "method": "SendMessage",
+    }
+    assert _normalize_v1_jsonrpc_method_alias(
+        {"jsonrpc": "2.0", "method": "message/send"},
+        protocol_version="1.0",
+    ) == {
+        "jsonrpc": "2.0",
+        "method": "message/send",
+    }
 
     response = _request_body_too_large_response(
         path="/",

@@ -378,6 +378,38 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
 
 
 @pytest.mark.asyncio
+async def test_v1_pascalcase_sendmessage_alias_is_accepted(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {
+        "Authorization": "Bearer test-token",
+        "A2A-Version": "1.0",
+    }
+    alias_payload = {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": "m-rpc-v1",
+                "role": "user",
+                "parts": [{"kind": "text", "text": "hello from v1 alias"}],
+            }
+        },
+    }
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        rpc_resp = await client.post("/", headers=headers, json=alias_payload)
+
+    assert rpc_resp.status_code == 200
+    assert rpc_resp.headers["A2A-Version"] == "1.0"
+    assert rpc_resp.json().get("error") is None
+
+
+@pytest.mark.asyncio
 async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatch) -> None:
     import opencode_a2a.server.application as app_module
 

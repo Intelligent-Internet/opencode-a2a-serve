@@ -34,6 +34,7 @@ from .request_parsing import (
     _looks_like_jsonrpc_envelope,
     _looks_like_jsonrpc_message_payload,
     _normalize_content_type,
+    _normalize_v1_jsonrpc_method_alias,
     _parse_content_length,
     _parse_json_body,
     _request_body_too_large_response,
@@ -122,6 +123,19 @@ def install_runtime_middlewares(
             except ValueError:
                 return raw_value.strip()
         return cast(str, settings.a2a_protocol_version)
+
+    def _uses_v1_jsonrpc_aliases(request: Request) -> bool:
+        negotiated = getattr(request.state, "a2a_protocol_version", None)
+        if negotiated == "1.0":
+            return True
+
+        raw_value = request.headers.get("A2A-Version") or request.query_params.get("A2A-Version")
+        if not isinstance(raw_value, str) or not raw_value.strip():
+            return False
+        try:
+            return normalize_protocol_version(raw_value) == "1.0"
+        except ValueError:
+            return False
 
     @app.middleware("http")
     async def negotiate_a2a_protocol_version(request: Request, call_next):
@@ -364,6 +378,46 @@ def install_runtime_middlewares(
                 protocol_version=_error_protocol_version(request),
             )
         finally:
+            if token is not None:
+                _REQUEST_BODY_BYTES.reset(token)
+
+    @app.middleware("http")
+    async def normalize_v1_jsonrpc_method_aliases(request: Request, call_next):
+        token: Token | None = None
+        rewrite_token: Token | None = None
+        if (
+            request.method != "POST"
+            or request.url.path != "/"
+            or not _uses_v1_jsonrpc_aliases(request)
+        ):
+            return await call_next(request)
+
+        try:
+            body, token = await _get_request_body(request)
+            payload = _parse_json_body(body)
+            normalized_payload = _normalize_v1_jsonrpc_method_alias(
+                payload,
+                protocol_version="1.0",
+            )
+            if normalized_payload is not None and normalized_payload is not payload:
+                normalized_body = json.dumps(
+                    normalized_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                request._body = normalized_body
+                rewrite_token = _REQUEST_BODY_BYTES.set(normalized_body)
+            return await call_next(request)
+        except _RequestBodyTooLargeError as error:
+            return _request_body_too_large_response(
+                path=request.url.path,
+                method=request.method,
+                error=error,
+                protocol_version=_error_protocol_version(request),
+            )
+        finally:
+            if rewrite_token is not None:
+                _REQUEST_BODY_BYTES.reset(rewrite_token)
             if token is not None:
                 _REQUEST_BODY_BYTES.reset(token)
 
