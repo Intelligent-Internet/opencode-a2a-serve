@@ -347,6 +347,20 @@ Retention guidance:
 - Treat `opencode.sessions.shell` as deployment-conditional and discover it from the declared profile and current wire contract before calling it.
 - Treat `protocol_compatibility` as the runtime truth for which protocol line is fully supported versus only partially adapted.
 
+Extension boundary principles:
+
+- Expose OpenCode-specific capabilities through A2A only when they fit the adapter boundary: the adapter may document, validate, route, and normalize stable upstream-facing behavior, but it should not become a general replacement for upstream private runtime internals or host-level control planes.
+- Default new `opencode.*` methods to provider-private extension status. Do not present them as portable A2A baseline capabilities unless they truly align with shared protocol semantics.
+- Prefer read-only discovery, stable compatibility surfaces, and low-risk control methods before introducing stronger mutating or destructive operations.
+- Map results to A2A core objects only when the upstream payload is a stable, low-ambiguity read projection such as session-to-`Task` or message-to-`Message`. Otherwise prefer provider-private summary/result envelopes.
+- Treat upstream internal execution mechanisms, including subtask/subagent fan-out and task-tool internals, as provider-private runtime behavior. The adapter may expose passthrough compatibility and observable output metadata, but should not promote those internals into a first-class A2A orchestration API by default.
+- For any new extension proposal, require an explicit answer to all of the following before implementation:
+  - What client value is added beyond the existing chat/session flow?
+  - Is the upstream behavior stable enough to document as a maintained contract?
+  - Should the surface remain provider-private, deployment-conditional, or not be exposed at all?
+  - Are authorization, workspace/session ownership, and destructive-side-effect boundaries clear enough to enforce?
+  - Can the result shape be expressed without overfitting OpenCode internals into fake A2A core semantics?
+
 ## Multipart Input Example
 
 Minimal JSON-RPC example with text + file input:
