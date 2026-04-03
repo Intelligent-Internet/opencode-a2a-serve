@@ -12,6 +12,7 @@ Executable scripts live in this directory. This file is the entry index for the 
 ## Other Scripts
 
 - [`doctor.sh`](./doctor.sh): primary local development regression entrypoint (uv sync + lint + tests + coverage)
+- [`conformance.sh`](./conformance.sh): local/manual external A2A conformance experiment entrypoint; caches the official TCK, can launch a dummy-backed local SUT, and preserves raw artifacts under `run/conformance/`
 - [`dependency_health.sh`](./dependency_health.sh): development dependency review entrypoint (`sync`/`pip check` + outdated + dev audit), while blocking CI/publish audits focus on runtime dependencies
 - [`check_coverage.py`](./check_coverage.py): enforces the overall coverage floor and per-file minimums for critical modules
 - [`lint.sh`](./lint.sh): lint helper
@@ -20,3 +21,4 @@ Executable scripts live in this directory. This file is the entry index for the 
 ## Notes
 
 - `doctor.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
+- External conformance experiments remain intentionally separate from the default regression path. See [`../docs/conformance.md`](../docs/conformance.md).

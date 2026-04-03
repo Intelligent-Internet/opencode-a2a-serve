@@ -85,6 +85,49 @@ async def test_sdk_owned_non_chat_jsonrpc_methods_delegate_to_base_app(monkeypat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("alias_method", "canonical_method"),
+    (
+        ("SendMessage", "message/send"),
+        ("SendStreamingMessage", "message/stream"),
+        ("GetTask", "tasks/get"),
+        ("CancelTask", "tasks/cancel"),
+        ("GetExtendedAgentCard", "agent/getAuthenticatedExtendedCard"),
+        ("GetTaskPushNotificationConfig", "tasks/pushNotificationConfig/get"),
+        ("ListTaskPushNotificationConfigs", "tasks/pushNotificationConfig/list"),
+        ("CreateTaskPushNotificationConfig", "tasks/pushNotificationConfig/set"),
+        ("DeleteTaskPushNotificationConfig", "tasks/pushNotificationConfig/delete"),
+    ),
+)
+async def test_v1_pascalcase_jsonrpc_aliases_delegate_to_canonical_methods(
+    monkeypatch,
+    alias_method: str,
+    canonical_method: str,
+) -> None:
+    async def _fake_base_handle(self, request):  # noqa: ANN001
+        payload = await request.json()
+        return JSONResponse({"delegated_method": payload["method"]})
+
+    monkeypatch.setattr(A2AFastAPIApplication, "_handle_requests", _fake_base_handle)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token", **_BASE_SETTINGS))
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={
+                "Authorization": "Bearer test-token",
+                "A2A-Version": "1.0",
+            },
+            json={"jsonrpc": "2.0", "id": 1, "method": alias_method, "params": {}},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["A2A-Version"] == "1.0"
+    assert response.json() == {"delegated_method": canonical_method}
+
+
+@pytest.mark.asyncio
 async def test_extension_methods_stay_on_local_registry(monkeypatch) -> None:
     dummy = DummySessionQueryOpencodeUpstreamClient(
         make_settings(

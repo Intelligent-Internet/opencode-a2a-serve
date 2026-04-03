@@ -358,6 +358,35 @@ def unwrap_task_store(task_store: TaskStore) -> TaskStore:
     return task_store
 
 
+async def list_stored_tasks(
+    task_store: TaskStore,
+    context: ServerCallContext | None = None,
+) -> list[Task]:
+    del context
+    raw_task_store = unwrap_task_store(task_store)
+
+    try:
+        if isinstance(raw_task_store, InMemoryTaskStore):
+            async with raw_task_store.lock:
+                return list(raw_task_store.tasks.values())
+
+        if isinstance(raw_task_store, DatabaseTaskStore):
+            await raw_task_store._ensure_initialized()
+            async with raw_task_store.async_session_maker() as session:
+                stmt = select(raw_task_store.task_model)
+                result = await session.execute(stmt)
+                task_models = result.scalars().all()
+            return [raw_task_store._from_orm(task_model) for task_model in task_models]
+
+        raise TypeError(
+            f"Unsupported task store type for listing tasks: {type(raw_task_store).__name__}"
+        )
+    except TaskStoreOperationError:
+        raise
+    except Exception as exc:
+        raise TaskStoreOperationError("list", None) from exc
+
+
 def _configure_sqlite_connection(dbapi_connection: Any, _connection_record: Any) -> None:
     cursor = dbapi_connection.cursor()
     try:

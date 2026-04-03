@@ -65,6 +65,26 @@ async def test_unsupported_method_uses_requested_protocol_version() -> None:
 
 
 @pytest.mark.asyncio
+async def test_pascalcase_jsonrpc_aliases_remain_unsupported_on_v03() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer test-token"},
+            json={"jsonrpc": "2.0", "id": 123, "method": "SendMessage", "params": {}},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"]["code"] == -32601
+    assert body["error"]["data"]["method"] == "SendMessage"
+    assert "message/send" in body["error"]["data"]["supported_methods"]
+
+
+@pytest.mark.asyncio
 async def test_unsupported_v1_minor_version_returns_v1_error_details() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     app = create_app(settings)
