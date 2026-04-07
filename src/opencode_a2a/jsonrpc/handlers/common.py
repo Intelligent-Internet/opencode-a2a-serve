@@ -10,6 +10,7 @@ from ...contracts.extensions import SESSION_QUERY_ERROR_BUSINESS_CODES
 from ...opencode_upstream_client import UpstreamConcurrencyLimitError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import (
+    authorization_forbidden_error,
     invalid_params_error,
     session_forbidden_error,
     upstream_http_error,
@@ -18,6 +19,7 @@ from ..error_responses import (
 )
 
 ERR_SESSION_FORBIDDEN = SESSION_QUERY_ERROR_BUSINESS_CODES["SESSION_FORBIDDEN"]
+ERR_AUTHORIZATION_FORBIDDEN = SESSION_QUERY_ERROR_BUSINESS_CODES["AUTHORIZATION_FORBIDDEN"]
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +42,26 @@ def build_session_forbidden_response(
     return context.error_response(
         request_id,
         session_forbidden_error(ERR_SESSION_FORBIDDEN, session_id=session_id),
+    )
+
+
+def build_authorization_forbidden_response(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    *,
+    method: str,
+    capability: str,
+    credential_id: str | None = None,
+    error_code: int = ERR_AUTHORIZATION_FORBIDDEN,
+) -> Response:
+    return context.error_response(
+        request_id,
+        authorization_forbidden_error(
+            error_code,
+            method=method,
+            capability=capability,
+            credential_id=credential_id,
+        ),
     )
 
 

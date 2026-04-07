@@ -1,4 +1,3 @@
-import hashlib
 import logging
 
 import httpx
@@ -18,7 +17,8 @@ from tests.support.session_extensions import _BASE_SETTINGS, _session_meta
 
 
 def _identity_for_token(token: str) -> str:
-    return f"bearer:{hashlib.sha256(token.encode()).hexdigest()[:12]}"
+    del token
+    return "automation"
 
 
 @pytest.mark.asyncio
@@ -27,7 +27,7 @@ async def test_session_query_extension_requires_bearer_token(monkeypatch):
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyOpencodeUpstreamClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -56,7 +56,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -65,7 +65,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -130,7 +130,7 @@ async def test_session_query_extension_supports_session_filters_and_message_curs
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -140,7 +140,7 @@ async def test_session_query_extension_supports_session_filters_and_message_curs
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -201,7 +201,7 @@ async def test_session_query_extension_prefers_workspace_metadata_for_routing(mo
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -210,7 +210,7 @@ async def test_session_query_extension_prefers_workspace_metadata_for_routing(mo
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -260,7 +260,7 @@ async def test_session_query_extension_rejects_directory_outside_workspace(monke
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -269,7 +269,7 @@ async def test_session_query_extension_rejects_directory_outside_workspace(monke
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -300,7 +300,7 @@ async def test_session_query_extension_applies_default_limit(monkeypatch):
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -313,7 +313,7 @@ async def test_session_query_extension_applies_default_limit(monkeypatch):
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -355,7 +355,7 @@ async def test_session_query_extension_enforces_session_limit_locally(monkeypatc
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -369,7 +369,7 @@ async def test_session_query_extension_enforces_session_limit_locally(monkeypatc
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -401,7 +401,7 @@ async def test_provider_discovery_extension_returns_normalized_catalog(monkeypat
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -410,7 +410,7 @@ async def test_provider_discovery_extension_returns_normalized_catalog(monkeypat
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -461,11 +461,11 @@ async def test_provider_discovery_extension_rejects_invalid_provider_id(monkeypa
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -491,12 +491,12 @@ async def test_provider_discovery_extension_maps_payload_mismatch(monkeypatch):
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     dummy.provider_catalog_payload = {"all": "bad", "default": {}, "connected": []}
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -532,7 +532,7 @@ async def test_provider_discovery_extension_maps_concurrency_limit_to_unreachabl
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", BusyDiscoveryClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -565,7 +565,7 @@ async def test_session_query_extension_rejects_non_array_upstream_payload(monkey
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", WeirdPayloadClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -602,7 +602,7 @@ async def test_session_query_extension_maps_concurrency_limit_to_unreachable(mon
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", BusySessionQueryClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -627,7 +627,7 @@ async def test_interrupt_recovery_extension_returns_identity_scoped_items(monkey
     identity = _identity_for_token(token)
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token=token,
+            test_bearer_token=token,
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -655,7 +655,7 @@ async def test_interrupt_recovery_extension_returns_identity_scoped_items(monkey
         request_id="perm-other",
         session_id="ses-3",
         interrupt_type="permission",
-        identity="bearer:other-user",
+        identity="other-user",
         task_id="task-3",
         context_id="ctx-3",
         details={"permission": "write"},
@@ -663,7 +663,7 @@ async def test_interrupt_recovery_extension_returns_identity_scoped_items(monkey
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token=token,
+            test_bearer_token=token,
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -710,11 +710,11 @@ async def test_interrupt_recovery_extension_rejects_unsupported_fields(monkeypat
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -741,11 +741,11 @@ async def test_interrupt_recovery_extension_notification_returns_204(monkeypatch
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -770,7 +770,7 @@ async def test_session_query_extension_session_title_is_extracted_or_placeholder
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", TitlePayloadClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -798,7 +798,7 @@ async def test_session_query_extension_keeps_session_with_empty_title(monkeypatc
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", EmptyTitlePayloadClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -831,7 +831,7 @@ async def test_session_query_extension_message_role_and_id_from_info(monkeypatch
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", InfoRoleClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -871,7 +871,7 @@ async def test_session_query_extension_accepts_top_level_list_payload(monkeypatc
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", ListPayloadClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -915,7 +915,7 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", AltKeyPayloadClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -951,7 +951,7 @@ async def test_session_query_extension_rejects_cursor_limit(monkeypatch):
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -960,7 +960,7 @@ async def test_session_query_extension_rejects_cursor_limit(monkeypatch):
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -993,7 +993,7 @@ async def test_session_query_extension_rejects_page_size_pagination(monkeypatch)
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -1002,7 +1002,7 @@ async def test_session_query_extension_rejects_page_size_pagination(monkeypatch)
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -1034,7 +1034,7 @@ async def test_session_query_extension_rejects_limit_above_max(monkeypatch):
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -1043,7 +1043,7 @@ async def test_session_query_extension_rejects_limit_above_max(monkeypatch):
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -1080,7 +1080,7 @@ async def test_session_query_extension_accepts_equivalent_string_and_integer_lim
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -1089,7 +1089,7 @@ async def test_session_query_extension_accepts_equivalent_string_and_integer_lim
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -1129,7 +1129,7 @@ async def test_session_query_extension_maps_404_to_session_not_found(monkeypatch
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", NotFoundOpencodeUpstreamClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -1160,7 +1160,7 @@ async def test_session_query_extension_does_not_log_response_bodies(monkeypatch,
     caplog.set_level(logging.DEBUG, logger="opencode_a2a.server.application")
 
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=True, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=True, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)

@@ -392,7 +392,7 @@ async def test_owned_preferred_session_rebinds_context_with_database_repository(
     tmp_path: Path,
 ) -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'preferred-owned.db'}",
     )
     engine = build_database_engine(settings)
@@ -432,7 +432,7 @@ async def test_expired_pending_claim_does_not_block_other_identity_with_database
         return now
 
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'preferred-expiry.db'}",
     )
     engine = build_database_engine(settings)

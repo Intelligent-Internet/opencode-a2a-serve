@@ -83,10 +83,10 @@ def test_add_missing_nullable_column_supports_non_sqlite_dialects(monkeypatch) -
     migrations_module._add_missing_nullable_column(
         _FakeConnection(),
         table=_INTERRUPT_REQUESTS,
-        column_name="details_json",
+        column_name="credential_id",
     )
 
-    assert executed == ["ALTER TABLE a2a_interrupt_requests ADD COLUMN details_json VARCHAR"]
+    assert executed == ["ALTER TABLE a2a_interrupt_requests ADD COLUMN credential_id VARCHAR"]
 
 
 def test_write_schema_version_recovers_from_concurrent_first_insert_race() -> None:
@@ -141,6 +141,7 @@ async def test_state_store_write_helper_recovers_from_concurrent_first_insert_ra
             "session_id": "ses-1",
             "interrupt_type": "permission",
             "identity": "user-1",
+            "credential_id": "cred-1",
             "task_id": "task-1",
             "context_id": "ctx-1",
             "details_json": None,
@@ -156,7 +157,7 @@ async def test_state_store_write_helper_recovers_from_concurrent_first_insert_ra
 async def test_database_session_state_repository_persists_bindings(tmp_path: Path) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'state.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -210,7 +211,7 @@ async def test_database_pending_session_claim_expires(tmp_path: Path) -> None:
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'pending-claim.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -241,7 +242,7 @@ async def test_database_pending_session_claim_keeps_absolute_expiry_when_runtime
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'pending-claim-expires-at.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -282,7 +283,7 @@ async def test_database_session_binding_and_owner_do_not_expire_with_time(tmp_pa
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'durable-state.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -309,7 +310,7 @@ async def test_database_interrupt_request_repository_persists_active_binding(
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'interrupt.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -321,6 +322,7 @@ async def test_database_interrupt_request_repository_persists_active_binding(
         session_id="ses-1",
         interrupt_type="permission",
         identity="user-1",
+        credential_id="cred-1",
         task_id="task-1",
         context_id="ctx-1",
         details={"permission": "read", "patterns": ["/tmp/config.yml"]},
@@ -338,6 +340,7 @@ async def test_database_interrupt_request_repository_persists_active_binding(
     assert binding.session_id == "ses-1"
     assert binding.interrupt_type == "permission"
     assert binding.identity == "user-1"
+    assert binding.credential_id == "cred-1"
     assert binding.task_id == "task-1"
     assert binding.context_id == "ctx-1"
     assert binding.details == {"permission": "read", "patterns": ["/tmp/config.yml"]}
@@ -351,7 +354,7 @@ async def test_interrupt_request_repository_lists_pending_items_by_identity_and_
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'interrupt-list.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -363,6 +366,7 @@ async def test_interrupt_request_repository_lists_pending_items_by_identity_and_
         session_id="ses-1",
         interrupt_type="permission",
         identity="user-1",
+        credential_id="cred-1",
         task_id="task-1",
         context_id="ctx-1",
         details={"permission": "read"},
@@ -373,6 +377,7 @@ async def test_interrupt_request_repository_lists_pending_items_by_identity_and_
         session_id="ses-2",
         interrupt_type="question",
         identity="user-1",
+        credential_id="cred-2",
         task_id="task-2",
         context_id="ctx-2",
         details={"questions": [{"question": "Proceed?"}]},
@@ -383,6 +388,7 @@ async def test_interrupt_request_repository_lists_pending_items_by_identity_and_
         session_id="ses-3",
         interrupt_type="permission",
         identity="user-2",
+        credential_id="cred-3",
         task_id="task-3",
         context_id="ctx-3",
         details={"permission": "write"},
@@ -399,8 +405,10 @@ async def test_interrupt_request_repository_lists_pending_items_by_identity_and_
     )
 
     assert [item.request_id for item in permission_items] == ["perm-1"]
+    assert permission_items[0].credential_id == "cred-1"
     assert permission_items[0].details == {"permission": "read"}
     assert [item.request_id for item in question_items] == ["q-1"]
+    assert question_items[0].credential_id == "cred-2"
     assert question_items[0].details == {"questions": [{"question": "Proceed?"}]}
 
     await engine.dispose()
@@ -412,7 +420,7 @@ async def test_database_interrupt_request_repository_upgrades_legacy_interrupt_t
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'legacy-interrupt.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -469,8 +477,10 @@ async def test_database_interrupt_request_repository_upgrades_legacy_interrupt_t
     assert status == "active"
     assert binding is not None
     assert binding.session_id == "ses-legacy"
+    assert binding.credential_id is None
     assert binding.details is None
     assert [item.request_id for item in pending] == ["perm-legacy"]
+    assert pending[0].credential_id is None
     assert pending[0].details is None
     assert await _read_state_store_schema_version(engine) == CURRENT_STATE_STORE_SCHEMA_VERSION
 
@@ -483,7 +493,7 @@ async def test_database_state_store_records_schema_version_for_existing_current_
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'current-schema.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -530,6 +540,7 @@ async def test_database_state_store_records_schema_version_for_existing_current_
                     session_id VARCHAR,
                     interrupt_type VARCHAR,
                     identity VARCHAR,
+                    credential_id VARCHAR,
                     task_id VARCHAR,
                     context_id VARCHAR,
                     details_json VARCHAR,
@@ -562,7 +573,7 @@ async def test_database_state_store_initialization_is_idempotent_across_reposito
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'idempotent-state.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)

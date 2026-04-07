@@ -49,7 +49,11 @@ from opencode_a2a.server.application import (
     create_app,
 )
 from opencode_a2a.server.task_store import TaskStoreOperationError
-from tests.support.helpers import DummyChatOpencodeUpstreamClient, make_settings
+from tests.support.helpers import (
+    DummyChatOpencodeUpstreamClient,
+    make_basic_auth_header,
+    make_settings,
+)
 
 
 def _request(path: str, body: bytes = b"{}") -> Request:
@@ -146,7 +150,7 @@ def test_request_payload_helpers_cover_edge_cases() -> None:
 
 def test_agent_card_helper_builders_cover_optional_branches() -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_project="alpha",
         a2a_allow_directory_override=False,
         a2a_enable_session_shell=True,
@@ -159,7 +163,7 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     disabled_capability_snapshot = build_capability_snapshot(
         runtime_profile=build_runtime_profile(
-            make_settings(a2a_bearer_token="test-token", a2a_enable_session_shell=False)
+            make_settings(test_bearer_token="test-token", a2a_enable_session_shell=False)
         )
     )
     assert runtime_profile.summary_dict() == {
@@ -271,6 +275,74 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
 
 
 @pytest.mark.asyncio
+async def test_health_endpoint_accepts_configured_basic_auth(monkeypatch) -> None:
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    settings = make_settings(
+        test_bearer_token="test-token",
+        test_basic_username="operator",
+        test_basic_password="op-pass",  # pragma: allowlist secret
+    )
+    app = app_module.create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        health = await client.get("/health", headers=make_basic_auth_header("operator", "op-pass"))
+
+    assert health.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_rejects_disabled_registry_token(monkeypatch) -> None:
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    settings = make_settings(
+        test_bearer_token=None,
+        a2a_static_auth_credentials=(
+            {
+                "scheme": "bearer",
+                "token": "token-enabled",
+                "principal": "automation-enabled",
+            },
+            {
+                "scheme": "bearer",
+                "token": "token-disabled",
+                "principal": "automation-disabled",
+                "enabled": False,
+            },
+        ),
+    )
+    app = app_module.create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        rejected = await client.get("/health", headers={"Authorization": "Bearer token-disabled"})
+        accepted = await client.get("/health", headers={"Authorization": "Bearer token-enabled"})
+
+    assert rejected.status_code == 401
+    assert accepted.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_registry_auth_accepts_configured_bearer_only(monkeypatch) -> None:
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    settings = make_settings(
+        a2a_static_auth_credentials=(
+            {
+                "scheme": "bearer",
+                "token": "token-enabled",
+                "principal": "automation-enabled",
+            },
+        ),
+    )
+    app = app_module.create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        registry = await client.get("/health", headers={"Authorization": "Bearer token-enabled"})
+
+    assert registry.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_auth_health_lifespan_and_openapi_cache(monkeypatch, caplog) -> None:
     class _ClosableClient(DummyChatOpencodeUpstreamClient):
         def __init__(self, settings=None) -> None:
@@ -280,10 +352,10 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch, caplog) -> No
         async def close(self) -> None:
             self.closed = True
 
-    closable = _ClosableClient(make_settings(a2a_bearer_token="test-token"))
+    closable = _ClosableClient(make_settings(test_bearer_token="test-token"))
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: closable)
 
-    settings = make_settings(a2a_bearer_token="test-token", a2a_enable_session_shell=True)
+    settings = make_settings(test_bearer_token="test-token", a2a_enable_session_shell=True)
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -391,7 +463,7 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch, caplog) -> No
 async def test_rest_adapter_routes_and_preconsume_error() -> None:
     handler = MagicMock()
     adapter = RESTAdapter(
-        agent_card=build_agent_card(make_settings(a2a_bearer_token="test-token")),
+        agent_card=build_agent_card(make_settings(test_bearer_token="test-token")),
         http_handler=handler,
     )
 
@@ -419,7 +491,7 @@ async def test_push_notification_routes_are_explicitly_unsupported(monkeypatch) 
         "OpencodeUpstreamClient",
         DummyChatOpencodeUpstreamClient,
     )
-    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    app = create_app(make_settings(test_bearer_token="test-token"))
     transport = httpx.ASGITransport(app=app)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -440,7 +512,7 @@ async def test_push_notification_jsonrpc_methods_remain_unsupported(monkeypatch)
         "OpencodeUpstreamClient",
         DummyChatOpencodeUpstreamClient,
     )
-    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    app = create_app(make_settings(test_bearer_token="test-token"))
     transport = httpx.ASGITransport(app=app)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -900,7 +972,7 @@ def test_normalize_log_level_configure_logging_and_main(monkeypatch) -> None:
     uvicorn_access_logger.setLevel.assert_called_once_with("INFO")
 
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_log_level="debug",
         a2a_host="127.0.0.1",
         a2a_port=9001,

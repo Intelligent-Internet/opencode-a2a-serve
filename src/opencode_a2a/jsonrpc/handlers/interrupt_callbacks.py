@@ -54,6 +54,7 @@ async def handle_interrupt_callback_request(
         )
     request_id = request_id.strip()
     request_identity = getattr(request.state, "user_identity", None)
+    request_credential_id = getattr(request.state, "user_credential_id", None)
 
     directory, directory_error = extract_interrupt_callback_directory_hint(
         context,
@@ -100,6 +101,19 @@ async def handle_interrupt_callback_request(
             and request_identity
             and binding.identity
             and binding.identity != request_identity
+        ):
+            return context.error_response(
+                base_request.id,
+                interrupt_not_found_error(
+                    ERR_INTERRUPT_NOT_FOUND,
+                    request_id=request_id,
+                ),
+            )
+        if (
+            isinstance(request_credential_id, str)
+            and request_credential_id
+            and binding.credential_id
+            and binding.credential_id != request_credential_id
         ):
             return context.error_response(
                 base_request.id,

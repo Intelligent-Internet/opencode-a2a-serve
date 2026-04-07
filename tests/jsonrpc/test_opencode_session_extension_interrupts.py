@@ -40,7 +40,7 @@ async def test_interrupt_callback_extension_permission_reply(monkeypatch):
             return True
 
     dummy = InterruptClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     await dummy.remember_interrupt_request(
         request_id="perm-1",
@@ -51,7 +51,7 @@ async def test_interrupt_callback_extension_permission_reply(monkeypatch):
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -94,11 +94,11 @@ async def test_interrupt_callback_extension_rejects_legacy_permission_fields(mon
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -123,11 +123,11 @@ async def test_interrupt_callback_extension_rejects_legacy_metadata_directory(mo
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -199,7 +199,7 @@ async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatc
             return True
 
     dummy = InterruptClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     await dummy.remember_interrupt_request(
         request_id="q-1",
@@ -213,7 +213,7 @@ async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatc
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -286,7 +286,7 @@ async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monk
             response = httpx.Response(404, request=request)
             raise httpx.HTTPStatusError("Not Found", request=request, response=response)
 
-    settings = make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    settings = make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     dummy = NotFoundInterruptClient(settings)
     await dummy.remember_interrupt_request(
         request_id="perm-404",
@@ -295,7 +295,7 @@ async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monk
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -327,7 +327,7 @@ async def test_interrupt_callback_extension_rejects_expired_request(monkeypatch)
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", ExpiredInterruptClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -371,11 +371,11 @@ async def test_interrupt_callback_extension_rejects_unknown_request_id(monkeypat
             return True
 
     dummy = InterruptClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -405,7 +405,7 @@ async def test_interrupt_callback_extension_rejects_interrupt_type_mismatch(monk
         pass
 
     dummy = InterruptClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     await dummy.remember_interrupt_request(
         request_id="q-only",
@@ -414,7 +414,7 @@ async def test_interrupt_callback_extension_rejects_interrupt_type_mismatch(monk
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -445,7 +445,7 @@ async def test_interrupt_callback_extension_rejects_identity_mismatch(monkeypatc
         pass
 
     dummy = InterruptClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     await dummy.remember_interrupt_request(
         request_id="perm-owned",
@@ -455,7 +455,7 @@ async def test_interrupt_callback_extension_rejects_identity_mismatch(monkeypatc
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -467,6 +467,70 @@ async def test_interrupt_callback_extension_rejects_identity_mismatch(monkeypatc
             json={
                 "jsonrpc": "2.0",
                 "id": 18,
+                "method": "a2a.interrupt.permission.reply",
+                "params": {"request_id": "perm-owned", "reply": "once"},
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32004
+        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_interrupt_callback_extension_rejects_credential_id_mismatch(monkeypatch):
+    import opencode_a2a.server.application as app_module
+
+    class InterruptClient(DummyOpencodeUpstreamClient):
+        pass
+
+    dummy = InterruptClient(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-current",
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+    await dummy.remember_interrupt_request(
+        request_id="perm-owned",
+        session_id="ses-1",
+        interrupt_type="permission",
+        identity="automation",
+        credential_id="cred-original",
+    )
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-current",
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 181,
                 "method": "a2a.interrupt.permission.reply",
                 "params": {"request_id": "perm-owned", "reply": "once"},
             },
@@ -498,7 +562,7 @@ async def test_interrupt_callback_extension_maps_concurrency_limit_to_unreachabl
             )
 
     dummy = BusyInterruptClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     await dummy.remember_interrupt_request(
         request_id="perm-busy",
@@ -507,7 +571,7 @@ async def test_interrupt_callback_extension_maps_concurrency_limit_to_unreachabl
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)

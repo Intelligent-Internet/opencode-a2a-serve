@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any, Literal
 
-from pydantic import BeforeValidator, Field, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from opencode_a2a import __version__
@@ -40,6 +40,7 @@ WriteAccessScope = Literal[
 ]
 OutsideWorkspaceAccess = Literal["unknown", "allowed", "disallowed", "custom"]
 TaskStoreBackend = Literal["memory", "database"]
+StaticAuthScheme = Literal["bearer", "basic"]
 
 
 def _parse_declared_list(value: Any) -> tuple[str, ...]:
@@ -64,7 +65,81 @@ def _parse_declared_list(value: Any) -> tuple[str, ...]:
     raise TypeError("Expected a comma-separated string, JSON array, or sequence.")
 
 
+def _parse_auth_credentials(value: Any) -> tuple[Any, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return ()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise TypeError("Expected a JSON array for static auth credentials.") from exc
+        if not isinstance(parsed, list):
+            raise TypeError("Expected a JSON array for static auth credentials.")
+        return tuple(parsed)
+    if isinstance(value, (list, tuple)):
+        return tuple(value)
+    raise TypeError("Expected a JSON array or sequence for static auth credentials.")
+
+
 DeclaredStringList = Annotated[tuple[str, ...], NoDecode, BeforeValidator(_parse_declared_list)]
+
+
+class StaticAuthCredentialSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    credential_id: str | None = None
+    scheme: StaticAuthScheme
+    principal: str | None = None
+    token: str | None = None
+    username: str | None = None
+    password: str | None = None
+    capabilities: tuple[str, ...] = ()
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> StaticAuthCredentialSettings:
+        self.credential_id = self.credential_id.strip() if self.credential_id else None
+        self.principal = self.principal.strip() if self.principal else None
+        self.token = self.token.strip() if self.token else None
+        self.username = self.username.strip() if self.username else None
+        self.password = self.password.strip() if self.password else None
+        self.capabilities = tuple(
+            item.strip() for item in self.capabilities if isinstance(item, str) and item.strip()
+        )
+
+        if self.scheme == "bearer":
+            if not self.token:
+                raise ValueError("Static bearer credential requires token.")
+            if self.username or self.password:
+                raise ValueError("Static bearer credential does not accept username/password.")
+            if self.principal is None:
+                raise ValueError(
+                    "Static bearer credential requires explicit principal; "
+                    "registry bearer principals must not default to automation."
+                )
+        else:
+            if not self.username or not self.password:
+                raise ValueError("Static basic credential requires username/password.")
+            if self.token:
+                raise ValueError("Static basic credential does not accept token.")
+            if self.principal is not None:
+                raise ValueError(
+                    "Static basic credential does not accept principal; "
+                    "principal defaults to username."
+                )
+            self.principal = self.username
+
+        return self
+
+
+StaticAuthCredentialList = Annotated[
+    tuple[StaticAuthCredentialSettings, ...],
+    NoDecode,
+    BeforeValidator(_parse_auth_credentials),
+]
 
 
 class Settings(BaseSettings):
@@ -158,7 +233,10 @@ class Settings(BaseSettings):
     )
     a2a_host: str = Field(default="127.0.0.1", alias="A2A_HOST")
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
-    a2a_bearer_token: str = Field(..., min_length=1, alias="A2A_BEARER_TOKEN")
+    a2a_static_auth_credentials: StaticAuthCredentialList = Field(
+        default=(),
+        alias="A2A_STATIC_AUTH_CREDENTIALS",
+    )
 
     a2a_pending_session_claim_ttl_seconds: float = Field(
         default=30.0,
@@ -234,6 +312,13 @@ class Settings(BaseSettings):
                 "A2A_PROTOCOL_VERSION must be present in A2A_SUPPORTED_PROTOCOL_VERSIONS. "
                 f"Declared supported versions: {supported_display}"
             )
+        if self.a2a_static_auth_credentials:
+            if not any(credential.enabled for credential in self.a2a_static_auth_credentials):
+                raise ValueError(
+                    "A2A_STATIC_AUTH_CREDENTIALS must contain at least one enabled credential"
+                )
+        else:
+            raise ValueError("Configure runtime authentication via A2A_STATIC_AUTH_CREDENTIALS")
         return self
 
     @field_validator("a2a_protocol_version", mode="before")

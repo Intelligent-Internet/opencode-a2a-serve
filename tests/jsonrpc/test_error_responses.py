@@ -5,6 +5,7 @@ from a2a.types import A2AError, InvalidParamsError, UnsupportedOperationError
 from opencode_a2a.jsonrpc.error_responses import (
     GOOGLE_RPC_ERROR_INFO_TYPE,
     adapt_jsonrpc_error_for_protocol,
+    authorization_forbidden_error,
     interrupt_not_found_error,
     interrupt_type_mismatch_error,
     invalid_params_error,
@@ -30,6 +31,20 @@ def test_jsonrpc_error_mapping_helpers_preserve_business_contract_fields() -> No
     forbidden = session_forbidden_error(-32006, session_id="s-1")
     assert forbidden.code == -32006
     assert forbidden.data == {"type": "SESSION_FORBIDDEN", "session_id": "s-1"}
+
+    authz_forbidden = authorization_forbidden_error(
+        -32007,
+        method="opencode.sessions.shell",
+        capability="session_shell",
+        credential_id="ops-basic",
+    )
+    assert authz_forbidden.code == -32007
+    assert authz_forbidden.data == {
+        "type": "AUTHORIZATION_FORBIDDEN",
+        "method": "opencode.sessions.shell",
+        "capability": "session_shell",
+        "credential_id": "ops-basic",
+    }
 
     missing_session = session_not_found_error(-32001, session_id="s-404")
     assert missing_session.data == {"type": "SESSION_NOT_FOUND", "session_id": "s-404"}

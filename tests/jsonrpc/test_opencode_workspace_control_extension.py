@@ -4,7 +4,7 @@ import pytest
 from tests.support.helpers import (
     DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient,
 )
-from tests.support.helpers import make_settings
+from tests.support.helpers import make_basic_auth_header, make_settings
 from tests.support.session_extensions import _BASE_SETTINGS
 
 
@@ -13,11 +13,11 @@ async def test_workspace_control_extension_supports_read_only_methods(monkeypatc
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -64,12 +64,14 @@ async def test_workspace_control_extension_supports_mutating_methods(monkeypatch
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
+            test_basic_username="operator",
+            test_basic_password="op-pass",  # pragma: allowlist secret
             a2a_log_payloads=False,
             a2a_enable_workspace_mutations=True,
             **_BASE_SETTINGS,
@@ -78,7 +80,7 @@ async def test_workspace_control_extension_supports_mutating_methods(monkeypatch
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = make_basic_auth_header("operator", "op-pass")
         create_workspace = await client.post(
             "/",
             headers=headers,
@@ -149,7 +151,20 @@ async def test_workspace_control_extension_validates_request_shape(monkeypatch) 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyOpencodeUpstreamClient)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-bearer",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                },
+            ),
             a2a_log_payloads=False,
             a2a_enable_workspace_mutations=True,
             **_BASE_SETTINGS,
@@ -160,7 +175,7 @@ async def test_workspace_control_extension_validates_request_shape(monkeypatch) 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/",
-            headers={"Authorization": "Bearer t-1"},
+            headers=make_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
                 "id": 20,
@@ -176,12 +191,65 @@ async def test_workspace_control_extension_validates_request_shape(monkeypatch) 
 
 
 @pytest.mark.asyncio
+async def test_workspace_control_mutations_require_workspace_mutation_capability(
+    monkeypatch,
+) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-bearer",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                },
+            ),
+            a2a_log_payloads=False,
+            a2a_enable_workspace_mutations=True,
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 201,
+                "method": "opencode.workspaces.create",
+                "params": {"request": {"type": "git", "branch": "main"}},
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error"]["code"] == -32007
+    assert payload["error"]["data"] == {
+        "type": "AUTHORIZATION_FORBIDDEN",
+        "method": "opencode.workspaces.create",
+        "capability": "workspace_mutation",
+        "credential_id": "cred-bearer",
+    }
+
+
+@pytest.mark.asyncio
 async def test_workspace_control_mutations_are_disabled_by_default(monkeypatch) -> None:
     import opencode_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyOpencodeUpstreamClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -216,7 +284,7 @@ async def test_workspace_control_extension_maps_upstream_http_error(monkeypatch)
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", UpstreamErrorClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)

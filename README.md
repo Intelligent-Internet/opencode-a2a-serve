@@ -63,7 +63,8 @@ Treat the deployed OpenCode user's HOME/XDG config directories as part of the ru
 Then start `opencode-a2a` against that upstream:
 
 ```bash
-A2A_BEARER_TOKEN=dev-token \
+DEMO_BEARER_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+A2A_STATIC_AUTH_CREDENTIALS='[{"scheme":"bearer","token":"'"${DEMO_BEARER_TOKEN}"'","principal":"automation"}]' \
 OPENCODE_BASE_URL=http://127.0.0.1:4096 \
 A2A_TASK_STORE_DATABASE_URL=sqlite+aiosqlite:///./opencode-a2a.db \
 A2A_HOST=127.0.0.1 \
@@ -120,7 +121,7 @@ opencode-a2a call http://other-agent:8000 "How are you?"
 ### Outbound Agent Calls (Tools)
 The server can autonomously execute `a2a_call(url, message)` tool calls emitted by the OpenCode runtime. Results are fetched via A2A and returned to the model as tool results, enabling multi-agent orchestration.
 
-When the target peer agent requires bearer auth, configure `A2A_CLIENT_BEARER_TOKEN` for server-side outbound calls. When the target peer agent requires Basic auth, use `A2A_CLIENT_BASIC_AUTH`. These outbound credentials apply to the peer specified by `opencode-a2a call` or `a2a_call(url, message)`, not to this service's inbound `A2A_BEARER_TOKEN`. The CLI intentionally reads outbound credentials from environment variables only, so secrets do not appear in shell history or process arguments.
+When the target peer agent requires bearer auth, configure `A2A_CLIENT_BEARER_TOKEN` for server-side outbound calls. When the target peer agent requires Basic auth, use `A2A_CLIENT_BASIC_AUTH`. These outbound credentials apply to the peer specified by `opencode-a2a call` or `a2a_call(url, message)`, not to this service's inbound `A2A_STATIC_AUTH_CREDENTIALS`. The CLI intentionally reads outbound credentials from environment variables only, so secrets do not appear in shell history or process arguments.
 
 Server-side outbound client settings are fully wired through runtime config: `A2A_CLIENT_TIMEOUT_SECONDS`, `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`, `A2A_CLIENT_USE_CLIENT_PREFERENCE`, `A2A_CLIENT_BEARER_TOKEN`, `A2A_CLIENT_BASIC_AUTH`, and `A2A_CLIENT_SUPPORTED_TRANSPORTS`.
 
@@ -146,7 +147,7 @@ For client-side integration, prefer [a2a-client-hub](https://github.com/liujuanj
 
 This repository improves the service boundary around OpenCode, but it does not turn OpenCode into a hardened multi-tenant platform.
 
-- `A2A_BEARER_TOKEN` protects the A2A surface.
+- `A2A_STATIC_AUTH_CREDENTIALS` protects the A2A surface.
 - Provider auth and default model configuration remain on the OpenCode side; deployment-time precedence details and HOME/XDG state impact are documented in [docs/guide.md](docs/guide.md#troubleshooting-provider-auth-state).
 - Use `A2A_CLIENT_BEARER_TOKEN` for server-side outbound peer calls initiated by `a2a_call`.
 - Deployment supervision is intentionally BYO. Use `systemd`, Docker, Kubernetes, or another supervisor if you need long-running operation.

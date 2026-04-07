@@ -38,7 +38,7 @@ class DummyStreamingClient:
         self._interrupt_sessions: dict[str, str] = {}
         self._interrupt_requests: dict[str, dict] = {}
         self.settings = make_settings(
-            a2a_bearer_token="test",
+            test_bearer_token="test",
             opencode_base_url="http://localhost",
         )
 

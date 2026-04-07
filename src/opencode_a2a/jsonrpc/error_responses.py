@@ -233,6 +233,27 @@ def session_forbidden_error(code: int, *, session_id: str) -> JSONRPCError:
     )
 
 
+def authorization_forbidden_error(
+    code: int,
+    *,
+    method: str,
+    capability: str,
+    credential_id: str | None = None,
+) -> JSONRPCError:
+    data: dict[str, Any] = {
+        "type": "AUTHORIZATION_FORBIDDEN",
+        "method": method,
+        "capability": capability,
+    }
+    if credential_id is not None:
+        data["credential_id"] = credential_id
+    return JSONRPCError(
+        code=code,
+        message="Authorization forbidden",
+        data=data,
+    )
+
+
 def session_not_found_error(code: int, *, session_id: str) -> JSONRPCError:
     return JSONRPCError(
         code=code,
@@ -345,6 +366,7 @@ __all__ = [
     "A2A_ERROR_DOMAIN",
     "GOOGLE_RPC_ERROR_INFO_TYPE",
     "adapt_jsonrpc_error_for_protocol",
+    "authorization_forbidden_error",
     "build_http_error_body",
     "interrupt_not_found_error",
     "interrupt_type_mismatch_error",

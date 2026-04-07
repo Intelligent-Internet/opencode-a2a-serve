@@ -249,6 +249,7 @@ class OpencodeUpstreamClient:
         session_id: str,
         interrupt_type: str,
         identity: str | None = None,
+        credential_id: str | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         details: dict[str, Any] | None = None,
@@ -265,6 +266,11 @@ class OpencodeUpstreamClient:
             session_id=session,
             interrupt_type=kind,
             identity=identity.strip() if isinstance(identity, str) and identity.strip() else None,
+            credential_id=(
+                credential_id.strip()
+                if isinstance(credential_id, str) and credential_id.strip()
+                else None
+            ),
             task_id=task_id.strip() if isinstance(task_id, str) and task_id.strip() else None,
             context_id=(
                 context_id.strip() if isinstance(context_id, str) and context_id.strip() else None

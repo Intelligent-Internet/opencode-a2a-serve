@@ -442,6 +442,7 @@ WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS: tuple[str, ...] = (
 SESSION_QUERY_ERROR_BUSINESS_CODES: dict[str, int] = {
     "SESSION_NOT_FOUND": -32001,
     "SESSION_FORBIDDEN": -32006,
+    "AUTHORIZATION_FORBIDDEN": -32007,
     "UPSTREAM_UNREACHABLE": -32002,
     "UPSTREAM_HTTP_ERROR": -32003,
     "UPSTREAM_PAYLOAD_ERROR": -32005,
@@ -450,6 +451,8 @@ SESSION_QUERY_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",
     "method",
     "session_id",
+    "capability",
+    "credential_id",
     "upstream_status",
     "detail",
 )
@@ -678,6 +681,7 @@ INTERRUPT_RECOVERY_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "fields",
 )
 WORKSPACE_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
+    "AUTHORIZATION_FORBIDDEN": -32007,
     "UPSTREAM_UNREACHABLE": -32002,
     "UPSTREAM_HTTP_ERROR": -32003,
     "UPSTREAM_PAYLOAD_ERROR": -32005,
@@ -685,6 +689,8 @@ WORKSPACE_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
 WORKSPACE_CONTROL_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",
     "method",
+    "capability",
+    "credential_id",
     "upstream_status",
     "detail",
 )

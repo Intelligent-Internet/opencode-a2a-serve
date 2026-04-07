@@ -25,7 +25,7 @@ from tests.support.helpers import make_settings
 
 
 def test_agent_card_description_reflects_actual_transport_capabilities() -> None:
-    card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    card = build_agent_card(make_settings(test_bearer_token="test-token"))
     skills_by_id = {skill.id: skill for skill in card.skills}
 
     assert "HTTP+JSON and JSON-RPC transports" in card.description
@@ -49,10 +49,41 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert skills_by_id["opencode.interrupt.callback"].output_modes == ["application/json"]
 
 
+def test_agent_card_declares_optional_basic_auth_when_configured() -> None:
+    card = build_agent_card(
+        make_settings(
+            test_bearer_token="test-token",
+            test_basic_username="operator",
+            test_basic_password="op-pass",  # pragma: allowlist secret
+        )
+    )
+
+    assert list(card.security_schemes.keys()) == ["bearerAuth", "basicAuth"]
+    assert card.security == [{"bearerAuth": []}, {"basicAuth": []}]
+
+
+def test_agent_card_reflects_registry_declared_auth_schemes() -> None:
+    card = build_agent_card(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                },
+            ),
+        )
+    )
+
+    assert list(card.security_schemes.keys()) == ["basicAuth"]
+    assert card.security == [{"basicAuth": []}]
+
+
 def test_public_agent_card_is_slimmed_but_keeps_core_shared_contract_hints() -> None:
-    public_card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    public_card = build_agent_card(make_settings(test_bearer_token="test-token"))
     extended_card = build_authenticated_extended_agent_card(
-        make_settings(a2a_bearer_token="test-token")
+        make_settings(test_bearer_token="test-token")
     )
     ext_by_uri = {ext.uri: ext for ext in public_card.capabilities.extensions or []}
 
@@ -161,7 +192,7 @@ def test_public_agent_card_is_slimmed_but_keeps_core_shared_contract_hints() -> 
 def test_agent_card_injects_profile_into_extensions() -> None:
     card = build_authenticated_extended_agent_card(
         make_settings(
-            a2a_bearer_token="test-token",
+            test_bearer_token="test-token",
             a2a_project="alpha",
             opencode_workspace_root="/srv/workspaces/alpha",
             opencode_agent="code-reviewer",
@@ -480,6 +511,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert session_management.params["errors"]["business_codes"] == {
         "SESSION_NOT_FOUND": -32001,
         "SESSION_FORBIDDEN": -32006,
+        "AUTHORIZATION_FORBIDDEN": -32007,
         "UPSTREAM_UNREACHABLE": -32002,
         "UPSTREAM_HTTP_ERROR": -32003,
         "UPSTREAM_PAYLOAD_ERROR": -32005,
@@ -488,6 +520,8 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "type",
         "method",
         "session_id",
+        "capability",
+        "credential_id",
         "upstream_status",
         "detail",
     ]
@@ -774,7 +808,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
 
 
 def test_agent_card_chat_examples_include_project_hint_when_configured() -> None:
-    card = build_agent_card(make_settings(a2a_bearer_token="test-token", a2a_project="alpha"))
+    card = build_agent_card(make_settings(test_bearer_token="test-token", a2a_project="alpha"))
     chat_skill = next(skill for skill in card.skills if skill.id == "opencode.chat")
     assert chat_skill.examples is None
     assert "shared session binding" in chat_skill.description
@@ -785,7 +819,7 @@ def test_agent_card_chat_examples_include_project_hint_when_configured() -> None
 
 def test_agent_card_contracts_include_shell_when_enabled() -> None:
     card = build_authenticated_extended_agent_card(
-        make_settings(a2a_bearer_token="test-token", a2a_enable_session_shell=True)
+        make_settings(test_bearer_token="test-token", a2a_enable_session_shell=True)
     )
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
@@ -835,7 +869,7 @@ def test_agent_card_contracts_include_shell_when_enabled() -> None:
 
 def test_agent_card_contracts_include_workspace_mutations_when_enabled() -> None:
     card = build_authenticated_extended_agent_card(
-        make_settings(a2a_bearer_token="test-token", a2a_enable_workspace_mutations=True)
+        make_settings(test_bearer_token="test-token", a2a_enable_workspace_mutations=True)
     )
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
@@ -868,7 +902,7 @@ def test_agent_card_contracts_include_workspace_mutations_when_enabled() -> None
 
 
 def test_agent_card_skills_hide_shell_when_disabled_by_default() -> None:
-    card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    card = build_agent_card(make_settings(test_bearer_token="test-token"))
 
     session_skill = next(
         skill for skill in card.skills if skill.id == "opencode.sessions.management"
@@ -893,7 +927,7 @@ def test_agent_card_skills_hide_shell_when_disabled_by_default() -> None:
 def test_agent_card_hides_shell_when_policy_disables_it() -> None:
     card = build_authenticated_extended_agent_card(
         make_settings(
-            a2a_bearer_token="test-token",
+            test_bearer_token="test-token",
             a2a_enable_session_shell=True,
             a2a_sandbox_mode="read-only",
             a2a_write_access_scope="workspace_only",

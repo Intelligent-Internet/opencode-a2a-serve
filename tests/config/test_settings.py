@@ -1,3 +1,4 @@
+import json
 import os
 from unittest import mock
 
@@ -12,15 +13,27 @@ def test_settings_missing_required():
     with mock.patch.dict(os.environ, {}, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings()
-        # Should mention missing required fields
-        errors = excinfo.value.errors()
-        field_names = [e["loc"][0] for e in errors]
-        assert "A2A_BEARER_TOKEN" in field_names
+        assert "Configure runtime authentication via A2A_STATIC_AUTH_CREDENTIALS" in str(
+            excinfo.value
+        )
 
 
 def test_settings_valid():
     env = {
-        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                },
+            ]
+        ),
         "OPENCODE_TIMEOUT": "300",
         "OPENCODE_WORKSPACE_ROOT": "/srv/workspaces/alpha",
         "A2A_HTTP_GZIP_MINIMUM_SIZE": "2048",
@@ -45,7 +58,9 @@ def test_settings_valid():
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings()
-        assert settings.a2a_bearer_token == "test-token"
+        assert len(settings.a2a_static_auth_credentials) == 2
+        assert settings.a2a_static_auth_credentials[0].principal == "automation"
+        assert settings.a2a_static_auth_credentials[1].principal == "operator"
         assert settings.opencode_timeout == 300.0
         assert settings.opencode_workspace_root == "/srv/workspaces/alpha"
         assert settings.a2a_http_gzip_minimum_size == 2048
@@ -76,7 +91,15 @@ def test_settings_valid():
 
 def test_settings_normalize_protocol_versions() -> None:
     env = {
-        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                }
+            ]
+        ),
         "A2A_PROTOCOL_VERSION": "0.3.0",
         "A2A_SUPPORTED_PROTOCOL_VERSIONS": "0.3.0,1.0.0,1.0",
         "A2A_CLIENT_PROTOCOL_VERSION": "1.0.0",
@@ -91,7 +114,15 @@ def test_settings_normalize_protocol_versions() -> None:
 
 def test_settings_allow_explicit_memory_backend() -> None:
     env = {
-        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                }
+            ]
+        ),
         "A2A_TASK_STORE_BACKEND": "memory",
     }
     with mock.patch.dict(os.environ, env, clear=True):
@@ -100,9 +131,124 @@ def test_settings_allow_explicit_memory_backend() -> None:
     assert settings.a2a_task_store_backend == "memory"
 
 
-def test_settings_ignore_legacy_opencode_directory_env() -> None:
+def test_settings_reject_legacy_runtime_auth_envs() -> None:
     env = {
         "A2A_BEARER_TOKEN": "test-token",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()
+
+    assert "Configure runtime authentication via A2A_STATIC_AUTH_CREDENTIALS" in str(excinfo.value)
+
+
+def test_settings_accept_static_auth_registry() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "credential_id": "bot-alpha",
+                    "scheme": "bearer",
+                    "token": "token-alpha",
+                    "principal": "automation-alpha",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                    "capabilities": ["session_shell"],
+                },
+                {
+                    "scheme": "bearer",
+                    "token": "token-disabled",
+                    "principal": "disabled",
+                    "enabled": False,
+                },
+            ]
+        )
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings()
+
+    assert len(settings.a2a_static_auth_credentials) == 3
+    assert settings.a2a_static_auth_credentials[0].credential_id == "bot-alpha"
+    assert settings.a2a_static_auth_credentials[0].principal == "automation-alpha"
+    assert settings.a2a_static_auth_credentials[1].principal == "operator"
+    assert settings.a2a_static_auth_credentials[1].capabilities == ("session_shell",)
+    assert settings.a2a_static_auth_credentials[2].enabled is False
+
+
+def test_settings_reject_registry_without_enabled_credentials() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "token-disabled",
+                    "principal": "disabled",
+                    "enabled": False,
+                }
+            ]
+        )
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()
+
+    assert "A2A_STATIC_AUTH_CREDENTIALS must contain at least one enabled credential" in str(
+        excinfo.value
+    )
+
+
+def test_settings_reject_basic_registry_principal_override() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                    "principal": "custom-operator",
+                }
+            ]
+        )
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()
+
+    assert "Static basic credential does not accept principal" in str(excinfo.value)
+
+
+def test_settings_reject_registry_bearer_without_explicit_principal() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "token-alpha",
+                }
+            ]
+        )
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()
+
+    assert "Static bearer credential requires explicit principal" in str(excinfo.value)
+
+
+def test_settings_ignore_legacy_opencode_directory_env() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                }
+            ]
+        ),
         "OPENCODE_DIRECTORY": "/legacy/workspace",
     }
     with mock.patch.dict(os.environ, env, clear=True):
@@ -113,7 +259,15 @@ def test_settings_ignore_legacy_opencode_directory_env() -> None:
 
 def test_settings_reject_negative_max_request_body_bytes():
     env = {
-        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                }
+            ]
+        ),
         "A2A_MAX_REQUEST_BODY_BYTES": "-1",
     }
     with mock.patch.dict(os.environ, env, clear=True):
@@ -126,7 +280,15 @@ def test_settings_reject_negative_max_request_body_bytes():
 
 def test_settings_reject_negative_http_gzip_minimum_size():
     env = {
-        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                }
+            ]
+        ),
         "A2A_HTTP_GZIP_MINIMUM_SIZE": "-1",
     }
     with mock.patch.dict(os.environ, env, clear=True):
@@ -139,7 +301,15 @@ def test_settings_reject_negative_http_gzip_minimum_size():
 
 def test_settings_reject_declared_writable_roots_outside_workspace_for_workspace_only_scope():
     env = {
-        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                }
+            ]
+        ),
         "OPENCODE_WORKSPACE_ROOT": "/srv/workspaces/alpha",
         "A2A_SANDBOX_WRITABLE_ROOTS": "/srv/workspaces/alpha,/tmp/opencode",
         "A2A_WRITE_ACCESS_SCOPE": "workspace_only",
@@ -153,7 +323,15 @@ def test_settings_reject_declared_writable_roots_outside_workspace_for_workspace
 
 def test_settings_reject_declared_writable_roots_when_write_scope_is_none():
     env = {
-        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                }
+            ]
+        ),
         "OPENCODE_WORKSPACE_ROOT": "/srv/workspaces/alpha",
         "A2A_SANDBOX_WRITABLE_ROOTS": "/srv/workspaces/alpha/tmp",
         "A2A_WRITE_ACCESS_SCOPE": "none",

@@ -7,7 +7,7 @@ from tests.support.helpers import make_settings
 
 @pytest.mark.asyncio
 async def test_unsupported_method_returns_unified_error() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(test_bearer_token="test-token")
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -38,7 +38,7 @@ async def test_unsupported_method_returns_unified_error() -> None:
 
 @pytest.mark.asyncio
 async def test_unsupported_method_uses_requested_protocol_version() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(test_bearer_token="test-token")
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -66,7 +66,7 @@ async def test_unsupported_method_uses_requested_protocol_version() -> None:
 
 @pytest.mark.asyncio
 async def test_pascalcase_jsonrpc_aliases_remain_unsupported_on_v03() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(test_bearer_token="test-token")
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -86,7 +86,7 @@ async def test_pascalcase_jsonrpc_aliases_remain_unsupported_on_v03() -> None:
 
 @pytest.mark.asyncio
 async def test_unsupported_v1_minor_version_returns_v1_error_details() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(test_bearer_token="test-token")
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -114,7 +114,7 @@ async def test_unsupported_v1_minor_version_returns_v1_error_details() -> None:
 
 @pytest.mark.asyncio
 async def test_unsupported_version_returns_version_error() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(test_bearer_token="test-token")
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -140,7 +140,7 @@ async def test_unsupported_version_returns_version_error() -> None:
 
 @pytest.mark.asyncio
 async def test_unsupported_method_notification_returns_204() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(test_bearer_token="test-token")
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -160,7 +160,7 @@ async def test_unsupported_method_notification_returns_204() -> None:
 
 @pytest.mark.asyncio
 async def test_disabled_shell_reports_current_supported_methods() -> None:
-    settings = make_settings(a2a_bearer_token="test-token", a2a_enable_session_shell=False)
+    settings = make_settings(test_bearer_token="test-token", a2a_enable_session_shell=False)
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
@@ -191,7 +191,7 @@ async def test_disabled_shell_reports_current_supported_methods() -> None:
 @pytest.mark.asyncio
 async def test_policy_disabled_shell_reports_current_supported_methods() -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_enable_session_shell=True,
         a2a_sandbox_mode="read-only",
         a2a_write_access_scope="workspace_only",
@@ -225,7 +225,7 @@ async def test_policy_disabled_shell_reports_current_supported_methods() -> None
 
 @pytest.mark.asyncio
 async def test_disabled_workspace_mutation_reports_current_supported_methods() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(test_bearer_token="test-token")
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
