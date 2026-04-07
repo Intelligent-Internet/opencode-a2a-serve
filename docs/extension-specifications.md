@@ -37,13 +37,13 @@ URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extens
 - Authenticated extended card: full shared stream contract including detailed block payload mappings and extended usage metadata
 - Runtime fields: `metadata.shared.stream`, `metadata.shared.usage`, `metadata.shared.interrupt`, `metadata.shared.session`
 
-## OpenCode Session Query v1
+## OpenCode Session Management v1
 
-URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#opencode-session-query-v1`
+URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#opencode-session-management-v1`
 
-- Scope: provider-private OpenCode session lifecycle, history, and low-risk control methods
+- Scope: provider-private OpenCode session read, mutation, and control methods
 - Public Agent Card: capability declaration only
-- Authenticated extended card: full method matrix, pagination rules, errors, context semantics, and existing `opencode.sessions.prompt_async` input-part contracts
+- Authenticated extended card: full method matrix, read/mutation/control grouping, pagination rules, errors, context semantics, and existing `opencode.sessions.prompt_async` input-part contracts
 - Transport: A2A JSON-RPC extension methods
 - `opencode.sessions.prompt_async` includes a provider-private `request.parts[]` compatibility surface for upstream OpenCode part types `text`, `file`, `agent`, and `subtask`
 - `subtask` support is declared as passthrough-compatible only: subagent selection and task-tool execution remain upstream OpenCode runtime behavior, not a separate `opencode-a2a` orchestration API
@@ -72,16 +72,16 @@ URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extens
 
 - Scope: provider-private recovery methods for pending local interrupt bindings
 - Public Agent Card: capability declaration only
-- Authenticated extended card: full method contracts, error surface, and local-registry notes
+- Authenticated extended card: full method contracts, error surface, local-registry notes, and identity-scope semantics
 - Transport: A2A JSON-RPC extension methods
 
 ## OpenCode Workspace Control v1
 
 URI: `https://github.com/Intelligent-Internet/opencode-a2a/blob/main/docs/extension-specifications.md#opencode-workspace-control-v1`
 
-- Scope: provider-private project, workspace, and worktree control-plane methods
+- Scope: provider-private project discovery plus workspace/worktree surfaces over upstream experimental endpoints, with deployment-conditional operator mutation methods
 - Public Agent Card: capability declaration only
-- Authenticated extended card: full method contracts, error surface, and routing notes
+- Authenticated extended card: full method contracts, error surface, routing notes, and upstream-stability hints
 - Transport: A2A JSON-RPC extension methods
 
 ## A2A Compatibility Profile v1

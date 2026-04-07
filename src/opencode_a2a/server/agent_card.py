@@ -21,8 +21,8 @@ from ..contracts.extensions import (
     MODEL_SELECTION_EXTENSION_URI,
     PROVIDER_DISCOVERY_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
-    SESSION_QUERY_EXTENSION_URI,
-    SESSION_QUERY_METHODS,
+    SESSION_MANAGEMENT_EXTENSION_URI,
+    SESSION_METHODS,
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     WORKSPACE_CONTROL_EXTENSION_URI,
@@ -34,7 +34,7 @@ from ..contracts.extensions import (
     build_model_selection_extension_params,
     build_provider_discovery_extension_params,
     build_session_binding_extension_params,
-    build_session_query_extension_params,
+    build_session_management_extension_params,
     build_streaming_extension_params,
     build_wire_contract_params,
     build_workspace_control_extension_params,
@@ -116,8 +116,9 @@ def _build_agent_card_description(
         "Supports HTTP+JSON and JSON-RPC transports, streaming-first A2A messaging "
         "(message/send, message/stream), authenticated extended Agent Card "
         "(agent/getAuthenticatedExtendedCard), task APIs (tasks/get, tasks/cancel, "
-        "tasks/resubscribe, push notification config methods; REST mappings "
-        "include GET /v1/tasks and GET /v1/tasks/{id}:subscribe), shared "
+        "tasks/resubscribe; SDK-owned push notification config surfaces remain "
+        "exposed but currently return unsupported; REST mappings include GET "
+        "/v1/tasks and GET /v1/tasks/{id}:subscribe), shared "
         "session-binding/model-selection/streaming contracts, provider-private "
         "OpenCode session/provider/model/workspace-control/interrupt recovery "
         "extensions, and shared interrupt callback extensions."
@@ -152,7 +153,7 @@ def _build_chat_examples(project: str | None) -> list[str]:
     return examples
 
 
-def _build_session_query_skill_examples(
+def _build_session_management_skill_examples(
     *,
     capability_snapshot: JsonRpcCapabilitySnapshot,
 ) -> list[str]:
@@ -177,7 +178,7 @@ def _build_session_query_skill_examples(
             "opencode.sessions.revert / opencode.sessions.unrevert)."
         ),
     ]
-    if capability_snapshot.is_method_enabled(SESSION_QUERY_METHODS["shell"]):
+    if capability_snapshot.is_method_enabled(SESSION_METHODS["shell"]):
         examples.append("Run shell in a session (method opencode.sessions.shell).")
     return examples
 
@@ -189,12 +190,14 @@ def _build_interrupt_recovery_skill_examples() -> list[str]:
     ]
 
 
-def _build_workspace_control_skill_examples() -> list[str]:
-    return [
+def _build_workspace_control_skill_examples(*, capability_snapshot) -> list[str]:  # noqa: ANN001
+    examples = [
         "List OpenCode projects (method opencode.projects.list).",
         "List workspaces for the active project (method opencode.workspaces.list).",
-        "Create a worktree (method opencode.worktrees.create).",
     ]
+    if capability_snapshot.is_method_enabled("opencode.worktrees.create"):
+        examples.append("Create a worktree (method opencode.worktrees.create).")
+    return examples
 
 
 def _build_agent_extensions(
@@ -210,7 +213,7 @@ def _build_agent_extensions(
         runtime_profile=runtime_profile,
     )
     streaming_extension_params = build_streaming_extension_params()
-    session_query_extension_params = build_session_query_extension_params(
+    session_management_extension_params = build_session_management_extension_params(
         runtime_profile=runtime_profile,
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
@@ -302,14 +305,14 @@ def _build_agent_extensions(
             ),
         ),
         AgentExtension(
-            uri=SESSION_QUERY_EXTENSION_URI,
+            uri=SESSION_MANAGEMENT_EXTENSION_URI,
             required=False,
             description=(
-                "Support OpenCode session lifecycle inspection, history queries, low-risk "
-                "session management, and async prompt injection via custom JSON-RPC "
-                "methods on the agent's A2A JSON-RPC interface."
+                "Support OpenCode session read, mutation, and control methods through "
+                "provider-private JSON-RPC extensions on the agent's A2A JSON-RPC "
+                "interface."
             ),
-            params=session_query_extension_params if include_detailed_contracts else None,
+            params=session_management_extension_params if include_detailed_contracts else None,
         ),
         AgentExtension(
             uri=PROVIDER_DISCOVERY_EXTENSION_URI,
@@ -324,8 +327,10 @@ def _build_agent_extensions(
             uri=WORKSPACE_CONTROL_EXTENSION_URI,
             required=False,
             description=(
-                "Expose OpenCode-specific project/workspace/worktree control-plane "
-                "methods through JSON-RPC extensions."
+                "Expose OpenCode-specific project discovery plus workspace/worktree "
+                "discovery and deployment-conditional control-plane mutations through "
+                "JSON-RPC extensions. Workspace/worktree surfaces depend on upstream "
+                "experimental endpoints."
             ),
             params=workspace_control_extension_params if include_detailed_contracts else None,
         ),
@@ -333,8 +338,9 @@ def _build_agent_extensions(
             uri=INTERRUPT_RECOVERY_EXTENSION_URI,
             required=False,
             description=(
-                "Expose provider-private interrupt recovery methods so clients can "
-                "list pending permission/question requests after reconnecting."
+                "Expose adapter-local, identity-scoped interrupt recovery methods so "
+                "clients can rediscover pending permission/question requests after "
+                "reconnecting."
             ),
             params=interrupt_recovery_extension_params if include_detailed_contracts else None,
         ),
@@ -399,11 +405,11 @@ def _build_agent_skills(
                 tags=["assistant", "coding", "opencode", "core-a2a", "portable"],
             ),
             AgentSkill(
-                id="opencode.sessions.query",
-                name="OpenCode Sessions Query",
+                id="opencode.sessions.management",
+                name="OpenCode Session Management",
                 description=(
-                    "Inspect OpenCode session status, history, and low-risk lifecycle actions "
-                    "through provider-private JSON-RPC extensions."
+                    "Read, mutate, and control OpenCode sessions through provider-private "
+                    "JSON-RPC extensions."
                 ),
                 input_modes=list(_JSON_RPC_MODES),
                 output_modes=list(_JSON_RPC_MODES),
@@ -424,8 +430,10 @@ def _build_agent_skills(
                 id="opencode.workspace.control",
                 name="OpenCode Workspace Control",
                 description=(
-                    "Manage OpenCode projects, workspaces, and worktrees through "
-                    "provider-private JSON-RPC extensions."
+                    "Discover OpenCode projects, workspaces, and worktrees through "
+                    "provider-private JSON-RPC extensions. Mutation methods are "
+                    "deployment-conditional and workspace/worktree surfaces depend on "
+                    "upstream experimental endpoints."
                 ),
                 input_modes=list(_JSON_RPC_MODES),
                 output_modes=list(_JSON_RPC_MODES),
@@ -435,8 +443,8 @@ def _build_agent_skills(
                 id="opencode.interrupt.recovery",
                 name="OpenCode Interrupt Recovery",
                 description=(
-                    "Recover pending permission and question interrupts through "
-                    "provider-private JSON-RPC extensions."
+                    "Recover pending permission and question interrupts from the "
+                    "adapter-local interrupt registry for the current caller."
                 ),
                 input_modes=list(_JSON_RPC_MODES),
                 output_modes=list(_JSON_RPC_MODES),
@@ -472,16 +480,16 @@ def _build_agent_skills(
             examples=_build_chat_examples(settings.a2a_project),
         ),
         AgentSkill(
-            id="opencode.sessions.query",
-            name="OpenCode Sessions Query",
+            id="opencode.sessions.management",
+            name="OpenCode Session Management",
             description=(
-                "provider-private OpenCode session/history and session-control surface "
-                "exposed through JSON-RPC extensions."
+                "provider-private OpenCode session read/mutation/control surface exposed "
+                "through JSON-RPC extensions."
             ),
             input_modes=list(_JSON_RPC_MODES),
             output_modes=list(_JSON_RPC_MODES),
             tags=["opencode", "sessions", "history", "provider-private"],
-            examples=_build_session_query_skill_examples(
+            examples=_build_session_management_skill_examples(
                 capability_snapshot=capability_snapshot,
             ),
         ),
@@ -504,20 +512,24 @@ def _build_agent_skills(
             id="opencode.workspace.control",
             name="OpenCode Workspace Control",
             description=(
-                "provider-private OpenCode project/workspace/worktree control surface "
-                "exposed through JSON-RPC extensions."
+                "provider-private OpenCode project discovery plus workspace/worktree "
+                "discovery surface with deployment-conditional mutation methods exposed "
+                "through JSON-RPC extensions; workspace/worktree methods currently wrap "
+                "upstream experimental endpoints."
             ),
             input_modes=list(_JSON_RPC_MODES),
             output_modes=list(_JSON_RPC_MODES),
             tags=["opencode", "project", "workspace", "worktree", "provider-private"],
-            examples=_build_workspace_control_skill_examples(),
+            examples=_build_workspace_control_skill_examples(
+                capability_snapshot=capability_snapshot,
+            ),
         ),
         AgentSkill(
             id="opencode.interrupt.recovery",
             name="OpenCode Interrupt Recovery",
             description=(
-                "provider-private OpenCode interrupt recovery surface exposed through "
-                "JSON-RPC extensions."
+                "adapter-local, identity-scoped interrupt recovery surface exposed "
+                "through JSON-RPC extensions."
             ),
             input_modes=list(_JSON_RPC_MODES),
             output_modes=list(_JSON_RPC_MODES),

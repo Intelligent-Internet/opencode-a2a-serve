@@ -31,7 +31,7 @@ from opencode_a2a.server.application import (
     _build_jsonrpc_extension_openapi_description,
     _build_jsonrpc_extension_openapi_examples,
     _build_rest_message_openapi_examples,
-    _build_session_query_skill_examples,
+    _build_session_management_skill_examples,
     _configure_logging,
     _decode_payload_preview,
     _detect_sensitive_extension_method,
@@ -89,10 +89,8 @@ def test_request_payload_helpers_cover_edge_cases() -> None:
     assert _detect_sensitive_extension_method(None) is None
     assert _detect_sensitive_extension_method({"method": "message/send"}) is None
     assert (
-        _detect_sensitive_extension_method(
-            {"method": app_module.SESSION_QUERY_METHODS["list_sessions"]}
-        )
-        == app_module.SESSION_QUERY_METHODS["list_sessions"]
+        _detect_sensitive_extension_method({"method": app_module.SESSION_METHODS["list_sessions"]})
+        == app_module.SESSION_METHODS["list_sessions"]
     )
 
     assert _parse_content_length(None) is None
@@ -189,6 +187,11 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
                 "availability": "enabled",
                 "toggle": "A2A_ENABLE_SESSION_SHELL",
             },
+            "workspace_mutations": {
+                "enabled": False,
+                "availability": "disabled",
+                "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+            },
             "execution_environment": {
                 "sandbox": {
                     "mode": "unknown",
@@ -241,21 +244,27 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
     )
     assert "Deployment project: alpha." in extended_description
     assert "Workspace root: /workspace." in extended_description
+    assert "currently return unsupported" in extended_description
     assert any("project alpha" in item for item in _build_chat_examples("alpha"))
     assert all(
         "shell" not in item
-        for item in _build_session_query_skill_examples(
+        for item in _build_session_management_skill_examples(
             capability_snapshot=disabled_capability_snapshot
         )
     )
     assert any(
         "shell" in item
-        for item in _build_session_query_skill_examples(capability_snapshot=capability_snapshot)
+        for item in _build_session_management_skill_examples(
+            capability_snapshot=capability_snapshot
+        )
     )
     assert "opencode.sessions.shell" in _build_jsonrpc_extension_openapi_description(
         capability_snapshot=capability_snapshot
     )
     assert "session_shell" in _build_jsonrpc_extension_openapi_examples(
+        capability_snapshot=capability_snapshot
+    )
+    assert "worktrees_create" not in _build_jsonrpc_extension_openapi_examples(
         capability_snapshot=capability_snapshot
     )
     assert "continue_session" in _build_rest_message_openapi_examples()
@@ -320,6 +329,11 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch, caplog) -> No
                         "availability": "enabled",
                         "toggle": "A2A_ENABLE_SESSION_SHELL",
                     },
+                    "workspace_mutations": {
+                        "enabled": False,
+                        "availability": "disabled",
+                        "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+                    },
                     "execution_environment": {
                         "sandbox": {
                             "mode": "unknown",
@@ -369,6 +383,7 @@ async def test_auth_health_lifespan_and_openapi_cache(monkeypatch, caplog) -> No
         "application/json"
     ]["examples"]
     assert "session_shell" in root_examples
+    assert "worktrees_create" not in root_examples
     assert "opencode.sessions.shell" in openapi_first["paths"]["/"]["post"]["description"]
 
 
@@ -395,6 +410,60 @@ async def test_rest_adapter_routes_and_preconsume_error() -> None:
 
     with pytest.raises(ServerError, match="Failed to pre-consume request body: broken body"):
         await adapter._handle_streaming_request(_stream, _BrokenRequest())
+
+
+@pytest.mark.asyncio
+async def test_push_notification_routes_are_explicitly_unsupported(monkeypatch) -> None:
+    monkeypatch.setattr(
+        app_module,
+        "OpencodeUpstreamClient",
+        DummyChatOpencodeUpstreamClient,
+    )
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/tasks/task-1/pushNotificationConfigs",
+            headers={"Authorization": "Bearer test-token"},
+            json={"pushNotificationConfig": {"url": "https://example.com/hook"}},
+        )
+
+    assert response.status_code == 501
+    assert response.json() == {"message": "Push notifications are not supported by the agent"}
+
+
+@pytest.mark.asyncio
+async def test_push_notification_jsonrpc_methods_remain_unsupported(monkeypatch) -> None:
+    monkeypatch.setattr(
+        app_module,
+        "OpencodeUpstreamClient",
+        DummyChatOpencodeUpstreamClient,
+    )
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tasks/pushNotificationConfig/get",
+                "params": {"id": "task-1"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "error": {
+            "code": -32004,
+            "message": "This operation is not supported",
+        },
+        "id": 1,
+        "jsonrpc": "2.0",
+    }
 
 
 @pytest.mark.asyncio

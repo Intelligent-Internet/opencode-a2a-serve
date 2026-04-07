@@ -122,18 +122,23 @@ async def handle_workspace_control_request(
 ) -> Response:
     del request
 
-    method_map = {
+    method_map: dict[str, str] = {
         context.method_list_projects: "list_projects",
         context.method_get_current_project: "get_current_project",
         context.method_list_workspaces: "list_workspaces",
-        context.method_create_workspace: "create_workspace",
-        context.method_remove_workspace: "remove_workspace",
         context.method_list_worktrees: "list_worktrees",
-        context.method_create_worktree: "create_worktree",
-        context.method_remove_worktree: "remove_worktree",
-        context.method_reset_worktree: "reset_worktree",
     }
-    method_key = method_map.get(base_request.method)
+    optional_methods = (
+        (context.method_create_workspace, "create_workspace"),
+        (context.method_remove_workspace, "remove_workspace"),
+        (context.method_create_worktree, "create_worktree"),
+        (context.method_remove_worktree, "remove_worktree"),
+        (context.method_reset_worktree, "reset_worktree"),
+    )
+    for method_name, optional_method_key in optional_methods:
+        if method_name is not None:
+            method_map[method_name] = optional_method_key
+    method_key: str | None = method_map.get(base_request.method)
     if method_key is None:
         return context.error_response(
             base_request.id,

@@ -5,7 +5,11 @@ from typing import Any
 
 from a2a.server.apps.jsonrpc.jsonrpc_app import JSONRPCApplication
 
-from ..profile.runtime import SESSION_SHELL_TOGGLE, RuntimeProfile
+from ..profile.runtime import (
+    SESSION_SHELL_TOGGLE,
+    WORKSPACE_MUTATIONS_TOGGLE,
+    RuntimeProfile,
+)
 
 EXTENSION_SPECIFICATIONS_DOCUMENT_URL = (
     "https://github.com/Intelligent-Internet/opencode-a2a/blob/main/"
@@ -30,7 +34,7 @@ OPENCODE_WORKSPACE_METADATA_FIELD = "metadata.opencode.workspace.id"
 SESSION_BINDING_EXTENSION_URI = _extension_spec_uri("shared-session-binding-v1")
 MODEL_SELECTION_EXTENSION_URI = _extension_spec_uri("shared-model-selection-v1")
 STREAMING_EXTENSION_URI = _extension_spec_uri("shared-stream-hints-v1")
-SESSION_QUERY_EXTENSION_URI = _extension_spec_uri("opencode-session-query-v1")
+SESSION_MANAGEMENT_EXTENSION_URI = _extension_spec_uri("opencode-session-management-v1")
 PROVIDER_DISCOVERY_EXTENSION_URI = _extension_spec_uri("opencode-provider-discovery-v1")
 INTERRUPT_CALLBACK_EXTENSION_URI = _extension_spec_uri("shared-interactive-interrupt-v1")
 INTERRUPT_RECOVERY_EXTENSION_URI = _extension_spec_uri("opencode-interrupt-recovery-v1")
@@ -156,7 +160,7 @@ SESSION_QUERY_MAX_LIMIT = 100
 SESSION_QUERY_PAGINATION_PARAMS: tuple[str, ...] = ("limit", "before")
 SESSION_QUERY_PAGINATION_UNSUPPORTED: tuple[str, ...] = ("cursor", "page", "size")
 
-SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
+SESSION_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
     "status": SessionQueryMethodContract(
         method="opencode.sessions.status",
         optional_params=("directory", OPENCODE_WORKSPACE_METADATA_FIELD),
@@ -384,20 +388,27 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
     ),
 }
 
-SESSION_QUERY_METHODS: dict[str, str] = {
-    key: contract.method for key, contract in SESSION_QUERY_METHOD_CONTRACTS.items()
+SESSION_METHODS: dict[str, str] = {
+    key: contract.method for key, contract in SESSION_METHOD_CONTRACTS.items()
 }
 SESSION_CONTROL_METHOD_KEYS: tuple[str, ...] = ("prompt_async", "command", "shell")
 SESSION_CONTROL_METHODS: dict[str, str] = {
-    key: SESSION_QUERY_METHODS[key] for key in SESSION_CONTROL_METHOD_KEYS
+    key: SESSION_METHODS[key] for key in SESSION_CONTROL_METHOD_KEYS
 }
-SESSION_LIFECYCLE_METHOD_KEYS: tuple[str, ...] = (
+SESSION_READ_METHOD_KEYS: tuple[str, ...] = (
     "status",
+    "list_sessions",
     "get_session",
     "get_session_children",
     "get_session_todo",
     "get_session_diff",
     "get_session_message",
+    "get_session_messages",
+)
+SESSION_READ_METHODS: dict[str, str] = {
+    key: SESSION_METHODS[key] for key in SESSION_READ_METHOD_KEYS
+}
+SESSION_MUTATION_METHOD_KEYS: tuple[str, ...] = (
     "fork",
     "share",
     "unshare",
@@ -405,8 +416,8 @@ SESSION_LIFECYCLE_METHOD_KEYS: tuple[str, ...] = (
     "revert",
     "unrevert",
 )
-SESSION_LIFECYCLE_METHODS: dict[str, str] = {
-    key: SESSION_QUERY_METHODS[key] for key in SESSION_LIFECYCLE_METHOD_KEYS
+SESSION_MUTATION_METHODS: dict[str, str] = {
+    key: SESSION_METHODS[key] for key in SESSION_MUTATION_METHOD_KEYS
 }
 
 CORE_JSONRPC_METHODS: tuple[str, ...] = tuple(JSONRPCApplication.METHOD_TO_MODEL)
@@ -580,6 +591,41 @@ WORKSPACE_CONTROL_METHOD_CONTRACTS: dict[str, WorkspaceControlMethodContract] = 
 WORKSPACE_CONTROL_METHODS: dict[str, str] = {
     key: contract.method for key, contract in WORKSPACE_CONTROL_METHOD_CONTRACTS.items()
 }
+WORKSPACE_DISCOVERY_METHOD_KEYS: tuple[str, ...] = (
+    "list_projects",
+    "get_current_project",
+    "list_workspaces",
+    "list_worktrees",
+)
+WORKSPACE_DISCOVERY_METHODS: dict[str, str] = {
+    key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_DISCOVERY_METHOD_KEYS
+}
+WORKSPACE_STABLE_METHOD_KEYS: tuple[str, ...] = ("list_projects", "get_current_project")
+WORKSPACE_STABLE_METHODS: dict[str, str] = {
+    key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_STABLE_METHOD_KEYS
+}
+WORKSPACE_EXPERIMENTAL_UPSTREAM_METHOD_KEYS: tuple[str, ...] = (
+    "list_workspaces",
+    "list_worktrees",
+    "create_workspace",
+    "remove_workspace",
+    "create_worktree",
+    "remove_worktree",
+    "reset_worktree",
+)
+WORKSPACE_EXPERIMENTAL_UPSTREAM_METHODS: dict[str, str] = {
+    key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_EXPERIMENTAL_UPSTREAM_METHOD_KEYS
+}
+WORKSPACE_MUTATION_METHOD_KEYS: tuple[str, ...] = (
+    "create_workspace",
+    "remove_workspace",
+    "create_worktree",
+    "remove_worktree",
+    "reset_worktree",
+)
+WORKSPACE_MUTATION_METHODS: dict[str, str] = {
+    key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_MUTATION_METHOD_KEYS
+}
 
 INTERRUPT_SUCCESS_RESULT_FIELDS: tuple[str, ...] = ("ok", "request_id")
 INTERRUPT_ERROR_BUSINESS_CODES: dict[str, int] = {
@@ -691,9 +737,9 @@ class JsonRpcCapabilitySnapshot:
             return True
         return conditional_method.enabled
 
-    def session_query_methods(self) -> dict[str, str]:
-        methods = dict(SESSION_QUERY_METHODS)
-        if not self.is_method_enabled(SESSION_QUERY_METHODS["shell"]):
+    def session_management_methods(self) -> dict[str, str]:
+        methods = dict(SESSION_METHODS)
+        if not self.is_method_enabled(SESSION_METHODS["shell"]):
             methods.pop("shell", None)
         return methods
 
@@ -703,8 +749,11 @@ class JsonRpcCapabilitySnapshot:
             methods.pop("shell", None)
         return methods
 
-    def session_lifecycle_methods(self) -> dict[str, str]:
-        return dict(SESSION_LIFECYCLE_METHODS)
+    def session_read_methods(self) -> dict[str, str]:
+        return dict(SESSION_READ_METHODS)
+
+    def session_mutation_methods(self) -> dict[str, str]:
+        return dict(SESSION_MUTATION_METHODS)
 
     def provider_discovery_methods(self) -> dict[str, str]:
         return dict(PROVIDER_DISCOVERY_METHODS)
@@ -716,14 +765,18 @@ class JsonRpcCapabilitySnapshot:
         return dict(INTERRUPT_CALLBACK_METHODS)
 
     def workspace_control_methods(self) -> dict[str, str]:
-        return dict(WORKSPACE_CONTROL_METHODS)
+        methods = dict(WORKSPACE_DISCOVERY_METHODS)
+        for key, method in WORKSPACE_MUTATION_METHODS.items():
+            if self.is_method_enabled(method):
+                methods[key] = method
+        return methods
 
     def supported_jsonrpc_methods(self) -> list[str]:
         methods = [
             *CORE_JSONRPC_METHODS,
-            *(method for key, method in SESSION_QUERY_METHODS.items() if key != "shell"),
+            *(method for key, method in SESSION_METHODS.items() if key != "shell"),
             *PROVIDER_DISCOVERY_METHODS.values(),
-            *WORKSPACE_CONTROL_METHODS.values(),
+            *self.workspace_control_methods().values(),
             *INTERRUPT_RECOVERY_METHODS.values(),
             *INTERRUPT_CALLBACK_METHODS.values(),
         ]
@@ -733,9 +786,9 @@ class JsonRpcCapabilitySnapshot:
 
     def extension_jsonrpc_methods(self) -> list[str]:
         methods = [
-            *(method for key, method in SESSION_QUERY_METHODS.items() if key != "shell"),
+            *(method for key, method in SESSION_METHODS.items() if key != "shell"),
             *PROVIDER_DISCOVERY_METHODS.values(),
-            *WORKSPACE_CONTROL_METHODS.values(),
+            *self.workspace_control_methods().values(),
             *INTERRUPT_RECOVERY_METHODS.values(),
             *INTERRUPT_CALLBACK_METHODS.values(),
         ]
@@ -757,6 +810,13 @@ class JsonRpcCapabilitySnapshot:
             if method in SESSION_CONTROL_METHODS.values()
         }
 
+    def workspace_mutation_method_flags(self) -> dict[str, dict[str, Any]]:
+        return {
+            method: conditional_method.control_method_flag()
+            for method, conditional_method in self.conditional_methods.items()
+            if method in WORKSPACE_MUTATION_METHODS.values()
+        }
+
     def conditional_method_retention(self) -> dict[str, dict[str, Any]]:
         return {
             method: conditional_method.method_retention()
@@ -765,16 +825,26 @@ class JsonRpcCapabilitySnapshot:
 
 
 def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> JsonRpcCapabilitySnapshot:
-    return JsonRpcCapabilitySnapshot(
-        conditional_methods={
-            SESSION_CONTROL_METHODS["shell"]: DeploymentConditionalMethod(
-                method=SESSION_CONTROL_METHODS["shell"],
-                enabled=runtime_profile.session_shell.enabled,
-                extension_uri=SESSION_QUERY_EXTENSION_URI,
-                toggle=SESSION_SHELL_TOGGLE,
+    conditional_methods = {
+        SESSION_CONTROL_METHODS["shell"]: DeploymentConditionalMethod(
+            method=SESSION_CONTROL_METHODS["shell"],
+            enabled=runtime_profile.session_shell.enabled,
+            extension_uri=SESSION_MANAGEMENT_EXTENSION_URI,
+            toggle=SESSION_SHELL_TOGGLE,
+        )
+    }
+    conditional_methods.update(
+        {
+            method: DeploymentConditionalMethod(
+                method=method,
+                enabled=runtime_profile.workspace_mutations.enabled,
+                extension_uri=WORKSPACE_CONTROL_EXTENSION_URI,
+                toggle=WORKSPACE_MUTATIONS_TOGGLE,
             )
+            for method in WORKSPACE_MUTATION_METHODS.values()
         }
     )
+    return JsonRpcCapabilitySnapshot(conditional_methods=conditional_methods)
 
 
 def _build_method_contract_params(
@@ -974,22 +1044,23 @@ def build_streaming_extension_params() -> dict[str, Any]:
     }
 
 
-def build_session_query_extension_params(
+def build_session_management_extension_params(
     *,
     runtime_profile: RuntimeProfile,
     context_id_prefix: str,
 ) -> dict[str, Any]:
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
-    methods = capability_snapshot.session_query_methods()
+    methods = capability_snapshot.session_management_methods()
+    read_methods = capability_snapshot.session_read_methods()
+    mutation_methods = capability_snapshot.session_mutation_methods()
     control_methods = capability_snapshot.session_control_methods()
-    lifecycle_methods = capability_snapshot.session_lifecycle_methods()
-    active_session_query_methods = set(methods.values())
+    active_session_methods = set(methods.values())
 
     method_contracts: dict[str, Any] = {}
     pagination_applies_to: list[str] = []
 
-    for method_contract in SESSION_QUERY_METHOD_CONTRACTS.values():
-        if method_contract.method not in active_session_query_methods:
+    for method_contract in SESSION_METHOD_CONTRACTS.values():
+        if method_contract.method not in active_session_methods:
             continue
         params_contract = _build_method_contract_params(
             required=method_contract.required_params,
@@ -1004,7 +1075,7 @@ def build_session_query_extension_params(
             "params": params_contract,
             "result": result_contract,
         }
-        if method_contract.method == SESSION_QUERY_METHODS["prompt_async"]:
+        if method_contract.method == SESSION_METHODS["prompt_async"]:
             contract_doc["request_parts"] = _build_prompt_async_part_contracts()
             contract_doc["subtask_support"] = _build_prompt_async_subtask_support()
         if method_contract.notification_response_status is not None:
@@ -1018,8 +1089,9 @@ def build_session_query_extension_params(
 
     return {
         "methods": methods,
+        "read_methods": read_methods,
+        "mutation_methods": mutation_methods,
         "control_methods": control_methods,
-        "lifecycle_methods": lifecycle_methods,
         "control_method_flags": capability_snapshot.control_method_flags(),
         "profile": runtime_profile.summary_dict(),
         "pagination": {
@@ -1031,7 +1103,7 @@ def build_session_query_extension_params(
             "cursor_param": "before",
             "result_cursor_field": "next_cursor",
             "applies_to": pagination_applies_to,
-            "cursor_applies_to": [SESSION_QUERY_METHODS["get_session_messages"]],
+            "cursor_applies_to": [SESSION_METHODS["get_session_messages"]],
         },
         "method_contracts": method_contracts,
         "errors": {
@@ -1126,6 +1198,11 @@ def build_interrupt_recovery_extension_params(
         "method_contracts": method_contracts,
         "supported_metadata": [],
         "provider_private_metadata": [],
+        "recovery_scope": {
+            "data_source": "local_interrupt_binding_registry",
+            "identity_scope": "current_authenticated_caller",
+            "empty_result_when_identity_unavailable": True,
+        },
         "item_fields": {
             "request_id": "items[].request_id",
             "session_id": "items[].session_id",
@@ -1147,6 +1224,10 @@ def build_interrupt_recovery_extension_params(
             (
                 "Results are scoped to the current authenticated caller identity when the "
                 "runtime can resolve one."
+            ),
+            (
+                "If the runtime cannot resolve a caller identity for the current request, "
+                "recovery queries return an empty item list."
             ),
             (
                 "Use a2a.interrupt.* methods to resolve requests; opencode.permissions.list "
@@ -1239,9 +1320,14 @@ def build_workspace_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
+    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    methods = capability_snapshot.workspace_control_methods()
+    active_workspace_methods = set(methods.values())
     method_contracts: dict[str, Any] = {}
 
     for method_contract in WORKSPACE_CONTROL_METHOD_CONTRACTS.values():
+        if method_contract.method not in active_workspace_methods:
+            continue
         params_contract = _build_method_contract_params(
             required=method_contract.required_params,
             optional=method_contract.optional_params,
@@ -1261,8 +1347,20 @@ def build_workspace_control_extension_params(
         method_contracts[method_contract.method] = contract_doc
 
     return {
-        "methods": dict(WORKSPACE_CONTROL_METHODS),
+        "methods": methods,
+        "control_method_flags": capability_snapshot.workspace_mutation_method_flags(),
         "method_contracts": method_contracts,
+        "upstream_stability": {
+            WORKSPACE_CONTROL_METHODS["list_projects"]: "stable",
+            WORKSPACE_CONTROL_METHODS["get_current_project"]: "stable",
+            WORKSPACE_CONTROL_METHODS["list_workspaces"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["list_worktrees"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["create_workspace"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["remove_workspace"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["create_worktree"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["remove_worktree"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["reset_worktree"]: "experimental",
+        },
         "supported_metadata": ["opencode.workspace.id", "opencode.directory"],
         "provider_private_metadata": ["opencode.workspace.id", "opencode.directory"],
         "routing_fields": {
@@ -1281,9 +1379,17 @@ def build_workspace_control_extension_params(
                 "control plane through provider-private JSON-RPC methods."
             ),
             (
+                "Mutation methods are deployment-conditional and disabled by default; "
+                "discover availability from the declared wire contract before calling them."
+            ),
+            (
                 "Workspace routing metadata is declared for consistency, but the current "
                 "control-plane methods operate on the active deployment project rather than "
                 "per-request workspace forwarding."
+            ),
+            (
+                "Workspace/worktree discovery and mutation methods currently wrap upstream "
+                "/experimental/workspace and /experimental/worktree endpoints."
             ),
         ],
     }
@@ -1320,9 +1426,9 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
-                "extension_uri": SESSION_QUERY_EXTENSION_URI,
+                "extension_uri": SESSION_MANAGEMENT_EXTENSION_URI,
             }
-            for key, method in SESSION_QUERY_METHODS.items()
+            for key, method in SESSION_METHODS.items()
             if key != "shell"
         }
     )
@@ -1346,7 +1452,21 @@ def build_compatibility_profile_params(
                 "retention": "stable",
                 "extension_uri": WORKSPACE_CONTROL_EXTENSION_URI,
             }
-            for method in WORKSPACE_CONTROL_METHODS.values()
+            for method in WORKSPACE_STABLE_METHODS.values()
+        }
+    )
+    method_retention.update(
+        {
+            method: {
+                "surface": "extension",
+                "availability": "always",
+                "retention": "experimental-upstream",
+                "extension_uri": WORKSPACE_CONTROL_EXTENSION_URI,
+            }
+            for method in (
+                WORKSPACE_EXPERIMENTAL_UPSTREAM_METHODS["list_workspaces"],
+                WORKSPACE_EXPERIMENTAL_UPSTREAM_METHODS["list_worktrees"],
+            )
         }
     )
     method_retention.update(
@@ -1356,10 +1476,16 @@ def build_compatibility_profile_params(
                 "availability": "always",
                 "retention": "stable",
                 "extension_uri": INTERRUPT_RECOVERY_EXTENSION_URI,
+                "implementation_scope": "adapter-local",
+                "identity_scope": "current_authenticated_caller",
             }
             for method in INTERRUPT_RECOVERY_METHODS.values()
         }
     )
+    for method in WORKSPACE_MUTATION_METHODS.values():
+        retention = method_retention.get(method)
+        if retention is not None:
+            retention["upstream_stability"] = "experimental"
     method_retention.update(
         {
             method: {
@@ -1396,7 +1522,7 @@ def build_compatibility_profile_params(
                 "availability": "always",
                 "retention": "required",
             },
-            SESSION_QUERY_EXTENSION_URI: {
+            SESSION_MANAGEMENT_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
                 "availability": "always",
                 "retention": "stable",
@@ -1409,12 +1535,15 @@ def build_compatibility_profile_params(
             WORKSPACE_CONTROL_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
                 "availability": "always",
-                "retention": "stable",
+                "retention": "mixed",
+                "upstream_stability": "mixed",
             },
             INTERRUPT_RECOVERY_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
                 "availability": "always",
                 "retention": "stable",
+                "implementation_scope": "adapter-local",
+                "identity_scope": "current_authenticated_caller",
             },
             INTERRUPT_CALLBACK_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
@@ -1448,6 +1577,20 @@ def build_compatibility_profile_params(
             (
                 "Treat opencode.sessions.shell as deployment-conditional and discover it from "
                 "the declared profile and current wire contract before calling it."
+            ),
+            (
+                "Treat opencode.workspaces.create/remove and opencode.worktrees.create/remove/"
+                "reset as deployment-conditional operator surfaces rather than baseline "
+                "workspace discovery methods."
+            ),
+            (
+                "Treat opencode.workspaces.list and opencode.worktrees.list as declared "
+                "adapter contracts over upstream experimental endpoints, not the same "
+                "stability tier as project discovery."
+            ),
+            (
+                "Treat opencode.permissions.list and opencode.questions.list as adapter-local, "
+                "identity-scoped recovery views rather than upstream global pending queues."
             ),
             (
                 "Treat declared service behaviors as stable server-level semantic "
@@ -1558,7 +1701,7 @@ def build_wire_contract_params(
                 SESSION_BINDING_EXTENSION_URI,
                 MODEL_SELECTION_EXTENSION_URI,
                 STREAMING_EXTENSION_URI,
-                SESSION_QUERY_EXTENSION_URI,
+                SESSION_MANAGEMENT_EXTENSION_URI,
                 PROVIDER_DISCOVERY_EXTENSION_URI,
                 WORKSPACE_CONTROL_EXTENSION_URI,
                 INTERRUPT_RECOVERY_EXTENSION_URI,

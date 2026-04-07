@@ -15,7 +15,7 @@ from opencode_a2a.server.application import (
     MODEL_SELECTION_EXTENSION_URI,
     PROVIDER_DISCOVERY_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
-    SESSION_QUERY_EXTENSION_URI,
+    SESSION_MANAGEMENT_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     WORKSPACE_CONTROL_EXTENSION_URI,
@@ -43,8 +43,8 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert card.security == [{"bearerAuth": []}]
     assert skills_by_id["opencode.chat"].input_modes == ["text/plain", "application/octet-stream"]
     assert skills_by_id["opencode.chat"].output_modes == ["text/plain", "application/json"]
-    assert skills_by_id["opencode.sessions.query"].input_modes == ["application/json"]
-    assert skills_by_id["opencode.sessions.query"].output_modes == ["application/json"]
+    assert skills_by_id["opencode.sessions.management"].input_modes == ["application/json"]
+    assert skills_by_id["opencode.sessions.management"].output_modes == ["application/json"]
     assert skills_by_id["opencode.interrupt.callback"].input_modes == ["application/json"]
     assert skills_by_id["opencode.interrupt.callback"].output_modes == ["application/json"]
 
@@ -131,7 +131,7 @@ def test_public_agent_card_is_slimmed_but_keeps_core_shared_contract_hints() -> 
     }
 
     for uri in (
-        SESSION_QUERY_EXTENSION_URI,
+        SESSION_MANAGEMENT_EXTENSION_URI,
         PROVIDER_DISCOVERY_EXTENSION_URI,
         WORKSPACE_CONTROL_EXTENSION_URI,
         INTERRUPT_RECOVERY_EXTENSION_URI,
@@ -299,19 +299,23 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         },
     }
 
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
-    assert session_query.params["profile"]["runtime_context"]["project"] == "alpha"
-    assert session_query.params["control_methods"] == {
+    session_management = ext_by_uri[SESSION_MANAGEMENT_EXTENSION_URI]
+    assert session_management.params["profile"]["runtime_context"]["project"] == "alpha"
+    assert session_management.params["control_methods"] == {
         "prompt_async": "opencode.sessions.prompt_async",
         "command": "opencode.sessions.command",
     }
-    assert session_query.params["lifecycle_methods"] == {
+    assert session_management.params["read_methods"] == {
         "status": "opencode.sessions.status",
+        "list_sessions": "opencode.sessions.list",
         "get_session": "opencode.sessions.get",
         "get_session_children": "opencode.sessions.children",
         "get_session_todo": "opencode.sessions.todo",
         "get_session_diff": "opencode.sessions.diff",
         "get_session_message": "opencode.sessions.messages.get",
+        "get_session_messages": "opencode.sessions.messages.list",
+    }
+    assert session_management.params["mutation_methods"] == {
         "fork": "opencode.sessions.fork",
         "share": "opencode.sessions.share",
         "unshare": "opencode.sessions.unshare",
@@ -319,40 +323,46 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "revert": "opencode.sessions.revert",
         "unrevert": "opencode.sessions.unrevert",
     }
-    assert session_query.params["methods"]["status"] == "opencode.sessions.status"
-    assert session_query.params["methods"]["get_session"] == "opencode.sessions.get"
-    assert session_query.params["methods"]["prompt_async"] == "opencode.sessions.prompt_async"
-    assert session_query.params["methods"]["command"] == "opencode.sessions.command"
-    assert "shell" not in session_query.params["methods"]
-    assert session_query.params["control_method_flags"]["opencode.sessions.shell"] == {
+    assert session_management.params["methods"]["status"] == "opencode.sessions.status"
+    assert session_management.params["methods"]["get_session"] == "opencode.sessions.get"
+    assert session_management.params["methods"]["prompt_async"] == "opencode.sessions.prompt_async"
+    assert session_management.params["methods"]["command"] == "opencode.sessions.command"
+    assert "shell" not in session_management.params["methods"]
+    assert session_management.params["control_method_flags"]["opencode.sessions.shell"] == {
         "enabled_by_default": False,
         "config_key": "A2A_ENABLE_SESSION_SHELL",
     }
-    assert session_query.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
-    assert session_query.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
-    assert session_query.params["pagination"]["cursor_param"] == "before"
-    assert session_query.params["pagination"]["result_cursor_field"] == "next_cursor"
-    assert session_query.params["pagination"]["applies_to"] == [
+    assert session_management.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert session_management.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert session_management.params["pagination"]["cursor_param"] == "before"
+    assert session_management.params["pagination"]["result_cursor_field"] == "next_cursor"
+    assert session_management.params["pagination"]["applies_to"] == [
         "opencode.sessions.list",
         "opencode.sessions.messages.list",
     ]
-    assert session_query.params["pagination"]["cursor_applies_to"] == [
+    assert session_management.params["pagination"]["cursor_applies_to"] == [
         "opencode.sessions.messages.list"
     ]
-    prompt_contract = session_query.params["method_contracts"]["opencode.sessions.prompt_async"]
-    command_contract = session_query.params["method_contracts"]["opencode.sessions.command"]
-    status_contract = session_query.params["method_contracts"]["opencode.sessions.status"]
-    get_contract = session_query.params["method_contracts"]["opencode.sessions.get"]
-    diff_contract = session_query.params["method_contracts"]["opencode.sessions.diff"]
-    message_get_contract = session_query.params["method_contracts"][
+    prompt_contract = session_management.params["method_contracts"][
+        "opencode.sessions.prompt_async"
+    ]
+    command_contract = session_management.params["method_contracts"]["opencode.sessions.command"]
+    status_contract = session_management.params["method_contracts"]["opencode.sessions.status"]
+    get_contract = session_management.params["method_contracts"]["opencode.sessions.get"]
+    diff_contract = session_management.params["method_contracts"]["opencode.sessions.diff"]
+    message_get_contract = session_management.params["method_contracts"][
         "opencode.sessions.messages.get"
     ]
-    fork_contract = session_query.params["method_contracts"]["opencode.sessions.fork"]
-    summarize_contract = session_query.params["method_contracts"]["opencode.sessions.summarize"]
-    revert_contract = session_query.params["method_contracts"]["opencode.sessions.revert"]
-    unrevert_contract = session_query.params["method_contracts"]["opencode.sessions.unrevert"]
-    list_contract = session_query.params["method_contracts"]["opencode.sessions.list"]
-    messages_contract = session_query.params["method_contracts"]["opencode.sessions.messages.list"]
+    fork_contract = session_management.params["method_contracts"]["opencode.sessions.fork"]
+    summarize_contract = session_management.params["method_contracts"][
+        "opencode.sessions.summarize"
+    ]
+    revert_contract = session_management.params["method_contracts"]["opencode.sessions.revert"]
+    unrevert_contract = session_management.params["method_contracts"]["opencode.sessions.unrevert"]
+    list_contract = session_management.params["method_contracts"]["opencode.sessions.list"]
+    messages_contract = session_management.params["method_contracts"][
+        "opencode.sessions.messages.list"
+    ]
     assert status_contract["result"]["fields"] == ["items"]
     assert get_contract["params"]["required"] == ["session_id"]
     assert get_contract["result"]["fields"] == ["item"]
@@ -457,30 +467,31 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert revert_contract["notification_response_status"] == 204
     assert unrevert_contract["notification_response_status"] == 204
     assert prompt_contract["notification_response_status"] == 204
-    assert "result_envelope" not in session_query.params
-    assert "opencode.sessions.shell" not in session_query.params["method_contracts"]
+    assert "result_envelope" not in session_management.params
+    assert "opencode.sessions.shell" not in session_management.params["method_contracts"]
     assert (
-        session_query.params["context_semantics"]["a2a_context_id_prefix"] == SESSION_CONTEXT_PREFIX
+        session_management.params["context_semantics"]["a2a_context_id_prefix"]
+        == SESSION_CONTEXT_PREFIX
     )
     assert (
-        session_query.params["context_semantics"]["upstream_session_id_field"]
+        session_management.params["context_semantics"]["upstream_session_id_field"]
         == "metadata.shared.session.id"
     )
-    assert session_query.params["errors"]["business_codes"] == {
+    assert session_management.params["errors"]["business_codes"] == {
         "SESSION_NOT_FOUND": -32001,
         "SESSION_FORBIDDEN": -32006,
         "UPSTREAM_UNREACHABLE": -32002,
         "UPSTREAM_HTTP_ERROR": -32003,
         "UPSTREAM_PAYLOAD_ERROR": -32005,
     }
-    assert session_query.params["errors"]["error_data_fields"] == [
+    assert session_management.params["errors"]["error_data_fields"] == [
         "type",
         "method",
         "session_id",
         "upstream_status",
         "detail",
     ]
-    assert session_query.params["errors"]["invalid_params_data_fields"] == [
+    assert session_management.params["errors"]["invalid_params_data_fields"] == [
         "type",
         "field",
         "fields",
@@ -522,12 +533,22 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "list_projects": "opencode.projects.list",
         "get_current_project": "opencode.projects.current",
         "list_workspaces": "opencode.workspaces.list",
-        "create_workspace": "opencode.workspaces.create",
-        "remove_workspace": "opencode.workspaces.remove",
         "list_worktrees": "opencode.worktrees.list",
-        "create_worktree": "opencode.worktrees.create",
-        "remove_worktree": "opencode.worktrees.remove",
-        "reset_worktree": "opencode.worktrees.reset",
+    }
+    assert workspace_control.params["control_method_flags"]["opencode.workspaces.create"] == {
+        "enabled_by_default": False,
+        "config_key": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+    }
+    assert workspace_control.params["upstream_stability"] == {
+        "opencode.projects.list": "stable",
+        "opencode.projects.current": "stable",
+        "opencode.workspaces.list": "experimental",
+        "opencode.worktrees.list": "experimental",
+        "opencode.workspaces.create": "experimental",
+        "opencode.workspaces.remove": "experimental",
+        "opencode.worktrees.create": "experimental",
+        "opencode.worktrees.remove": "experimental",
+        "opencode.worktrees.reset": "experimental",
     }
     assert workspace_control.params["routing_fields"]["workspace_id"] == (
         "metadata.opencode.workspace.id"
@@ -536,14 +557,8 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "fields": ["items"],
         "items_type": "Project[]",
     }
-    assert workspace_control.params["method_contracts"]["opencode.workspaces.create"]["params"] == {
-        "required": ["request.type"],
-        "optional": ["request.id", "request.branch", "request.extra"],
-    }
-    assert workspace_control.params["method_contracts"]["opencode.worktrees.reset"]["result"] == {
-        "fields": ["ok"],
-        "items_type": "boolean",
-    }
+    assert "opencode.workspaces.create" not in workspace_control.params["method_contracts"]
+    assert "opencode.worktrees.reset" not in workspace_control.params["method_contracts"]
 
     interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
     assert interrupt_recovery.params["profile"]["runtime_context"]["project"] == "alpha"
@@ -554,6 +569,11 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert interrupt_recovery.params["method_contracts"]["opencode.permissions.list"]["result"] == {
         "fields": ["items"],
         "items_type": "InterruptRequest[]",
+    }
+    assert interrupt_recovery.params["recovery_scope"] == {
+        "data_source": "local_interrupt_binding_registry",
+        "identity_scope": "current_authenticated_caller",
+        "empty_result_when_identity_unavailable": True,
     }
     assert interrupt_recovery.params["item_fields"]["details"] == "items[].details"
     assert interrupt_recovery.params["errors"]["invalid_params_data_fields"] == [
@@ -628,12 +648,53 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "availability": "always",
         "retention": "stable",
     }
+    assert compatibility.params["extension_retention"][WORKSPACE_CONTROL_EXTENSION_URI] == {
+        "surface": "jsonrpc-extension",
+        "availability": "always",
+        "retention": "mixed",
+        "upstream_stability": "mixed",
+    }
+    assert compatibility.params["extension_retention"][INTERRUPT_RECOVERY_EXTENSION_URI] == {
+        "surface": "jsonrpc-extension",
+        "availability": "always",
+        "retention": "stable",
+        "implementation_scope": "adapter-local",
+        "identity_scope": "current_authenticated_caller",
+    }
     shell_policy = compatibility.params["method_retention"]["opencode.sessions.shell"]
+    workspace_list_policy = compatibility.params["method_retention"]["opencode.workspaces.list"]
+    workspace_mutation_policy = compatibility.params["method_retention"][
+        "opencode.workspaces.create"
+    ]
+    interrupt_recovery_policy = compatibility.params["method_retention"][
+        "opencode.permissions.list"
+    ]
     assert compatibility.params["deployment"]["id"] == "single_tenant_shared_workspace"
     assert compatibility.params["runtime_features"]["session_shell"]["availability"] == "disabled"
+    assert compatibility.params["runtime_features"]["workspace_mutations"]["availability"] == (
+        "disabled"
+    )
     assert shell_policy["availability"] == "disabled"
     assert shell_policy["retention"] == "deployment-conditional"
     assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
+    assert workspace_list_policy == {
+        "surface": "extension",
+        "availability": "always",
+        "retention": "experimental-upstream",
+        "extension_uri": WORKSPACE_CONTROL_EXTENSION_URI,
+    }
+    assert workspace_mutation_policy["availability"] == "disabled"
+    assert workspace_mutation_policy["retention"] == "deployment-conditional"
+    assert workspace_mutation_policy["toggle"] == "A2A_ENABLE_WORKSPACE_MUTATIONS"
+    assert workspace_mutation_policy["upstream_stability"] == "experimental"
+    assert interrupt_recovery_policy == {
+        "surface": "extension",
+        "availability": "always",
+        "retention": "stable",
+        "extension_uri": INTERRUPT_RECOVERY_EXTENSION_URI,
+        "implementation_scope": "adapter-local",
+        "identity_scope": "current_authenticated_caller",
+    }
     assert compatibility.params["method_retention"]["agent/getAuthenticatedExtendedCard"] == {
         "surface": "core",
         "availability": "always",
@@ -687,7 +748,27 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "opencode.sessions.shell": {
             "reason": "disabled_by_configuration",
             "toggle": "A2A_ENABLE_SESSION_SHELL",
-        }
+        },
+        "opencode.workspaces.create": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+        "opencode.workspaces.remove": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+        "opencode.worktrees.create": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+        "opencode.worktrees.remove": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+        "opencode.worktrees.reset": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
     }
     assert wire_contract.description.endswith("unified error contracts.")
 
@@ -708,10 +789,10 @@ def test_agent_card_contracts_include_shell_when_enabled() -> None:
     )
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
-    assert session_query.params["control_methods"]["shell"] == "opencode.sessions.shell"
-    assert session_query.params["methods"]["shell"] == "opencode.sessions.shell"
-    assert "opencode.sessions.shell" in session_query.params["method_contracts"]
+    session_management = ext_by_uri[SESSION_MANAGEMENT_EXTENSION_URI]
+    assert session_management.params["control_methods"]["shell"] == "opencode.sessions.shell"
+    assert session_management.params["methods"]["shell"] == "opencode.sessions.shell"
+    assert "opencode.sessions.shell" in session_management.params["method_contracts"]
 
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
     shell_policy = compatibility.params["method_retention"]["opencode.sessions.shell"]
@@ -723,16 +804,75 @@ def test_agent_card_contracts_include_shell_when_enabled() -> None:
         "enabled"
     )
     assert "opencode.sessions.shell" in wire_contract.params["all_jsonrpc_methods"]
-    assert wire_contract.params["extensions"]["conditionally_available_methods"] == {}
+    assert wire_contract.params["extensions"]["conditionally_available_methods"] == {
+        "opencode.workspaces.create": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+        "opencode.workspaces.remove": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+        "opencode.worktrees.create": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+        "opencode.worktrees.remove": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+        "opencode.worktrees.reset": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+        },
+    }
 
-    session_skill = next(skill for skill in card.skills if skill.id == "opencode.sessions.query")
+    session_skill = next(
+        skill for skill in card.skills if skill.id == "opencode.sessions.management"
+    )
     assert any("opencode.sessions.shell" in example for example in session_skill.examples)
+
+
+def test_agent_card_contracts_include_workspace_mutations_when_enabled() -> None:
+    card = build_authenticated_extended_agent_card(
+        make_settings(a2a_bearer_token="test-token", a2a_enable_workspace_mutations=True)
+    )
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+
+    workspace_control = ext_by_uri[WORKSPACE_CONTROL_EXTENSION_URI]
+    assert workspace_control.params["methods"]["create_workspace"] == "opencode.workspaces.create"
+    assert workspace_control.params["methods"]["create_worktree"] == "opencode.worktrees.create"
+    assert "opencode.workspaces.create" in workspace_control.params["method_contracts"]
+    assert "opencode.worktrees.reset" in workspace_control.params["method_contracts"]
+    assert (
+        workspace_control.params["upstream_stability"]["opencode.workspaces.create"]
+        == "experimental"
+    )
+
+    compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
+    workspace_mutation_policy = compatibility.params["method_retention"][
+        "opencode.workspaces.create"
+    ]
+    assert compatibility.params["runtime_features"]["workspace_mutations"]["availability"] == (
+        "enabled"
+    )
+    assert workspace_mutation_policy["availability"] == "enabled"
+
+    wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
+    assert (
+        wire_contract.params["profile"]["runtime_features"]["workspace_mutations"]["availability"]
+        == "enabled"
+    )
+    assert "opencode.workspaces.create" in wire_contract.params["all_jsonrpc_methods"]
+    assert "opencode.worktrees.reset" in wire_contract.params["all_jsonrpc_methods"]
 
 
 def test_agent_card_skills_hide_shell_when_disabled_by_default() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
 
-    session_skill = next(skill for skill in card.skills if skill.id == "opencode.sessions.query")
+    session_skill = next(
+        skill for skill in card.skills if skill.id == "opencode.sessions.management"
+    )
     provider_skill = next(skill for skill in card.skills if skill.id == "opencode.providers.query")
     workspace_skill = next(
         skill for skill in card.skills if skill.id == "opencode.workspace.control"
@@ -761,9 +901,9 @@ def test_agent_card_hides_shell_when_policy_disables_it() -> None:
     )
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
+    session_management = ext_by_uri[SESSION_MANAGEMENT_EXTENSION_URI]
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
 
-    assert "shell" not in session_query.params["methods"]
-    assert "opencode.sessions.shell" not in session_query.params["method_contracts"]
+    assert "shell" not in session_management.params["methods"]
+    assert "opencode.sessions.shell" not in session_management.params["method_contracts"]
     assert compatibility.params["runtime_features"]["session_shell"]["availability"] == "disabled"

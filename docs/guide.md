@@ -28,6 +28,7 @@ Key variables to understand protocol behavior:
 - `OPENCODE_WORKSPACE_ROOT`: service-level default workspace root exposed to OpenCode when clients do not request a narrower directory override.
 - `A2A_ALLOW_DIRECTORY_OVERRIDE`: controls whether clients may pass `metadata.opencode.directory`.
 - `A2A_ENABLE_SESSION_SHELL`: gates high-risk JSON-RPC method `opencode.sessions.shell`.
+- `A2A_ENABLE_WORKSPACE_MUTATIONS`: gates operator-only workspace/worktree mutation methods such as `opencode.workspaces.create` and `opencode.worktrees.reset`.
 - `A2A_SANDBOX_MODE` / `A2A_SANDBOX_FILESYSTEM_SCOPE` / `A2A_SANDBOX_WRITABLE_ROOTS`: declarative execution-boundary metadata for sandbox mode, filesystem scope, and optional writable roots.
 - `A2A_NETWORK_ACCESS` / `A2A_NETWORK_ALLOWED_DOMAINS`: declarative execution-boundary metadata for network policy and optional allowlist disclosure.
 - `A2A_APPROVAL_POLICY` / `A2A_APPROVAL_ESCALATION_BEHAVIOR`: declarative execution-boundary metadata for approval workflow.
@@ -246,8 +247,11 @@ Current behavior:
 - `all_jsonrpc_methods` is the runtime truth for the current deployment.
 - The current SDK-owned core JSON-RPC surface includes `agent/getAuthenticatedExtendedCard` and `tasks/pushNotificationConfig/*`.
 - The current SDK-owned REST surface also includes `GET /v1/tasks` and the task push notification config routes.
+- Push notification config routes/methods are currently exposed only because they are part of the SDK-owned core surface. This runtime does not configure a push config store or push sender, so push notification operations remain unsupported. REST routes currently return HTTP `501`, while JSON-RPC methods surface SDK-owned unsupported error envelopes.
 
 When `A2A_ENABLE_SESSION_SHELL=false`, `opencode.sessions.shell` is omitted from `all_jsonrpc_methods` and exposed only through `extensions.conditionally_available_methods`.
+
+When `A2A_ENABLE_WORKSPACE_MUTATIONS=false`, `opencode.workspaces.create/remove` and `opencode.worktrees.create/remove/reset` are omitted from `all_jsonrpc_methods` and exposed only through `extensions.conditionally_available_methods`.
 
 Unsupported method contract:
 
@@ -286,7 +290,7 @@ Current compatibility matrix:
 | Transport payloads and enums | Supported | Partial | Request/response payloads, enums, and schema details still follow the SDK-owned `0.3` baseline. |
 | Error model | Supported | Partial | `0.3` keeps legacy `error.data={...}` / flat REST payloads; `1.0` uses protocol-aware JSON-RPC details and AIP-193-style REST errors. |
 | Pagination and list semantics | Supported | Partial | Cursor/list behavior is stable, but the declared shape still follows the `0.3` SDK baseline. |
-| Push notification surfaces | Supported | Partial | Core task push-notification routes are available, but no extra `1.0`-specific compatibility layer is declared yet. |
+| Push notification surfaces | Unsupported | Unsupported | SDK-owned task push-notification routes are still exposed, but this runtime does not enable push sender/config-store support. REST routes return HTTP `501`, while JSON-RPC methods remain unsupported via SDK-owned error envelopes. |
 | Signatures and authenticated data | Supported | Partial | Security schemes and authenticated extended card discovery follow the shipped SDK schema rather than a dedicated `1.0` compatibility layer. |
 
 ## Compatibility Profile
@@ -555,15 +559,16 @@ Minimal stream semantics summary:
 - `sequence` is the per-request canonical stream sequence
 - final task/status metadata may repeat normalized usage and interrupt context even after the streaming phase ends
 
-## OpenCode Session Query A2A Extension
+## OpenCode Session Management A2A Extension
 
-This service exposes OpenCode session lifecycle inspection, list/message-history queries, and low-risk session control methods via A2A JSON-RPC extension methods (default endpoint: `POST /`). No extra custom REST endpoint is introduced.
+This service exposes OpenCode session read, mutation, and control methods via A2A JSON-RPC extension methods (default endpoint: `POST /`). No extra custom REST endpoint is introduced.
 
 - Trigger: call extension methods through A2A JSON-RPC
 - Auth: same `Authorization: Bearer <token>`
 - Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still suppressed for `method=opencode.sessions.*`
 - Endpoint discovery: prefer `additional_interfaces[]` with `transport=jsonrpc` from Agent Card
 - The runtime still delegates SDK-owned JSON-RPC methods such as `agent/getAuthenticatedExtendedCard` and `tasks/pushNotificationConfig/*` to the base A2A implementation; they are not OpenCode-specific extensions.
+- Push notification config methods remain effectively unsupported in the current runtime because no push config store or push sender is configured; REST routes return HTTP `501`, while JSON-RPC methods stay on SDK-owned unsupported error handling.
 - Notification behavior: for `opencode.sessions.*`, requests without `id` return HTTP `204 No Content`
 - Result format:
   - `opencode.sessions.status` => provider-private status summaries in `result.items`
@@ -589,7 +594,7 @@ This service exposes OpenCode session lifecycle inspection, list/message-history
   - optional `limit`, `before`
   - optional `metadata.opencode.workspace.id`
   - `before` is an opaque cursor for loading older messages and is only supported on `opencode.sessions.messages.list`
-- Mutating lifecycle methods:
+- Mutation methods:
   - `opencode.sessions.fork`
   - `opencode.sessions.share`
   - `opencode.sessions.unshare`
@@ -968,14 +973,17 @@ Response:
 
 ## Workspace Control (Provider-Private Extension)
 
-The runtime also exposes the OpenCode project/workspace/worktree control plane through provider-private JSON-RPC methods:
+The runtime exposes OpenCode project/workspace/worktree discovery through provider-private JSON-RPC methods:
 
 - `opencode.projects.list`
 - `opencode.projects.current`
 - `opencode.workspaces.list`
+- `opencode.worktrees.list`
+
+Deployment-conditional mutation methods remain available for trusted operator scenarios, but they are disabled by default. Enable them with `A2A_ENABLE_WORKSPACE_MUTATIONS=true`:
+
 - `opencode.workspaces.create`
 - `opencode.workspaces.remove`
-- `opencode.worktrees.list`
 - `opencode.worktrees.create`
 - `opencode.worktrees.remove`
 - `opencode.worktrees.reset`
@@ -984,7 +992,8 @@ Behavior notes:
 
 - These methods target the active OpenCode deployment project. They are not routed through per-request workspace forwarding.
 - `metadata.opencode.workspace.id` is declared consistently across the adapter, but current workspace-control methods do not use it to change the target project.
-- Mutating methods should be treated as operator-only control-plane actions.
+- `opencode.workspaces.*` and `opencode.worktrees.*` currently wrap upstream `/experimental/workspace` and `/experimental/worktree` endpoints; treat them as experimental-upstream surfaces even when declared by the adapter.
+- Mutating methods should be treated as operator-only control-plane actions and are disabled by default.
 
 ### Project Discovery (`opencode.projects.list`, `opencode.projects.current`)
 
@@ -1005,7 +1014,27 @@ Response:
 - `opencode.projects.list` => `{"items": [...]}`
 - `opencode.projects.current` => `{"item": {...}}`
 
-### Workspace Discovery and Mutation
+### Workspace Discovery
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 32,
+    "method": "opencode.workspaces.list",
+    "params": {}
+  }'
+```
+
+Response:
+
+- `opencode.workspaces.list` => `{"items": [...]}`
+
+### Workspace Mutation
+
+`opencode.workspaces.create` and `opencode.workspaces.remove` are disabled by default. Enable with `A2A_ENABLE_WORKSPACE_MUTATIONS=true`.
 
 ```bash
 curl -sS http://127.0.0.1:8000/ \
@@ -1027,11 +1056,30 @@ curl -sS http://127.0.0.1:8000/ \
 
 Response:
 
-- `opencode.workspaces.list` => `{"items": [...]}`
 - `opencode.workspaces.create` => `{"item": {...}}`
 - `opencode.workspaces.remove` => `{"item": {...}}`
 
-### Worktree Discovery and Mutation
+### Worktree Discovery
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H 'Authorization: Bearer <your-token>' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 33,
+    "method": "opencode.worktrees.list",
+    "params": {}
+  }'
+```
+
+Response:
+
+- `opencode.worktrees.list` => `{"items": [...]}`
+
+### Worktree Mutation
+
+`opencode.worktrees.create`, `opencode.worktrees.remove`, and `opencode.worktrees.reset` are disabled by default. Enable with `A2A_ENABLE_WORKSPACE_MUTATIONS=true`.
 
 ```bash
 curl -sS http://127.0.0.1:8000/ \
@@ -1051,7 +1099,6 @@ curl -sS http://127.0.0.1:8000/ \
 
 Response:
 
-- `opencode.worktrees.list` => `{"items": [...]}`
 - `opencode.worktrees.create` => `{"item": {...}}`
 - `opencode.worktrees.remove` => `{"ok": true|false}`
 - `opencode.worktrees.reset` => `{"ok": true|false}`
@@ -1072,6 +1119,7 @@ Response shape:
 Notes:
 
 - Recovery results are scoped to the current authenticated caller identity when the runtime can resolve one.
+- If the runtime cannot resolve a caller identity for the current request, recovery queries return an empty item list.
 - The runtime stores normalized interrupt `details` alongside request bindings, so recovery results match the shape emitted in `metadata.shared.interrupt.details`.
 - The first implementation stage reads from the local interrupt registry rather than proxying upstream global `/permission` or `/question` pending lists.
 - Use recovery queries to rediscover pending requests after reconnecting; use `a2a.interrupt.*` methods to resolve them.

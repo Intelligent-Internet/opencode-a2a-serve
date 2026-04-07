@@ -50,6 +50,11 @@ def test_profile_runtime_splits_deployment_runtime_features_and_health_payload()
                 "availability": "disabled",
                 "toggle": "A2A_ENABLE_SESSION_SHELL",
             },
+            "workspace_mutations": {
+                "enabled": False,
+                "availability": "disabled",
+                "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+            },
             "execution_environment": {
                 "sandbox": {
                     "mode": "workspace-write",
@@ -121,6 +126,11 @@ def test_profile_runtime_uses_conservative_execution_environment_defaults() -> N
             "outside_workspace": "unknown",
         },
     }
+    assert profile.runtime_features_dict()["workspace_mutations"] == {
+        "enabled": False,
+        "availability": "disabled",
+        "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
+    }
 
 
 def test_profile_runtime_disables_shell_when_policy_is_read_only() -> None:
@@ -137,4 +147,21 @@ def test_profile_runtime_disables_shell_when_policy_is_read_only() -> None:
         "enabled": False,
         "availability": "disabled",
         "toggle": "A2A_ENABLE_SESSION_SHELL",
+    }
+
+
+def test_profile_runtime_disables_workspace_mutations_when_policy_is_read_only() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_enable_workspace_mutations=True,
+        a2a_sandbox_mode="read-only",
+        a2a_write_access_scope="workspace_only",
+    )
+
+    profile = build_runtime_profile(settings)
+
+    assert profile.runtime_features_dict()["workspace_mutations"] == {
+        "enabled": False,
+        "availability": "disabled",
+        "toggle": "A2A_ENABLE_WORKSPACE_MUTATIONS",
     }

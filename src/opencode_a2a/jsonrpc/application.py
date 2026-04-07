@@ -59,8 +59,8 @@ __all__ = [
 ]
 
 
-class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
-    """Extend A2A JSON-RPC endpoint with OpenCode session methods.
+class OpencodeSessionManagementJSONRPCApplication(A2AFastAPIApplication):
+    """Extend A2A JSON-RPC endpoint with OpenCode session management methods.
 
     These methods are optional (declared via AgentCard.capabilities.extensions) and do
     not require additional private REST endpoints.
@@ -103,12 +103,12 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._method_list_projects = methods["list_projects"]
         self._method_get_current_project = methods["get_current_project"]
         self._method_list_workspaces = methods["list_workspaces"]
-        self._method_create_workspace = methods["create_workspace"]
-        self._method_remove_workspace = methods["remove_workspace"]
+        self._method_create_workspace = methods.get("create_workspace")
+        self._method_remove_workspace = methods.get("remove_workspace")
         self._method_list_worktrees = methods["list_worktrees"]
-        self._method_create_worktree = methods["create_worktree"]
-        self._method_remove_worktree = methods["remove_worktree"]
-        self._method_reset_worktree = methods["reset_worktree"]
+        self._method_create_worktree = methods.get("create_worktree")
+        self._method_remove_worktree = methods.get("remove_worktree")
+        self._method_reset_worktree = methods.get("reset_worktree")
         self._method_list_permissions = methods["list_permissions"]
         self._method_list_questions = methods["list_questions"]
         self._method_reply_permission = methods["reply_permission"]

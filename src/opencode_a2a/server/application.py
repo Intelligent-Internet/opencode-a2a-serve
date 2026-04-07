@@ -50,8 +50,8 @@ from ..contracts.extensions import (
     PROVIDER_DISCOVERY_METHODS,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_CONTROL_METHODS,
-    SESSION_QUERY_EXTENSION_URI,
-    SESSION_QUERY_METHODS,
+    SESSION_MANAGEMENT_EXTENSION_URI,
+    SESSION_METHODS,
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     WORKSPACE_CONTROL_EXTENSION_URI,
@@ -61,7 +61,7 @@ from ..contracts.extensions import (
 from ..execution.executor import OpencodeAgentExecutor
 from ..invocation import call_with_supported_kwargs
 from ..jsonrpc.application import (
-    OpencodeSessionQueryJSONRPCApplication,
+    OpencodeSessionManagementJSONRPCApplication,
 )
 from ..opencode_upstream_client import OpencodeUpstreamClient
 from ..output_modes import normalize_accepted_output_modes
@@ -70,7 +70,7 @@ from .agent_card import (
     _CHAT_OUTPUT_MODES,
     _build_agent_card_description,
     _build_chat_examples,
-    _build_session_query_skill_examples,
+    _build_session_management_skill_examples,
     build_agent_card,
     build_authenticated_extended_agent_card,
 )
@@ -129,10 +129,10 @@ __all__ = [
     "AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL",
     "PROVIDER_DISCOVERY_EXTENSION_URI",
     "PROVIDER_DISCOVERY_METHODS",
+    "SESSION_MANAGEMENT_EXTENSION_URI",
     "SESSION_BINDING_EXTENSION_URI",
     "SESSION_CONTROL_METHODS",
-    "SESSION_QUERY_EXTENSION_URI",
-    "SESSION_QUERY_METHODS",
+    "SESSION_METHODS",
     "STREAMING_EXTENSION_URI",
     "WIRE_CONTRACT_EXTENSION_URI",
     "WORKSPACE_CONTROL_EXTENSION_URI",
@@ -142,7 +142,7 @@ __all__ = [
     "_build_jsonrpc_extension_openapi_description",
     "_build_jsonrpc_extension_openapi_examples",
     "_build_rest_message_openapi_examples",
-    "_build_session_query_skill_examples",
+    "_build_session_management_skill_examples",
     "build_authenticated_extended_agent_card",
     "_configure_logging",
     "_decode_payload_preview",
@@ -559,7 +559,7 @@ def create_app(settings: Settings) -> FastAPI:
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
 
     jsonrpc_methods = {
-        **capability_snapshot.session_query_methods(),
+        **capability_snapshot.session_management_methods(),
         **capability_snapshot.provider_discovery_methods(),
         **capability_snapshot.workspace_control_methods(),
         **capability_snapshot.interrupt_recovery_methods(),
@@ -567,7 +567,7 @@ def create_app(settings: Settings) -> FastAPI:
     }
 
     # Build JSON-RPC app (POST / by default) and attach REST endpoints (HTTP+JSON) to the same app.
-    jsonrpc_app = OpencodeSessionQueryJSONRPCApplication(
+    jsonrpc_app = OpencodeSessionManagementJSONRPCApplication(
         agent_card=agent_card,
         extended_agent_card=extended_agent_card,
         http_handler=handler,

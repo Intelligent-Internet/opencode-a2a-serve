@@ -9,6 +9,7 @@ from ..sandbox_policy import SandboxPolicy
 PROFILE_ID = "opencode-a2a-single-tenant-coding-v1"
 DEPLOYMENT_ID = "single_tenant_shared_workspace"
 SESSION_SHELL_TOGGLE = "A2A_ENABLE_SESSION_SHELL"
+WORKSPACE_MUTATIONS_TOGGLE = "A2A_ENABLE_WORKSPACE_MUTATIONS"
 DIRECTORY_OVERRIDE_METADATA_FIELD = "metadata.opencode.directory"
 WORKSPACE_OVERRIDE_METADATA_FIELD = "metadata.opencode.workspace.id"
 
@@ -64,6 +65,20 @@ class SessionShellProfile:
     enabled: bool
     availability: str
     toggle: str = SESSION_SHELL_TOGGLE
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "availability": self.availability,
+            "toggle": self.toggle,
+        }
+
+
+@dataclass(frozen=True)
+class WorkspaceMutationsProfile:
+    enabled: bool
+    availability: str
+    toggle: str = WORKSPACE_MUTATIONS_TOGGLE
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -180,6 +195,7 @@ class RuntimeProfile:
     directory_binding: DirectoryBindingProfile
     workspace_binding: WorkspaceBindingProfile
     session_shell: SessionShellProfile
+    workspace_mutations: WorkspaceMutationsProfile
     execution_environment: ExecutionEnvironmentProfile
     service_features: ServiceFeaturesProfile
     runtime_context: RuntimeContext
@@ -189,6 +205,7 @@ class RuntimeProfile:
             "directory_binding": self.directory_binding.as_dict(),
             "workspace_binding": self.workspace_binding.as_dict(),
             "session_shell": self.session_shell.as_dict(),
+            "workspace_mutations": self.workspace_mutations.as_dict(),
             "execution_environment": self.execution_environment.as_dict(),
             "service_features": self.service_features.as_dict(),
         }
@@ -226,6 +243,9 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
     shell_enabled = sandbox_policy.is_session_shell_enabled(
         enabled_by_config=settings.a2a_enable_session_shell,
     )
+    workspace_mutations_enabled = sandbox_policy.is_workspace_mutations_enabled(
+        enabled_by_config=settings.a2a_enable_workspace_mutations,
+    )
     directory_scope = (
         "workspace_root_or_descendant"
         if settings.a2a_allow_directory_override
@@ -244,6 +264,10 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
         session_shell=SessionShellProfile(
             enabled=shell_enabled,
             availability="enabled" if shell_enabled else "disabled",
+        ),
+        workspace_mutations=WorkspaceMutationsProfile(
+            enabled=workspace_mutations_enabled,
+            availability="enabled" if workspace_mutations_enabled else "disabled",
         ),
         execution_environment=ExecutionEnvironmentProfile(
             sandbox=SandboxProfile(

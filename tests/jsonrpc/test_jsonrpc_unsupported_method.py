@@ -152,7 +152,8 @@ async def test_unsupported_method_notification_returns_204() -> None:
         )
 
     # Even unsupported methods follow notification semantics: if id is missing, return 204.
-    # Note: OpencodeSessionQueryJSONRPCApplication._handle_requests returns 204 for notifications
+    # Note: OpencodeSessionManagementJSONRPCApplication._handle_requests
+    # returns 204 for notifications
     # if it catches the method. For unsupported methods, it now also returns 204 if id is None.
     assert response.status_code == 204
 
@@ -220,3 +221,30 @@ async def test_policy_disabled_shell_reports_current_supported_methods() -> None
     assert error["data"]["type"] == "METHOD_NOT_SUPPORTED"
     assert error["data"]["method"] == "opencode.sessions.shell"
     assert "opencode.sessions.shell" not in error["data"]["supported_methods"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_workspace_mutation_reports_current_supported_methods() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    app = create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 126,
+                "method": "opencode.workspaces.create",
+                "params": {"request": {"type": "git"}},
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    error = body["error"]
+    assert error["code"] == -32601
+    assert error["data"]["type"] == "METHOD_NOT_SUPPORTED"
+    assert error["data"]["method"] == "opencode.workspaces.create"
+    assert "opencode.workspaces.create" not in error["data"]["supported_methods"]

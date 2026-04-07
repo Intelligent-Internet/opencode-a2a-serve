@@ -83,6 +83,19 @@ class SandboxPolicy:
             return False
         return True
 
+    def is_workspace_mutations_enabled(
+        self,
+        *,
+        enabled_by_config: bool,
+    ) -> bool:
+        if not enabled_by_config:
+            return False
+        if self.sandbox_mode == "read-only":
+            return False
+        if self.write_access_scope == "none":
+            return False
+        return True
+
     def validate_configuration(self) -> None:
         if self.write_access_scope == "none" and self.writable_roots:
             raise ValueError(
