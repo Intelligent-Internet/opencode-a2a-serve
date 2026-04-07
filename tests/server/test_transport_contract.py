@@ -21,7 +21,7 @@ from a2a.types import (
 from opencode_a2a.server.application import (
     AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL,
     PUBLIC_AGENT_CARD_CACHE_CONTROL,
-    SESSION_QUERY_EXTENSION_URI,
+    SESSION_MANAGEMENT_EXTENSION_URI,
     _normalize_log_level,
     build_agent_card,
     create_app,
@@ -478,10 +478,10 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         extended_extensions = {
             item["uri"]: item for item in extended_card.json()["capabilities"]["extensions"]
         }
-        assert public_extensions[SESSION_QUERY_EXTENSION_URI].get("params") is None
-        assert extended_extensions[SESSION_QUERY_EXTENSION_URI]["params"]["methods"]["status"] == (
-            "opencode.sessions.status"
-        )
+        assert public_extensions[SESSION_MANAGEMENT_EXTENSION_URI].get("params") is None
+        assert extended_extensions[SESSION_MANAGEMENT_EXTENSION_URI]["params"]["methods"][
+            "status"
+        ] == ("opencode.sessions.status")
         assert len(public_card.content) < len(extended_card.content)
 
         rpc_card = await client.post(
@@ -497,7 +497,7 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         assert rpc_card.status_code == 200
         assert (
             rpc_card.json()["result"]["capabilities"]["extensions"][3]["uri"]
-            == SESSION_QUERY_EXTENSION_URI
+            == SESSION_MANAGEMENT_EXTENSION_URI
         )
 
 

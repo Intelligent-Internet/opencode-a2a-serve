@@ -21,8 +21,8 @@ from ..contracts.extensions import (
     MODEL_SELECTION_EXTENSION_URI,
     PROVIDER_DISCOVERY_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
-    SESSION_QUERY_EXTENSION_URI,
-    SESSION_QUERY_METHODS,
+    SESSION_MANAGEMENT_EXTENSION_URI,
+    SESSION_METHODS,
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     WORKSPACE_CONTROL_EXTENSION_URI,
@@ -34,7 +34,7 @@ from ..contracts.extensions import (
     build_model_selection_extension_params,
     build_provider_discovery_extension_params,
     build_session_binding_extension_params,
-    build_session_query_extension_params,
+    build_session_management_extension_params,
     build_streaming_extension_params,
     build_wire_contract_params,
     build_workspace_control_extension_params,
@@ -153,7 +153,7 @@ def _build_chat_examples(project: str | None) -> list[str]:
     return examples
 
 
-def _build_session_query_skill_examples(
+def _build_session_management_skill_examples(
     *,
     capability_snapshot: JsonRpcCapabilitySnapshot,
 ) -> list[str]:
@@ -178,7 +178,7 @@ def _build_session_query_skill_examples(
             "opencode.sessions.revert / opencode.sessions.unrevert)."
         ),
     ]
-    if capability_snapshot.is_method_enabled(SESSION_QUERY_METHODS["shell"]):
+    if capability_snapshot.is_method_enabled(SESSION_METHODS["shell"]):
         examples.append("Run shell in a session (method opencode.sessions.shell).")
     return examples
 
@@ -213,7 +213,7 @@ def _build_agent_extensions(
         runtime_profile=runtime_profile,
     )
     streaming_extension_params = build_streaming_extension_params()
-    session_query_extension_params = build_session_query_extension_params(
+    session_management_extension_params = build_session_management_extension_params(
         runtime_profile=runtime_profile,
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
@@ -305,14 +305,14 @@ def _build_agent_extensions(
             ),
         ),
         AgentExtension(
-            uri=SESSION_QUERY_EXTENSION_URI,
+            uri=SESSION_MANAGEMENT_EXTENSION_URI,
             required=False,
             description=(
-                "Support OpenCode session lifecycle inspection, history queries, low-risk "
-                "session management, and async prompt injection via custom JSON-RPC "
-                "methods on the agent's A2A JSON-RPC interface."
+                "Support OpenCode session read, mutation, and control methods through "
+                "provider-private JSON-RPC extensions on the agent's A2A JSON-RPC "
+                "interface."
             ),
-            params=session_query_extension_params if include_detailed_contracts else None,
+            params=session_management_extension_params if include_detailed_contracts else None,
         ),
         AgentExtension(
             uri=PROVIDER_DISCOVERY_EXTENSION_URI,
@@ -403,11 +403,11 @@ def _build_agent_skills(
                 tags=["assistant", "coding", "opencode", "core-a2a", "portable"],
             ),
             AgentSkill(
-                id="opencode.sessions.query",
-                name="OpenCode Sessions Query",
+                id="opencode.sessions.management",
+                name="OpenCode Session Management",
                 description=(
-                    "Inspect OpenCode session status, history, and low-risk lifecycle actions "
-                    "through provider-private JSON-RPC extensions."
+                    "Read, mutate, and control OpenCode sessions through provider-private "
+                    "JSON-RPC extensions."
                 ),
                 input_modes=list(_JSON_RPC_MODES),
                 output_modes=list(_JSON_RPC_MODES),
@@ -476,16 +476,16 @@ def _build_agent_skills(
             examples=_build_chat_examples(settings.a2a_project),
         ),
         AgentSkill(
-            id="opencode.sessions.query",
-            name="OpenCode Sessions Query",
+            id="opencode.sessions.management",
+            name="OpenCode Session Management",
             description=(
-                "provider-private OpenCode session/history and session-control surface "
-                "exposed through JSON-RPC extensions."
+                "provider-private OpenCode session read/mutation/control surface exposed "
+                "through JSON-RPC extensions."
             ),
             input_modes=list(_JSON_RPC_MODES),
             output_modes=list(_JSON_RPC_MODES),
             tags=["opencode", "sessions", "history", "provider-private"],
-            examples=_build_session_query_skill_examples(
+            examples=_build_session_management_skill_examples(
                 capability_snapshot=capability_snapshot,
             ),
         ),

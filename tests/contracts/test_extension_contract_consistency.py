@@ -12,7 +12,7 @@ from opencode_a2a.contracts.extensions import (
     build_model_selection_extension_params,
     build_provider_discovery_extension_params,
     build_session_binding_extension_params,
-    build_session_query_extension_params,
+    build_session_management_extension_params,
     build_streaming_extension_params,
     build_wire_contract_params,
     build_workspace_control_extension_params,
@@ -27,7 +27,7 @@ from opencode_a2a.server.application import (
     MODEL_SELECTION_EXTENSION_URI,
     PROVIDER_DISCOVERY_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
-    SESSION_QUERY_EXTENSION_URI,
+    SESSION_MANAGEMENT_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     WORKSPACE_CONTROL_EXTENSION_URI,
@@ -46,7 +46,7 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     session_binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
     model_selection = ext_by_uri[MODEL_SELECTION_EXTENSION_URI]
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
+    session_management = ext_by_uri[SESSION_MANAGEMENT_EXTENSION_URI]
     provider_discovery = ext_by_uri[PROVIDER_DISCOVERY_EXTENSION_URI]
     workspace_control = ext_by_uri[WORKSPACE_CONTROL_EXTENSION_URI]
     interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
@@ -62,7 +62,7 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
         runtime_profile=runtime_profile,
     )
     expected_streaming = build_streaming_extension_params()
-    expected_session_query = build_session_query_extension_params(
+    expected_session_management = build_session_management_extension_params(
         runtime_profile=runtime_profile,
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
@@ -75,8 +75,8 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     expected_interrupt_recovery = build_interrupt_recovery_extension_params(
         runtime_profile=runtime_profile,
     )
-    assert expected_session_query["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
-    assert expected_session_query["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert expected_session_management["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert expected_session_management["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
     expected_interrupt_callback = build_interrupt_callback_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -102,8 +102,8 @@ def test_extension_ssot_matches_agent_card_contracts() -> None:
     assert streaming.params == expected_streaming, (
         "Streaming extension drifted from contracts.extensions SSOT."
     )
-    assert session_query.params == expected_session_query, (
-        "Session query extension drifted from contracts.extensions SSOT."
+    assert session_management.params == expected_session_management, (
+        "Session management extension drifted from contracts.extensions SSOT."
     )
     assert provider_discovery.params == expected_provider_discovery, (
         "Provider discovery extension drifted from contracts.extensions SSOT."
@@ -142,7 +142,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     session_binding = contract["session_binding"]
     model_selection = contract["model_selection"]
     streaming = contract["streaming"]
-    session_query = contract["session_query"]
+    session_management = contract["session_management"]
     provider_discovery = contract["provider_discovery"]
     workspace_control = contract["workspace_control"]
     interrupt_recovery = contract["interrupt_recovery"]
@@ -158,7 +158,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         runtime_profile=runtime_profile,
     )
     expected_streaming = build_streaming_extension_params()
-    expected_session_query = build_session_query_extension_params(
+    expected_session_management = build_session_management_extension_params(
         runtime_profile=runtime_profile,
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
@@ -196,8 +196,8 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert streaming == expected_streaming, (
         "OpenAPI streaming contract drifted from contracts.extensions SSOT."
     )
-    assert session_query == expected_session_query, (
-        "OpenAPI session query contract drifted from contracts.extensions SSOT."
+    assert session_management == expected_session_management, (
+        "OpenAPI session management contract drifted from contracts.extensions SSOT."
     )
     assert provider_discovery == expected_provider_discovery, (
         "OpenAPI provider discovery contract drifted from contracts.extensions SSOT."
@@ -238,7 +238,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     example_methods = {
         value.get("value", {}).get("method") for value in example_values if isinstance(value, dict)
     }
-    expected_methods = set(session_query["methods"].values()) | set(
+    expected_methods = set(session_management["methods"].values()) | set(
         INTERRUPT_CALLBACK_METHODS.values()
     )
     expected_methods |= {

@@ -59,8 +59,8 @@ __all__ = [
 ]
 
 
-class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
-    """Extend A2A JSON-RPC endpoint with OpenCode session methods.
+class OpencodeSessionManagementJSONRPCApplication(A2AFastAPIApplication):
+    """Extend A2A JSON-RPC endpoint with OpenCode session management methods.
 
     These methods are optional (declared via AgentCard.capabilities.extensions) and do
     not require additional private REST endpoints.

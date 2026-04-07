@@ -9,8 +9,8 @@ from ..contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     PROVIDER_DISCOVERY_METHODS,
+    SESSION_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
-    SESSION_QUERY_METHODS,
     WORKSPACE_CONTROL_METHODS,
     JsonRpcCapabilitySnapshot,
     build_capability_snapshot,
@@ -20,7 +20,7 @@ from ..contracts.extensions import (
     build_model_selection_extension_params,
     build_provider_discovery_extension_params,
     build_session_binding_extension_params,
-    build_session_query_extension_params,
+    build_session_management_extension_params,
     build_streaming_extension_params,
     build_wire_contract_params,
     build_workspace_control_extension_params,
@@ -33,7 +33,7 @@ def _build_jsonrpc_extension_openapi_description(
     *,
     capability_snapshot: JsonRpcCapabilitySnapshot,
 ) -> str:
-    session_methods = list(capability_snapshot.session_query_methods().values())
+    session_methods = list(capability_snapshot.session_management_methods().values())
     provider_methods = ", ".join(sorted(PROVIDER_DISCOVERY_METHODS.values()))
     workspace_methods = ", ".join(sorted(capability_snapshot.workspace_control_methods().values()))
     interrupt_recovery_methods = ", ".join(sorted(INTERRUPT_RECOVERY_METHODS.values()))
@@ -43,7 +43,7 @@ def _build_jsonrpc_extension_openapi_description(
         "(message/send, message/stream, tasks/get, tasks/cancel, tasks/resubscribe) "
         "plus shared model-selection metadata, OpenCode session/provider extensions, "
         "interrupt recovery extensions, and shared interrupt callback methods.\n\n"
-        f"OpenCode session lifecycle/query/control methods: {', '.join(session_methods)}.\n"
+        f"OpenCode session read/mutation/control methods: {', '.join(session_methods)}.\n"
         "The existing prompt_async extension also accepts provider-private OpenCode "
         "request.parts[] item types such as text, file, agent, and subtask; subtask "
         "execution remains upstream runtime behavior rather than a separate A2A "
@@ -152,7 +152,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 1,
-                "method": SESSION_QUERY_METHODS["list_sessions"],
+                "method": SESSION_METHODS["list_sessions"],
                 "params": {
                     "directory": "services/api",
                     "roots": True,
@@ -166,7 +166,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 11,
-                "method": SESSION_QUERY_METHODS["status"],
+                "method": SESSION_METHODS["status"],
                 "params": {"directory": "services/api"},
             },
         },
@@ -175,7 +175,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 12,
-                "method": SESSION_QUERY_METHODS["get_session"],
+                "method": SESSION_METHODS["get_session"],
                 "params": {"session_id": "s-1"},
             },
         },
@@ -184,7 +184,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 13,
-                "method": SESSION_QUERY_METHODS["get_session_children"],
+                "method": SESSION_METHODS["get_session_children"],
                 "params": {"session_id": "s-1"},
             },
         },
@@ -193,7 +193,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 14,
-                "method": SESSION_QUERY_METHODS["get_session_todo"],
+                "method": SESSION_METHODS["get_session_todo"],
                 "params": {"session_id": "s-1"},
             },
         },
@@ -202,7 +202,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 15,
-                "method": SESSION_QUERY_METHODS["get_session_diff"],
+                "method": SESSION_METHODS["get_session_diff"],
                 "params": {"session_id": "s-1", "message_id": "msg-1"},
             },
         },
@@ -211,7 +211,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 2,
-                "method": SESSION_QUERY_METHODS["get_session_messages"],
+                "method": SESSION_METHODS["get_session_messages"],
                 "params": {
                     "session_id": "s-1",
                     "before": "cursor-1",
@@ -224,7 +224,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 16,
-                "method": SESSION_QUERY_METHODS["get_session_message"],
+                "method": SESSION_METHODS["get_session_message"],
                 "params": {"session_id": "s-1", "message_id": "msg-1"},
             },
         },
@@ -233,7 +233,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 21,
-                "method": SESSION_QUERY_METHODS["prompt_async"],
+                "method": SESSION_METHODS["prompt_async"],
                 "params": {
                     "session_id": "s-1",
                     "request": {
@@ -247,7 +247,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 211,
-                "method": SESSION_QUERY_METHODS["prompt_async"],
+                "method": SESSION_METHODS["prompt_async"],
                 "params": {
                     "session_id": "s-1",
                     "request": {
@@ -269,7 +269,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 22,
-                "method": SESSION_QUERY_METHODS["command"],
+                "method": SESSION_METHODS["command"],
                 "params": {
                     "session_id": "s-1",
                     "request": {
@@ -284,7 +284,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 221,
-                "method": SESSION_QUERY_METHODS["fork"],
+                "method": SESSION_METHODS["fork"],
                 "params": {
                     "session_id": "s-1",
                     "request": {"messageID": "msg-1"},
@@ -296,7 +296,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 222,
-                "method": SESSION_QUERY_METHODS["share"],
+                "method": SESSION_METHODS["share"],
                 "params": {"session_id": "s-1"},
             },
         },
@@ -305,7 +305,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 223,
-                "method": SESSION_QUERY_METHODS["unshare"],
+                "method": SESSION_METHODS["unshare"],
                 "params": {"session_id": "s-1"},
             },
         },
@@ -314,7 +314,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 224,
-                "method": SESSION_QUERY_METHODS["summarize"],
+                "method": SESSION_METHODS["summarize"],
                 "params": {
                     "session_id": "s-1",
                     "request": {
@@ -330,7 +330,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 225,
-                "method": SESSION_QUERY_METHODS["revert"],
+                "method": SESSION_METHODS["revert"],
                 "params": {
                     "session_id": "s-1",
                     "request": {"messageID": "msg-1", "partID": "part-1"},
@@ -342,7 +342,7 @@ def _build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 226,
-                "method": SESSION_QUERY_METHODS["unrevert"],
+                "method": SESSION_METHODS["unrevert"],
                 "params": {"session_id": "s-1"},
             },
         },
@@ -446,13 +446,13 @@ def _build_jsonrpc_extension_openapi_examples(
             },
         },
     }
-    if capability_snapshot.is_method_enabled(SESSION_QUERY_METHODS["shell"]):
+    if capability_snapshot.is_method_enabled(SESSION_METHODS["shell"]):
         examples["session_shell"] = {
             "summary": "Run shell command in an existing session",
             "value": {
                 "jsonrpc": "2.0",
                 "id": 23,
-                "method": SESSION_QUERY_METHODS["shell"],
+                "method": SESSION_METHODS["shell"],
                 "params": {
                     "session_id": "s-1",
                     "request": {
@@ -596,7 +596,7 @@ def _patch_jsonrpc_openapi_contract(
         runtime_profile=runtime_profile,
     )
     streaming = build_streaming_extension_params()
-    session_query = build_session_query_extension_params(
+    session_management = build_session_management_extension_params(
         runtime_profile=runtime_profile,
         context_id_prefix=SESSION_CONTEXT_PREFIX,
     )
@@ -646,7 +646,7 @@ def _patch_jsonrpc_openapi_contract(
                         "session_binding": session_binding,
                         "model_selection": model_selection,
                         "streaming": streaming,
-                        "session_query": session_query,
+                        "session_management": session_management,
                         "provider_discovery": provider_discovery,
                         "workspace_control": workspace_control,
                         "interrupt_recovery": interrupt_recovery,

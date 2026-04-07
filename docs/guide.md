@@ -559,9 +559,9 @@ Minimal stream semantics summary:
 - `sequence` is the per-request canonical stream sequence
 - final task/status metadata may repeat normalized usage and interrupt context even after the streaming phase ends
 
-## OpenCode Session Query A2A Extension
+## OpenCode Session Management A2A Extension
 
-This service exposes OpenCode session lifecycle inspection, list/message-history queries, and low-risk session control methods via A2A JSON-RPC extension methods (default endpoint: `POST /`). No extra custom REST endpoint is introduced.
+This service exposes OpenCode session read, mutation, and control methods via A2A JSON-RPC extension methods (default endpoint: `POST /`). No extra custom REST endpoint is introduced.
 
 - Trigger: call extension methods through A2A JSON-RPC
 - Auth: same `Authorization: Bearer <token>`
@@ -594,7 +594,7 @@ This service exposes OpenCode session lifecycle inspection, list/message-history
   - optional `limit`, `before`
   - optional `metadata.opencode.workspace.id`
   - `before` is an opaque cursor for loading older messages and is only supported on `opencode.sessions.messages.list`
-- Mutating lifecycle methods:
+- Mutation methods:
   - `opencode.sessions.fork`
   - `opencode.sessions.share`
   - `opencode.sessions.unshare`

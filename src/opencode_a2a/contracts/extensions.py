@@ -34,7 +34,7 @@ OPENCODE_WORKSPACE_METADATA_FIELD = "metadata.opencode.workspace.id"
 SESSION_BINDING_EXTENSION_URI = _extension_spec_uri("shared-session-binding-v1")
 MODEL_SELECTION_EXTENSION_URI = _extension_spec_uri("shared-model-selection-v1")
 STREAMING_EXTENSION_URI = _extension_spec_uri("shared-stream-hints-v1")
-SESSION_QUERY_EXTENSION_URI = _extension_spec_uri("opencode-session-query-v1")
+SESSION_MANAGEMENT_EXTENSION_URI = _extension_spec_uri("opencode-session-management-v1")
 PROVIDER_DISCOVERY_EXTENSION_URI = _extension_spec_uri("opencode-provider-discovery-v1")
 INTERRUPT_CALLBACK_EXTENSION_URI = _extension_spec_uri("shared-interactive-interrupt-v1")
 INTERRUPT_RECOVERY_EXTENSION_URI = _extension_spec_uri("opencode-interrupt-recovery-v1")
@@ -160,7 +160,7 @@ SESSION_QUERY_MAX_LIMIT = 100
 SESSION_QUERY_PAGINATION_PARAMS: tuple[str, ...] = ("limit", "before")
 SESSION_QUERY_PAGINATION_UNSUPPORTED: tuple[str, ...] = ("cursor", "page", "size")
 
-SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
+SESSION_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
     "status": SessionQueryMethodContract(
         method="opencode.sessions.status",
         optional_params=("directory", OPENCODE_WORKSPACE_METADATA_FIELD),
@@ -388,20 +388,27 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
     ),
 }
 
-SESSION_QUERY_METHODS: dict[str, str] = {
-    key: contract.method for key, contract in SESSION_QUERY_METHOD_CONTRACTS.items()
+SESSION_METHODS: dict[str, str] = {
+    key: contract.method for key, contract in SESSION_METHOD_CONTRACTS.items()
 }
 SESSION_CONTROL_METHOD_KEYS: tuple[str, ...] = ("prompt_async", "command", "shell")
 SESSION_CONTROL_METHODS: dict[str, str] = {
-    key: SESSION_QUERY_METHODS[key] for key in SESSION_CONTROL_METHOD_KEYS
+    key: SESSION_METHODS[key] for key in SESSION_CONTROL_METHOD_KEYS
 }
-SESSION_LIFECYCLE_METHOD_KEYS: tuple[str, ...] = (
+SESSION_READ_METHOD_KEYS: tuple[str, ...] = (
     "status",
+    "list_sessions",
     "get_session",
     "get_session_children",
     "get_session_todo",
     "get_session_diff",
     "get_session_message",
+    "get_session_messages",
+)
+SESSION_READ_METHODS: dict[str, str] = {
+    key: SESSION_METHODS[key] for key in SESSION_READ_METHOD_KEYS
+}
+SESSION_MUTATION_METHOD_KEYS: tuple[str, ...] = (
     "fork",
     "share",
     "unshare",
@@ -409,8 +416,8 @@ SESSION_LIFECYCLE_METHOD_KEYS: tuple[str, ...] = (
     "revert",
     "unrevert",
 )
-SESSION_LIFECYCLE_METHODS: dict[str, str] = {
-    key: SESSION_QUERY_METHODS[key] for key in SESSION_LIFECYCLE_METHOD_KEYS
+SESSION_MUTATION_METHODS: dict[str, str] = {
+    key: SESSION_METHODS[key] for key in SESSION_MUTATION_METHOD_KEYS
 }
 
 CORE_JSONRPC_METHODS: tuple[str, ...] = tuple(JSONRPCApplication.METHOD_TO_MODEL)
@@ -714,9 +721,9 @@ class JsonRpcCapabilitySnapshot:
             return True
         return conditional_method.enabled
 
-    def session_query_methods(self) -> dict[str, str]:
-        methods = dict(SESSION_QUERY_METHODS)
-        if not self.is_method_enabled(SESSION_QUERY_METHODS["shell"]):
+    def session_management_methods(self) -> dict[str, str]:
+        methods = dict(SESSION_METHODS)
+        if not self.is_method_enabled(SESSION_METHODS["shell"]):
             methods.pop("shell", None)
         return methods
 
@@ -726,8 +733,11 @@ class JsonRpcCapabilitySnapshot:
             methods.pop("shell", None)
         return methods
 
-    def session_lifecycle_methods(self) -> dict[str, str]:
-        return dict(SESSION_LIFECYCLE_METHODS)
+    def session_read_methods(self) -> dict[str, str]:
+        return dict(SESSION_READ_METHODS)
+
+    def session_mutation_methods(self) -> dict[str, str]:
+        return dict(SESSION_MUTATION_METHODS)
 
     def provider_discovery_methods(self) -> dict[str, str]:
         return dict(PROVIDER_DISCOVERY_METHODS)
@@ -748,7 +758,7 @@ class JsonRpcCapabilitySnapshot:
     def supported_jsonrpc_methods(self) -> list[str]:
         methods = [
             *CORE_JSONRPC_METHODS,
-            *(method for key, method in SESSION_QUERY_METHODS.items() if key != "shell"),
+            *(method for key, method in SESSION_METHODS.items() if key != "shell"),
             *PROVIDER_DISCOVERY_METHODS.values(),
             *self.workspace_control_methods().values(),
             *INTERRUPT_RECOVERY_METHODS.values(),
@@ -760,7 +770,7 @@ class JsonRpcCapabilitySnapshot:
 
     def extension_jsonrpc_methods(self) -> list[str]:
         methods = [
-            *(method for key, method in SESSION_QUERY_METHODS.items() if key != "shell"),
+            *(method for key, method in SESSION_METHODS.items() if key != "shell"),
             *PROVIDER_DISCOVERY_METHODS.values(),
             *self.workspace_control_methods().values(),
             *INTERRUPT_RECOVERY_METHODS.values(),
@@ -803,7 +813,7 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> JsonRpcCapa
         SESSION_CONTROL_METHODS["shell"]: DeploymentConditionalMethod(
             method=SESSION_CONTROL_METHODS["shell"],
             enabled=runtime_profile.session_shell.enabled,
-            extension_uri=SESSION_QUERY_EXTENSION_URI,
+            extension_uri=SESSION_MANAGEMENT_EXTENSION_URI,
             toggle=SESSION_SHELL_TOGGLE,
         )
     }
@@ -1018,22 +1028,23 @@ def build_streaming_extension_params() -> dict[str, Any]:
     }
 
 
-def build_session_query_extension_params(
+def build_session_management_extension_params(
     *,
     runtime_profile: RuntimeProfile,
     context_id_prefix: str,
 ) -> dict[str, Any]:
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
-    methods = capability_snapshot.session_query_methods()
+    methods = capability_snapshot.session_management_methods()
+    read_methods = capability_snapshot.session_read_methods()
+    mutation_methods = capability_snapshot.session_mutation_methods()
     control_methods = capability_snapshot.session_control_methods()
-    lifecycle_methods = capability_snapshot.session_lifecycle_methods()
-    active_session_query_methods = set(methods.values())
+    active_session_methods = set(methods.values())
 
     method_contracts: dict[str, Any] = {}
     pagination_applies_to: list[str] = []
 
-    for method_contract in SESSION_QUERY_METHOD_CONTRACTS.values():
-        if method_contract.method not in active_session_query_methods:
+    for method_contract in SESSION_METHOD_CONTRACTS.values():
+        if method_contract.method not in active_session_methods:
             continue
         params_contract = _build_method_contract_params(
             required=method_contract.required_params,
@@ -1048,7 +1059,7 @@ def build_session_query_extension_params(
             "params": params_contract,
             "result": result_contract,
         }
-        if method_contract.method == SESSION_QUERY_METHODS["prompt_async"]:
+        if method_contract.method == SESSION_METHODS["prompt_async"]:
             contract_doc["request_parts"] = _build_prompt_async_part_contracts()
             contract_doc["subtask_support"] = _build_prompt_async_subtask_support()
         if method_contract.notification_response_status is not None:
@@ -1062,8 +1073,9 @@ def build_session_query_extension_params(
 
     return {
         "methods": methods,
+        "read_methods": read_methods,
+        "mutation_methods": mutation_methods,
         "control_methods": control_methods,
-        "lifecycle_methods": lifecycle_methods,
         "control_method_flags": capability_snapshot.control_method_flags(),
         "profile": runtime_profile.summary_dict(),
         "pagination": {
@@ -1075,7 +1087,7 @@ def build_session_query_extension_params(
             "cursor_param": "before",
             "result_cursor_field": "next_cursor",
             "applies_to": pagination_applies_to,
-            "cursor_applies_to": [SESSION_QUERY_METHODS["get_session_messages"]],
+            "cursor_applies_to": [SESSION_METHODS["get_session_messages"]],
         },
         "method_contracts": method_contracts,
         "errors": {
@@ -1374,9 +1386,9 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
-                "extension_uri": SESSION_QUERY_EXTENSION_URI,
+                "extension_uri": SESSION_MANAGEMENT_EXTENSION_URI,
             }
-            for key, method in SESSION_QUERY_METHODS.items()
+            for key, method in SESSION_METHODS.items()
             if key != "shell"
         }
     )
@@ -1450,7 +1462,7 @@ def build_compatibility_profile_params(
                 "availability": "always",
                 "retention": "required",
             },
-            SESSION_QUERY_EXTENSION_URI: {
+            SESSION_MANAGEMENT_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
                 "availability": "always",
                 "retention": "stable",
@@ -1617,7 +1629,7 @@ def build_wire_contract_params(
                 SESSION_BINDING_EXTENSION_URI,
                 MODEL_SELECTION_EXTENSION_URI,
                 STREAMING_EXTENSION_URI,
-                SESSION_QUERY_EXTENSION_URI,
+                SESSION_MANAGEMENT_EXTENSION_URI,
                 PROVIDER_DISCOVERY_EXTENSION_URI,
                 WORKSPACE_CONTROL_EXTENSION_URI,
                 INTERRUPT_RECOVERY_EXTENSION_URI,

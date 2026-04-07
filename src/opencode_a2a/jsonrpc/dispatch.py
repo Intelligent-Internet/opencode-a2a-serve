@@ -122,7 +122,7 @@ def build_extension_method_registry(
     session_control_methods = {context.method_prompt_async, context.method_command}
     if context.method_shell is not None:
         session_control_methods.add(context.method_shell)
-    session_lifecycle_methods = {
+    session_item_methods = {
         context.method_session_status,
         context.method_get_session,
         context.method_get_session_children,
@@ -157,11 +157,11 @@ def build_extension_method_registry(
         (
             ExtensionMethodSpec(
                 name="session_lifecycle",
-                methods=frozenset(session_lifecycle_methods),
+                methods=frozenset(session_item_methods),
                 handler=handle_session_lifecycle_request,
             ),
             ExtensionMethodSpec(
-                name="session_query",
+                name="session_listing",
                 methods=frozenset(
                     {
                         context.method_list_sessions,

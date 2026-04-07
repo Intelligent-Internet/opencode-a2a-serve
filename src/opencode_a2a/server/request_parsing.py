@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from ..contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
-    SESSION_QUERY_METHODS,
+    SESSION_METHODS,
     WORKSPACE_CONTROL_METHODS,
 )
 from ..jsonrpc.error_responses import build_http_error_body
@@ -43,7 +43,7 @@ def _detect_sensitive_extension_method(payload: dict | None) -> str | None:
     if not isinstance(method, str):
         return None
     sensitive_methods = (
-        set(SESSION_QUERY_METHODS.values())
+        set(SESSION_METHODS.values())
         | set(INTERRUPT_CALLBACK_METHODS.values())
         | set(INTERRUPT_RECOVERY_METHODS.values())
         | set(WORKSPACE_CONTROL_METHODS.values())

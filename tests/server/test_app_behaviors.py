@@ -31,7 +31,7 @@ from opencode_a2a.server.application import (
     _build_jsonrpc_extension_openapi_description,
     _build_jsonrpc_extension_openapi_examples,
     _build_rest_message_openapi_examples,
-    _build_session_query_skill_examples,
+    _build_session_management_skill_examples,
     _configure_logging,
     _decode_payload_preview,
     _detect_sensitive_extension_method,
@@ -89,10 +89,8 @@ def test_request_payload_helpers_cover_edge_cases() -> None:
     assert _detect_sensitive_extension_method(None) is None
     assert _detect_sensitive_extension_method({"method": "message/send"}) is None
     assert (
-        _detect_sensitive_extension_method(
-            {"method": app_module.SESSION_QUERY_METHODS["list_sessions"]}
-        )
-        == app_module.SESSION_QUERY_METHODS["list_sessions"]
+        _detect_sensitive_extension_method({"method": app_module.SESSION_METHODS["list_sessions"]})
+        == app_module.SESSION_METHODS["list_sessions"]
     )
 
     assert _parse_content_length(None) is None
@@ -250,13 +248,15 @@ def test_agent_card_helper_builders_cover_optional_branches() -> None:
     assert any("project alpha" in item for item in _build_chat_examples("alpha"))
     assert all(
         "shell" not in item
-        for item in _build_session_query_skill_examples(
+        for item in _build_session_management_skill_examples(
             capability_snapshot=disabled_capability_snapshot
         )
     )
     assert any(
         "shell" in item
-        for item in _build_session_query_skill_examples(capability_snapshot=capability_snapshot)
+        for item in _build_session_management_skill_examples(
+            capability_snapshot=capability_snapshot
+        )
     )
     assert "opencode.sessions.shell" in _build_jsonrpc_extension_openapi_description(
         capability_snapshot=capability_snapshot

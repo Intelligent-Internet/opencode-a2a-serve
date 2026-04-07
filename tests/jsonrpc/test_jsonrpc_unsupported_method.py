@@ -152,7 +152,8 @@ async def test_unsupported_method_notification_returns_204() -> None:
         )
 
     # Even unsupported methods follow notification semantics: if id is missing, return 204.
-    # Note: OpencodeSessionQueryJSONRPCApplication._handle_requests returns 204 for notifications
+    # Note: OpencodeSessionManagementJSONRPCApplication._handle_requests
+    # returns 204 for notifications
     # if it catches the method. For unsupported methods, it now also returns 204 if id is None.
     assert response.status_code == 204
 
