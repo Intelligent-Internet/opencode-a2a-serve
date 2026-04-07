@@ -68,8 +68,7 @@ def build_static_auth_credentials(settings: Settings) -> tuple[StaticAuthCredent
 
 def has_configured_auth_scheme(settings: Settings, scheme: str) -> bool:
     return any(
-        credential.auth_scheme == scheme
-        for credential in build_static_auth_credentials(settings)
+        credential.auth_scheme == scheme for credential in build_static_auth_credentials(settings)
     )
 
 

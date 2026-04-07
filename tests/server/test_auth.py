@@ -41,7 +41,7 @@ def test_build_static_auth_credentials_uses_registry_only() -> None:
                 "credential_id": "ops-basic",
                 "scheme": "basic",
                 "username": "ops",
-                "password": "ops-pass",
+                "password": "ops-pass",  # pragma: allowlist secret
             },
             {
                 "credential_id": "disabled",
@@ -79,7 +79,7 @@ def test_authenticate_static_credential_supports_bearer_and_basic() -> None:
                 "credential_id": "ops-basic",
                 "scheme": "basic",
                 "username": "ops",
-                "password": "ops-pass",
+                "password": "ops-pass",  # pragma: allowlist secret
                 "capabilities": ["session_shell"],
             },
         )
