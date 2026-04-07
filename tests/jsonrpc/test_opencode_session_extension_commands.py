@@ -535,9 +535,20 @@ async def test_session_shell_extension_requires_session_shell_capability(monkeyp
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            test_bearer_token="t-1",
-            test_basic_username="operator",
-            test_basic_password="op-pass",  # pragma: allowlist secret
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-bearer",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                },
+            ),
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             **_BASE_SETTINGS,
@@ -546,9 +557,20 @@ async def test_session_shell_extension_requires_session_shell_capability(monkeyp
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            test_bearer_token="t-1",
-            test_basic_username="operator",
-            test_basic_password="op-pass",  # pragma: allowlist secret
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-bearer",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                },
+            ),
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             **_BASE_SETTINGS,
@@ -577,6 +599,7 @@ async def test_session_shell_extension_requires_session_shell_capability(monkeyp
         "type": "AUTHORIZATION_FORBIDDEN",
         "method": "opencode.sessions.shell",
         "capability": "session_shell",
+        "credential_id": "cred-bearer",
     }
     assert dummy.shell_calls == []
 

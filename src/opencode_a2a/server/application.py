@@ -508,6 +508,12 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
         identity = getattr(request.state, "user_identity", None)
         if identity:
             context.state["identity"] = identity
+        auth_scheme = getattr(request.state, "user_auth_scheme", None)
+        if auth_scheme:
+            context.state["auth_scheme"] = auth_scheme
+        credential_id = getattr(request.state, "user_credential_id", None)
+        if credential_id:
+            context.state["credential_id"] = credential_id
         negotiated_protocol_version = getattr(request.state, "a2a_protocol_version", None)
         if negotiated_protocol_version:
             context.state["a2a_protocol_version"] = negotiated_protocol_version

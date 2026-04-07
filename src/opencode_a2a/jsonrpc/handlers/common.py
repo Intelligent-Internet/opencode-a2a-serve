@@ -51,6 +51,7 @@ def build_authorization_forbidden_response(
     *,
     method: str,
     capability: str,
+    credential_id: str | None = None,
     error_code: int = ERR_AUTHORIZATION_FORBIDDEN,
 ) -> Response:
     return context.error_response(
@@ -59,6 +60,7 @@ def build_authorization_forbidden_response(
             error_code,
             method=method,
             capability=capability,
+            credential_id=credential_id,
         ),
     )
 

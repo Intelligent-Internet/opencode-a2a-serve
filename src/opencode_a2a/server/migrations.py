@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 STATE_STORE_SCHEMA_NAME = "state_store"
-CURRENT_STATE_STORE_SCHEMA_VERSION = 3
+CURRENT_STATE_STORE_SCHEMA_VERSION = 4
 
 _SCHEMA_VERSION_METADATA = MetaData()
 
@@ -110,6 +110,18 @@ def _migration_3_add_lightweight_state_indexes(
     )
     for index in indexes:
         _create_missing_index(connection, index=index)
+
+
+def _migration_4_add_interrupt_credential_id(
+    connection: Connection,
+    *,
+    interrupt_requests_table: Table,
+) -> None:
+    _add_missing_nullable_column(
+        connection,
+        table=interrupt_requests_table,
+        column_name="credential_id",
+    )
 
 
 def _read_schema_version(
@@ -212,6 +224,10 @@ def migrate_state_store_schema(
         3: lambda conn: _migration_3_add_lightweight_state_indexes(
             conn,
             pending_session_claims_table=pending_session_claims_table,
+            interrupt_requests_table=interrupt_requests_table,
+        ),
+        4: lambda conn: _migration_4_add_interrupt_credential_id(
+            conn,
             interrupt_requests_table=interrupt_requests_table,
         ),
     }

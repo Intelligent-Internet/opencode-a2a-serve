@@ -452,6 +452,7 @@ SESSION_QUERY_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "method",
     "session_id",
     "capability",
+    "credential_id",
     "upstream_status",
     "detail",
 )
@@ -689,6 +690,7 @@ WORKSPACE_CONTROL_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",
     "method",
     "capability",
+    "credential_id",
     "upstream_status",
     "detail",
 )

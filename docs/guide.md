@@ -57,7 +57,7 @@ Key variables to understand protocol behavior:
 - Runtime authentication is configured only through the static credential registry declared by `A2A_STATIC_AUTH_CREDENTIALS`.
 - The runtime maps authenticated requests to stable principals rather than credential-derived identities.
 - With `A2A_STATIC_AUTH_CREDENTIALS`, every bearer credential must declare an explicit `principal`; Basic credentials always derive their runtime principal from `username`.
-- `credential_id`, when provided, is carried as optional runtime metadata for audit, logging, diagnostics, and credential-rotation workflows; it does not participate in principal resolution or authorization decisions.
+- `credential_id`, when provided, is carried as optional runtime metadata for audit, logging, diagnostics, credential-rotation workflows, authorization-denied diagnostics, and interrupt tracking; it does not participate in principal resolution or authorization decisions.
 - Individual static credentials can be disabled by removing them from the registry or setting `enabled=false`, then restarting/reloading the deployment.
 - High-risk methods require explicitly granted operator-level capabilities:
   - `opencode.sessions.shell`

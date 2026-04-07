@@ -36,12 +36,14 @@ def test_jsonrpc_error_mapping_helpers_preserve_business_contract_fields() -> No
         -32007,
         method="opencode.sessions.shell",
         capability="session_shell",
+        credential_id="ops-basic",
     )
     assert authz_forbidden.code == -32007
     assert authz_forbidden.data == {
         "type": "AUTHORIZATION_FORBIDDEN",
         "method": "opencode.sessions.shell",
         "capability": "session_shell",
+        "credential_id": "ops-basic",
     }
 
     missing_session = session_not_found_error(-32001, session_id="s-404")

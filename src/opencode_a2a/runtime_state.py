@@ -10,6 +10,7 @@ class InterruptRequestBinding:
     session_id: str
     interrupt_type: str
     identity: str | None
+    credential_id: str | None
     task_id: str | None
     context_id: str | None
     details: dict[str, Any] | None

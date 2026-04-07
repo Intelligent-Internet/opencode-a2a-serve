@@ -151,9 +151,20 @@ async def test_workspace_control_extension_validates_request_shape(monkeypatch) 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyOpencodeUpstreamClient)
     app = app_module.create_app(
         make_settings(
-            test_bearer_token="t-1",
-            test_basic_username="operator",
-            test_basic_password="op-pass",  # pragma: allowlist secret
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-bearer",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                },
+            ),
             a2a_log_payloads=False,
             a2a_enable_workspace_mutations=True,
             **_BASE_SETTINGS,
@@ -188,9 +199,20 @@ async def test_workspace_control_mutations_require_workspace_mutation_capability
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyOpencodeUpstreamClient)
     app = app_module.create_app(
         make_settings(
-            test_bearer_token="t-1",
-            test_basic_username="operator",
-            test_basic_password="op-pass",  # pragma: allowlist secret
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-bearer",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "operator",
+                    "password": "op-pass",  # pragma: allowlist secret
+                },
+            ),
             a2a_log_payloads=False,
             a2a_enable_workspace_mutations=True,
             **_BASE_SETTINGS,
@@ -217,6 +239,7 @@ async def test_workspace_control_mutations_require_workspace_mutation_capability
         "type": "AUTHORIZATION_FORBIDDEN",
         "method": "opencode.workspaces.create",
         "capability": "workspace_mutation",
+        "credential_id": "cred-bearer",
     }
 
 

@@ -114,11 +114,13 @@ async def handle_session_control_request(
         CAPABILITY_SESSION_SHELL,
     ):
         _log_shell_audit("authorization_forbidden")
+        credential_id = getattr(request.state, "user_credential_id", None)
         return build_authorization_forbidden_response(
             context,
             base_request.id,
             method=base_request.method,
             capability=CAPABILITY_SESSION_SHELL,
+            credential_id=credential_id if isinstance(credential_id, str) else None,
             error_code=SESSION_QUERY_ERROR_BUSINESS_CODES["AUTHORIZATION_FORBIDDEN"],
         )
 

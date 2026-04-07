@@ -238,12 +238,15 @@ def authorization_forbidden_error(
     *,
     method: str,
     capability: str,
+    credential_id: str | None = None,
 ) -> JSONRPCError:
     data: dict[str, Any] = {
         "type": "AUTHORIZATION_FORBIDDEN",
         "method": method,
         "capability": capability,
     }
+    if credential_id is not None:
+        data["credential_id"] = credential_id
     return JSONRPCError(
         code=code,
         message="Authorization forbidden",

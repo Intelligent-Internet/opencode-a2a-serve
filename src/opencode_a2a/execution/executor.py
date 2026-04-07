@@ -212,6 +212,8 @@ class OpencodeAgentExecutor(AgentExecutor):
 
         call_context = context.call_context
         identity = (call_context.state.get("identity") if call_context else None) or "anonymous"
+        credential_id = call_context.state.get("credential_id") if call_context else None
+        auth_scheme = call_context.state.get("auth_scheme") if call_context else None
 
         streaming_request = self._should_stream(context)
         accepted_output_modes = normalize_accepted_output_modes(context.configuration)
@@ -311,10 +313,13 @@ class OpencodeAgentExecutor(AgentExecutor):
 
         logger.debug(
             (
-                "Received message identity=%s task_id=%s context_id=%s "
+                "Received message identity=%s credential_id=%s auth_scheme=%s "
+                "task_id=%s context_id=%s "
                 "streaming=%s text=%s part_count=%s"
             ),
             identity,
+            credential_id,
+            auth_scheme,
             task_id,
             context_id,
             streaming_request,

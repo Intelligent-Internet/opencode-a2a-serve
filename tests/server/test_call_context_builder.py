@@ -20,6 +20,8 @@ def _request(path: str, *, raw_path: bytes | None = None) -> Request:
     }
     req = Request(scope)
     req.state.user_identity = "opaque:test-id"
+    req.state.user_auth_scheme = "bearer"
+    req.state.user_credential_id = "cred-123"
     return req
 
 
@@ -27,6 +29,8 @@ def test_builder_sets_identity_for_non_stream_request():
     builder = IdentityAwareCallContextBuilder()
     context = builder.build(_request("/"))
     assert context.state.get("identity") == "opaque:test-id"
+    assert context.state.get("auth_scheme") == "bearer"
+    assert context.state.get("credential_id") == "cred-123"
     assert context.state.get("a2a_streaming_request") is None
 
 
@@ -34,6 +38,8 @@ def test_builder_marks_rest_stream_request():
     builder = IdentityAwareCallContextBuilder()
     context = builder.build(_request("/v1/message:stream"))
     assert context.state.get("identity") == "opaque:test-id"
+    assert context.state.get("auth_scheme") == "bearer"
+    assert context.state.get("credential_id") == "cred-123"
     assert context.state.get("a2a_streaming_request") is True
 
 
@@ -41,4 +47,6 @@ def test_builder_marks_encoded_stream_request():
     builder = IdentityAwareCallContextBuilder()
     context = builder.build(_request("/v1/message%3Astream", raw_path=b"/v1/message%3Astream"))
     assert context.state.get("identity") == "opaque:test-id"
+    assert context.state.get("auth_scheme") == "bearer"
+    assert context.state.get("credential_id") == "cred-123"
     assert context.state.get("a2a_streaming_request") is True

@@ -521,6 +521,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "method",
         "session_id",
         "capability",
+        "credential_id",
         "upstream_status",
         "detail",
     ]

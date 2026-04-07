@@ -158,11 +158,13 @@ async def handle_workspace_control_request(
         "remove_worktree",
         "reset_worktree",
     } and not request_has_capability(request, CAPABILITY_WORKSPACE_MUTATION):
+        credential_id = getattr(request.state, "user_credential_id", None)
         return build_authorization_forbidden_response(
             context,
             base_request.id,
             method=base_request.method,
             capability=CAPABILITY_WORKSPACE_MUTATION,
+            credential_id=credential_id if isinstance(credential_id, str) else None,
             error_code=WORKSPACE_CONTROL_ERROR_BUSINESS_CODES["AUTHORIZATION_FORBIDDEN"],
         )
 

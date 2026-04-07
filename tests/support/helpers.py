@@ -254,6 +254,7 @@ class DummyChatOpencodeUpstreamClient:
         session_id: str,
         interrupt_type: str | None = None,
         identity: str | None = None,
+        credential_id: str | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         details: dict[str, Any] | None = None,
@@ -264,6 +265,7 @@ class DummyChatOpencodeUpstreamClient:
             session_id,
             interrupt_type,
             identity,
+            credential_id,
             task_id,
             context_id,
             details,
@@ -773,6 +775,7 @@ class DummySessionQueryOpencodeUpstreamClient:
         session_id: str,
         interrupt_type: str,
         identity: str | None = None,
+        credential_id: str | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         details: dict[str, Any] | None = None,
@@ -783,6 +786,7 @@ class DummySessionQueryOpencodeUpstreamClient:
             "session_id": session_id,
             "interrupt_type": interrupt_type,
             "identity": identity,
+            "credential_id": credential_id,
             "task_id": task_id,
             "context_id": context_id,
         }
@@ -801,6 +805,7 @@ class DummySessionQueryOpencodeUpstreamClient:
                 self.session_id = data.get("session_id")
                 self.interrupt_type = data.get("interrupt_type")
                 self.identity = data.get("identity")
+                self.credential_id = data.get("credential_id")
                 self.task_id = data.get("task_id")
                 self.context_id = data.get("context_id")
                 self.details = self_details
@@ -837,6 +842,7 @@ class DummySessionQueryOpencodeUpstreamClient:
                 self.session_id = data.get("session_id")
                 self.interrupt_type = data.get("interrupt_type")
                 self.identity = data.get("identity")
+                self.credential_id = data.get("credential_id")
                 self.task_id = data.get("task_id")
                 self.context_id = data.get("context_id")
                 self.details = details

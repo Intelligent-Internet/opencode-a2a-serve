@@ -477,6 +477,70 @@ async def test_interrupt_callback_extension_rejects_identity_mismatch(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_interrupt_callback_extension_rejects_credential_id_mismatch(monkeypatch):
+    import opencode_a2a.server.application as app_module
+
+    class InterruptClient(DummyOpencodeUpstreamClient):
+        pass
+
+    dummy = InterruptClient(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-current",
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+    await dummy.remember_interrupt_request(
+        request_id="perm-owned",
+        session_id="ses-1",
+        interrupt_type="permission",
+        identity="automation",
+        credential_id="cred-original",
+    )
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "credential_id": "cred-current",
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 181,
+                "method": "a2a.interrupt.permission.reply",
+                "params": {"request_id": "perm-owned", "reply": "once"},
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32004
+        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
+
+
+@pytest.mark.asyncio
 async def test_interrupt_callback_extension_maps_concurrency_limit_to_unreachable(monkeypatch):
     import opencode_a2a.server.application as app_module
 
