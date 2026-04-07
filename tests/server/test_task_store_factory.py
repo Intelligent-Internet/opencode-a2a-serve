@@ -36,7 +36,7 @@ def _task(task_id: str, *, context_id: str = "ctx-1") -> Task:
 
 def test_build_task_store_defaults_to_database_backend(tmp_path: Path) -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'default-tasks.db'}",
     )
     store = build_task_store(settings)
@@ -49,7 +49,7 @@ def test_build_task_store_allows_explicit_memory_backend() -> None:
     from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 
     store = build_task_store(
-        make_settings(a2a_bearer_token="test-token", a2a_task_store_backend="memory")
+        make_settings(test_bearer_token="test-token", a2a_task_store_backend="memory")
     )
 
     assert isinstance(store, GuardedTaskStore)
@@ -59,7 +59,7 @@ def test_build_task_store_allows_explicit_memory_backend() -> None:
 
 def test_describe_lightweight_persistence_backend_marks_sqlite_first_scope() -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url="sqlite+aiosqlite:///./opencode-a2a.db",
     )
 
@@ -73,7 +73,7 @@ def test_describe_lightweight_persistence_backend_marks_sqlite_first_scope() -> 
 
 def test_describe_lightweight_persistence_backend_supports_memory_backend() -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_backend="memory",
     )
 
@@ -88,7 +88,7 @@ async def test_database_task_store_persists_tasks_across_rebuilds(tmp_path: Path
     database_path = tmp_path / "tasks.db"
     database_url = f"sqlite+aiosqlite:///{database_path}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
 
@@ -120,7 +120,7 @@ async def test_database_task_store_can_build_multiple_instances_without_warnings
     tmp_path: Path,
 ) -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'warnings.db'}",
     )
     with warnings.catch_warnings():
@@ -140,7 +140,7 @@ async def test_build_database_engine_configures_sqlite_pragmas_and_parent_dir(
 ) -> None:
     database_path = tmp_path / "nested" / "runtime.db"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{database_path}",
     )
     engine = build_database_engine(settings)
@@ -165,7 +165,7 @@ async def test_build_task_store_does_not_dispose_shared_engine(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'shared-engine.db'}",
     )
     engine = build_database_engine(settings)
@@ -185,7 +185,7 @@ async def test_task_store_preserves_first_terminal_state(
     backend: str,
 ) -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_backend=backend,
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / f'{backend}.db'}",
     )
@@ -214,7 +214,7 @@ async def test_database_task_store_keeps_first_terminal_state_across_independent
     tmp_path: Path,
 ) -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'terminal-guard.db'}",
     )
     first = build_task_store(settings)
@@ -250,7 +250,7 @@ async def test_task_store_rejects_late_mutation_after_terminal_state(
     backend: str,
 ) -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_backend=backend,
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / f'{backend}-late.db'}",
     )
@@ -282,7 +282,7 @@ async def test_database_task_store_atomic_guard_does_not_depend_on_stale_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=f"sqlite+aiosqlite:///{tmp_path / 'stale-read.db'}",
     )
     first = build_task_store(settings)

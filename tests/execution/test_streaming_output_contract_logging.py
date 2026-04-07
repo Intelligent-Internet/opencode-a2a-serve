@@ -39,7 +39,7 @@ async def test_streaming_logs_raw_upstream_events_at_debug(caplog) -> None:
         response_text="done",
     )
     client.settings = make_settings(
-        a2a_bearer_token="test",
+        test_bearer_token="test",
         opencode_base_url="http://localhost",
         a2a_log_body_limit=64,
     )
@@ -87,7 +87,7 @@ async def test_streaming_logs_interrupt_payload_at_debug_with_redaction(caplog) 
         response_text="done",
     )
     client.settings = make_settings(
-        a2a_bearer_token="test",
+        test_bearer_token="test",
         opencode_base_url="http://localhost",
         a2a_log_body_limit=0,
     )

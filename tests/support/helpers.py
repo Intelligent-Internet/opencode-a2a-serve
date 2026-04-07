@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import uuid
+from base64 import b64encode
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock
 
@@ -13,16 +14,66 @@ from opencode_a2a.config import Settings
 from opencode_a2a.opencode_upstream_client import OpencodeMessage, OpencodeMessagePage
 
 
+def _build_test_static_auth_credentials(**overrides: Any) -> tuple[dict[str, Any], ...]:
+    explicit_credentials = overrides.pop("a2a_static_auth_credentials", None)
+    has_bearer_override = "test_bearer_token" in overrides
+    has_basic_username_override = "test_basic_username" in overrides
+    has_basic_password_override = "test_basic_password" in overrides  # pragma: allowlist secret
+    bearer_token = overrides.pop("test_bearer_token", "test-token")
+    basic_username = overrides.pop("test_basic_username", None)
+    basic_password = overrides.pop("test_basic_password", None)  # pragma: allowlist secret
+
+    if explicit_credentials is not None:
+        if (
+            (has_bearer_override and bearer_token is not None)
+            or (has_basic_username_override and basic_username is not None)
+            or (has_basic_password_override and basic_password is not None)
+        ):
+            raise ValueError(
+                "Test settings helper does not combine a2a_static_auth_credentials "
+                "with shorthand auth overrides."
+            )
+        return tuple(explicit_credentials)
+
+    credentials: list[dict[str, Any]] = []
+    if bearer_token is not None:
+        credentials.append(
+            {
+                "scheme": "bearer",
+                "token": bearer_token,
+                "principal": "automation",
+            }
+        )
+    if basic_username is not None or basic_password is not None:
+        if not basic_username or not basic_password:
+            raise ValueError(
+                "Test settings helper requires both basic username and password overrides."
+            )
+        credentials.append(
+            {
+                "scheme": "basic",
+                "username": basic_username,
+                "password": basic_password,
+            }
+        )
+    return tuple(credentials)
+
+
 def make_settings(**overrides: Any) -> Settings:
     base: dict[str, Any] = {
         "opencode_base_url": "http://127.0.0.1:4096",
-        "a2a_bearer_token": "test-token",
         "a2a_task_store_database_url": (
             f"sqlite+aiosqlite:///{tempfile.gettempdir()}/opencode-a2a-test-{uuid.uuid4().hex}.db"
         ),
     }
     base.update(overrides)
+    base["a2a_static_auth_credentials"] = _build_test_static_auth_credentials(**base)
     return Settings(**base)
+
+
+def make_basic_auth_header(username: str, password: str) -> dict[str, str]:
+    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
 
 
 class DummyEventQueue:
@@ -70,7 +121,6 @@ def configure_mock_client_runtime(
     settings_overrides: dict[str, Any] | None = None,
 ) -> None:
     overrides: dict[str, Any] = {
-        "a2a_bearer_token": "test",
         "opencode_base_url": "http://localhost",
         "a2a_allow_directory_override": True,
     }
@@ -147,10 +197,7 @@ class DummyChatOpencodeUpstreamClient:
         self.created_workspace_ids: list[str | None] = []
         self.stream_timeout = None
         self.directory = None
-        self.settings = settings or make_settings(
-            a2a_bearer_token="test",
-            opencode_base_url="http://localhost",
-        )
+        self.settings = settings or make_settings(opencode_base_url="http://localhost")
 
     async def close(self) -> None:
         return None

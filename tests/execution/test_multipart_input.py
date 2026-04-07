@@ -11,7 +11,7 @@ class RecordingMultipartClient:
         self.stream_timeout = None
         self.directory = "/tmp/workspace"
         self.settings = make_settings(
-            a2a_bearer_token="test",
+            test_bearer_token="test",
             opencode_base_url="http://localhost",
         )
         self.created_titles: list[str | None] = []

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import httpx
@@ -151,7 +150,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'app-state.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
 
@@ -173,7 +172,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             request_id="perm-1",
             session_id=session_id,
             interrupt_type="permission",
-            identity=f"bearer:{hashlib.sha256(b'test-token').hexdigest()[:12]}",
+            identity="automation",
             task_id="task-1",
             context_id="ctx-1",
             details={"permission": "read", "patterns": ["/tmp/config.yml"]},

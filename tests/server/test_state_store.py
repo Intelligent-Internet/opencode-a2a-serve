@@ -156,7 +156,7 @@ async def test_state_store_write_helper_recovers_from_concurrent_first_insert_ra
 async def test_database_session_state_repository_persists_bindings(tmp_path: Path) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'state.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -210,7 +210,7 @@ async def test_database_pending_session_claim_expires(tmp_path: Path) -> None:
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'pending-claim.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -241,7 +241,7 @@ async def test_database_pending_session_claim_keeps_absolute_expiry_when_runtime
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'pending-claim-expires-at.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -282,7 +282,7 @@ async def test_database_session_binding_and_owner_do_not_expire_with_time(tmp_pa
 
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'durable-state.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -309,7 +309,7 @@ async def test_database_interrupt_request_repository_persists_active_binding(
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'interrupt.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -351,7 +351,7 @@ async def test_interrupt_request_repository_lists_pending_items_by_identity_and_
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'interrupt-list.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -412,7 +412,7 @@ async def test_database_interrupt_request_repository_upgrades_legacy_interrupt_t
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'legacy-interrupt.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -483,7 +483,7 @@ async def test_database_state_store_records_schema_version_for_existing_current_
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'current-schema.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)
@@ -562,7 +562,7 @@ async def test_database_state_store_initialization_is_idempotent_across_reposito
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'idempotent-state.db'}"
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_task_store_database_url=database_url,
     )
     engine = build_database_engine(settings)

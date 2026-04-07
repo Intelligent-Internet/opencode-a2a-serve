@@ -8,11 +8,16 @@ from a2a.types import JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
+from ...auth import (
+    CAPABILITY_WORKSPACE_MUTATION,
+    request_has_capability,
+)
 from ...contracts.extensions import WORKSPACE_CONTROL_ERROR_BUSINESS_CODES
 from ...opencode_upstream_client import UpstreamConcurrencyLimitError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import invalid_params_error
 from .common import (
+    build_authorization_forbidden_response,
     build_internal_error_response,
     build_success_response,
     build_upstream_concurrency_error_response,
@@ -120,8 +125,6 @@ async def handle_workspace_control_request(
     params: dict[str, Any],
     request: Request,
 ) -> Response:
-    del request
-
     method_map: dict[str, str] = {
         context.method_list_projects: "list_projects",
         context.method_get_current_project: "get_current_project",
@@ -146,6 +149,21 @@ async def handle_workspace_control_request(
                 f"Unsupported method: {base_request.method}",
                 data={"type": "INVALID_FIELD", "field": "method"},
             ),
+        )
+
+    if method_key in {
+        "create_workspace",
+        "remove_workspace",
+        "create_worktree",
+        "remove_worktree",
+        "reset_worktree",
+    } and not request_has_capability(request, CAPABILITY_WORKSPACE_MUTATION):
+        return build_authorization_forbidden_response(
+            context,
+            base_request.id,
+            method=base_request.method,
+            capability=CAPABILITY_WORKSPACE_MUTATION,
+            error_code=WORKSPACE_CONTROL_ERROR_BUSINESS_CODES["AUTHORIZATION_FORBIDDEN"],
         )
 
     try:

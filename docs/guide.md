@@ -23,7 +23,7 @@ This section keeps only the protocol-relevant variables. For the full runtime va
 
 Key variables to understand protocol behavior:
 
-- `A2A_BEARER_TOKEN`: required for all authenticated runtime requests.
+- `A2A_STATIC_AUTH_CREDENTIALS`: required static credential registry in JSON array form. Supports multiple `bearer` / `basic` credentials, bearer-only required `principal`, optional `credential_id`, optional `capabilities`, and optional `enabled=false` for explicit disablement.
 - `OPENCODE_BASE_URL`: upstream OpenCode HTTP endpoint. Default: `http://127.0.0.1:4096`. In two-process deployments, set it explicitly.
 - `OPENCODE_WORKSPACE_ROOT`: service-level default workspace root exposed to OpenCode when clients do not request a narrower directory override.
 - `A2A_ALLOW_DIRECTORY_OVERRIDE`: controls whether clients may pass `metadata.opencode.directory`.
@@ -54,9 +54,20 @@ Key variables to understand protocol behavior:
 - `A2A_CLIENT_SUPPORTED_TRANSPORTS`: ordered outbound transport preference list.
 - `A2A_TASK_STORE_BACKEND`: unified lightweight persistence backend for SDK task rows plus adapter-managed session / interrupt state. Supported values: `database`, `memory`. Default: `database`.
 - `A2A_TASK_STORE_DATABASE_URL`: database URL used by the unified durable backend when `A2A_TASK_STORE_BACKEND=database`. Default: `sqlite+aiosqlite:///./opencode-a2a.db`.
-- Runtime authentication is bearer-token only via `A2A_BEARER_TOKEN`.
+- Runtime authentication is configured only through the static credential registry declared by `A2A_STATIC_AUTH_CREDENTIALS`.
+- The runtime maps authenticated requests to stable principals rather than credential-derived identities.
+- With `A2A_STATIC_AUTH_CREDENTIALS`, every bearer credential must declare an explicit `principal`; Basic credentials always derive their runtime principal from `username`.
+- `credential_id`, when provided, is carried as optional runtime metadata for audit, logging, diagnostics, and credential-rotation workflows; it does not participate in principal resolution or authorization decisions.
+- Individual static credentials can be disabled by removing them from the registry or setting `enabled=false`, then restarting/reloading the deployment.
+- High-risk methods require explicitly granted operator-level capabilities:
+  - `opencode.sessions.shell`
+  - `opencode.workspaces.create`
+  - `opencode.workspaces.remove`
+  - `opencode.worktrees.create`
+  - `opencode.worktrees.remove`
+  - `opencode.worktrees.reset`
 - Runtime authentication also applies to `/health`; the public unauthenticated discovery surface remains `/.well-known/agent-card.json` and `/.well-known/agent.json`.
-- The authenticated extended card endpoint `/agent/authenticatedExtendedCard` is bearer-token protected.
+- The authenticated extended card endpoint `/agent/authenticatedExtendedCard` accepts the same configured bearer/basic auth modes.
 - The same outbound client flags are also honored by the server-side embedded A2A client used for peer calls and `a2a_call` tool execution:
   - `A2A_CLIENT_TIMEOUT_SECONDS`
   - `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`
@@ -123,7 +134,7 @@ Then start `opencode-a2a` against that explicit upstream URL:
 
 ```bash
 OPENCODE_BASE_URL=http://127.0.0.1:4096 \
-A2A_BEARER_TOKEN=dev-token \
+A2A_STATIC_AUTH_CREDENTIALS='[{"scheme":"bearer","token":"dev-token","principal":"automation"}]' \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
@@ -135,7 +146,7 @@ By default, the service uses a SQLite-backed durable state store:
 
 ```bash
 OPENCODE_BASE_URL=http://127.0.0.1:4096 \
-A2A_BEARER_TOKEN=dev-token \
+A2A_STATIC_AUTH_CREDENTIALS='[{"scheme":"bearer","token":"dev-token","principal":"automation"}]' \
 A2A_TASK_STORE_DATABASE_URL=sqlite+aiosqlite:///./opencode-a2a.db \
 opencode-a2a
 ```
@@ -214,7 +225,7 @@ If one deployment works while another fails against the same upstream provider, 
 
 ## Auth, Limits, and Failure Contract
 
-- Requests require `Authorization: Bearer <token>`; otherwise `401` is returned. Agent Card endpoints are public.
+- Requests require either `Authorization: Bearer <token>` or a configured `Authorization: Basic <base64(username:password)>`; otherwise `401` is returned. Agent Card endpoints are public.
 - Requests above `A2A_MAX_REQUEST_BODY_BYTES` are rejected with HTTP `413` before transport handling.
 - For validation failures, missing context (`task_id` / `context_id`), or internal errors, the service attempts to return standard A2A failure events via `event_queue`.
 - Failure events include concrete error details with `failed` state.
@@ -564,7 +575,7 @@ Minimal stream semantics summary:
 This service exposes OpenCode session read, mutation, and control methods via A2A JSON-RPC extension methods (default endpoint: `POST /`). No extra custom REST endpoint is introduced.
 
 - Trigger: call extension methods through A2A JSON-RPC
-- Auth: same `Authorization: Bearer <token>`
+- Auth: same runtime auth as the main endpoint (`Bearer` or configured `Basic`)
 - Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still suppressed for `method=opencode.sessions.*`
 - Endpoint discovery: prefer `additional_interfaces[]` with `transport=jsonrpc` from Agent Card
 - The runtime still delegates SDK-owned JSON-RPC methods such as `agent/getAuthenticatedExtendedCard` and `tasks/pushNotificationConfig/*` to the base A2A implementation; they are not OpenCode-specific extensions.
@@ -744,6 +755,7 @@ Validation notes:
 - `subtask` parts require `prompt`, `description`, and `agent`; they may also include optional `model` and `command`.
 - For `subtask` parts, `request.parts[].agent` is the upstream subagent selector. `opencode-a2a` validates and forwards the shape but does not define a separate subagent discovery or orchestration API.
 - Control methods enforce session owner guard based on request identity.
+- `opencode.sessions.shell` additionally requires the `session_shell` capability, which may be granted to any explicitly configured credential under `A2A_STATIC_AUTH_CREDENTIALS`.
 
 Example (`opencode.sessions.prompt_async` with a provider-private `subtask` part):
 

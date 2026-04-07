@@ -17,7 +17,7 @@ async def test_extension_registry_tracks_configured_methods(monkeypatch) -> None
     )
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="test-token",
+            test_bearer_token="test-token",
             a2a_enable_session_shell=False,
             **_BASE_SETTINGS,
         )
@@ -44,7 +44,7 @@ async def test_core_jsonrpc_methods_delegate_to_base_app(monkeypatch) -> None:
         return JSONResponse({"delegated_method": payload["method"]})
 
     monkeypatch.setattr(A2AFastAPIApplication, "_handle_requests", _fake_base_handle)
-    app = app_module.create_app(make_settings(a2a_bearer_token="test-token", **_BASE_SETTINGS))
+    app = app_module.create_app(make_settings(test_bearer_token="test-token", **_BASE_SETTINGS))
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -65,7 +65,7 @@ async def test_sdk_owned_non_chat_jsonrpc_methods_delegate_to_base_app(monkeypat
         return JSONResponse({"delegated_method": payload["method"]})
 
     monkeypatch.setattr(A2AFastAPIApplication, "_handle_requests", _fake_base_handle)
-    app = app_module.create_app(make_settings(a2a_bearer_token="test-token", **_BASE_SETTINGS))
+    app = app_module.create_app(make_settings(test_bearer_token="test-token", **_BASE_SETTINGS))
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -109,7 +109,7 @@ async def test_v1_pascalcase_jsonrpc_aliases_delegate_to_canonical_methods(
         return JSONResponse({"delegated_method": payload["method"]})
 
     monkeypatch.setattr(A2AFastAPIApplication, "_handle_requests", _fake_base_handle)
-    app = app_module.create_app(make_settings(a2a_bearer_token="test-token", **_BASE_SETTINGS))
+    app = app_module.create_app(make_settings(test_bearer_token="test-token", **_BASE_SETTINGS))
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -131,7 +131,7 @@ async def test_v1_pascalcase_jsonrpc_aliases_delegate_to_canonical_methods(
 async def test_extension_methods_stay_on_local_registry(monkeypatch) -> None:
     dummy = DummySessionQueryOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="test-token",
+            test_bearer_token="test-token",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -145,7 +145,7 @@ async def test_extension_methods_stay_on_local_registry(monkeypatch) -> None:
     monkeypatch.setattr(A2AFastAPIApplication, "_handle_requests", _unexpected_delegate)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="test-token",
+            test_bearer_token="test-token",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,

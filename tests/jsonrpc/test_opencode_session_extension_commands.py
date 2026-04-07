@@ -4,7 +4,7 @@ import pytest
 from tests.support.helpers import (
     DummySessionQueryOpencodeUpstreamClient as DummyOpencodeUpstreamClient,
 )
-from tests.support.helpers import make_settings
+from tests.support.helpers import make_basic_auth_header, make_settings
 from tests.support.session_extensions import _BASE_SETTINGS, _jsonrpc_app, _session_meta
 
 
@@ -14,7 +14,7 @@ async def test_session_command_extension_success(monkeypatch):
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -23,7 +23,7 @@ async def test_session_command_extension_success(monkeypatch):
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             opencode_workspace_root="/workspace",
             **_BASE_SETTINGS,
@@ -59,15 +59,97 @@ async def test_session_command_extension_success(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_session_command_extension_uses_registry_bearer_principal(monkeypatch):
+    import opencode_a2a.server.application as app_module
+
+    dummy = DummyOpencodeUpstreamClient(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "token-build",
+                    "principal": "build-bot",
+                },
+                {
+                    "scheme": "bearer",
+                    "token": "token-other",
+                    "principal": "other-bot",
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "token-build",
+                    "principal": "build-bot",
+                },
+                {
+                    "scheme": "bearer",
+                    "token": "token-other",
+                    "principal": "other-bot",
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+    await _jsonrpc_app(app)._session_claim_finalize(  # noqa: SLF001
+        identity="build-bot",
+        session_id="s-1",
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        owned = await client.post(
+            "/",
+            headers={"Authorization": "Bearer token-build"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 32001,
+                "method": "opencode.sessions.command",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"command": "/review", "arguments": "security"},
+                },
+            },
+        )
+        foreign = await client.post(
+            "/",
+            headers={"Authorization": "Bearer token-other"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 32002,
+                "method": "opencode.sessions.command",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"command": "/review", "arguments": "security"},
+                },
+            },
+        )
+
+    assert owned.status_code == 200
+    assert owned.json().get("error") is None
+    assert foreign.json()["error"]["data"]["type"] == "SESSION_FORBIDDEN"
+
+
+@pytest.mark.asyncio
 async def test_session_command_extension_prefers_workspace_metadata(monkeypatch):
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -97,11 +179,11 @@ async def test_session_command_extension_accepts_request_model(monkeypatch):
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -140,11 +222,11 @@ async def test_session_command_extension_rejects_invalid_params(monkeypatch):
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -219,7 +301,7 @@ async def test_session_command_extension_maps_404_to_session_not_found(monkeypat
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", NotFoundCommandClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -248,11 +330,11 @@ async def test_session_shell_extension_disabled_by_default(monkeypatch):
     import opencode_a2a.server.application as app_module
 
     dummy = DummyOpencodeUpstreamClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -284,7 +366,7 @@ async def test_session_shell_extension_success_when_enabled(monkeypatch):
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             opencode_workspace_root="/workspace",
@@ -294,7 +376,9 @@ async def test_session_shell_extension_success_when_enabled(monkeypatch):
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
+            test_basic_username="operator",
+            test_basic_password="op-pass",  # pragma: allowlist secret
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             opencode_workspace_root="/workspace",
@@ -304,7 +388,7 @@ async def test_session_shell_extension_success_when_enabled(monkeypatch):
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = make_basic_auth_header("operator", "op-pass")
         resp = await client.post(
             "/",
             headers=headers,
@@ -335,7 +419,7 @@ async def test_session_shell_extension_rejects_invalid_params(monkeypatch):
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             **_BASE_SETTINGS,
@@ -344,7 +428,9 @@ async def test_session_shell_extension_rejects_invalid_params(monkeypatch):
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
+            test_basic_username="operator",
+            test_basic_password="op-pass",  # pragma: allowlist secret
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             **_BASE_SETTINGS,
@@ -353,7 +439,7 @@ async def test_session_shell_extension_rejects_invalid_params(monkeypatch):
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = make_basic_auth_header("operator", "op-pass")
         missing_agent = await client.post(
             "/",
             headers=headers,
@@ -399,7 +485,7 @@ async def test_session_shell_extension_rejects_owner_mismatch(monkeypatch):
 
     dummy = DummyOpencodeUpstreamClient(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             **_BASE_SETTINGS,
@@ -408,20 +494,22 @@ async def test_session_shell_extension_rejects_owner_mismatch(monkeypatch):
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
+            test_basic_username="operator",
+            test_basic_password="op-pass",  # pragma: allowlist secret
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             **_BASE_SETTINGS,
         )
     )
     await _jsonrpc_app(app)._session_claim_finalize(  # noqa: SLF001
-        identity="bearer:other",
+        identity="other-user",
         session_id="s-1",
     )
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = make_basic_auth_header("operator", "op-pass")
         resp = await client.post(
             "/",
             headers=headers,
@@ -442,6 +530,123 @@ async def test_session_shell_extension_rejects_owner_mismatch(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_session_shell_extension_requires_session_shell_capability(monkeypatch):
+    import opencode_a2a.server.application as app_module
+
+    dummy = DummyOpencodeUpstreamClient(
+        make_settings(
+            test_bearer_token="t-1",
+            test_basic_username="operator",
+            test_basic_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            a2a_enable_session_shell=True,
+            **_BASE_SETTINGS,
+        )
+    )
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            test_bearer_token="t-1",
+            test_basic_username="operator",
+            test_basic_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            a2a_enable_session_shell=True,
+            **_BASE_SETTINGS,
+        )
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 3341,
+                "method": "opencode.sessions.shell",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"agent": "code-reviewer", "command": "git status --short"},
+                },
+            },
+        )
+
+    payload = resp.json()
+    assert payload["error"]["code"] == -32007
+    assert payload["error"]["data"] == {
+        "type": "AUTHORIZATION_FORBIDDEN",
+        "method": "opencode.sessions.shell",
+        "capability": "session_shell",
+    }
+    assert dummy.shell_calls == []
+
+
+@pytest.mark.asyncio
+async def test_session_shell_extension_accepts_registry_bearer_with_explicit_capability(
+    monkeypatch,
+):
+    import opencode_a2a.server.application as app_module
+
+    dummy = DummyOpencodeUpstreamClient(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "token-ops",
+                    "principal": "ops-bot",
+                    "capabilities": ["session_shell"],
+                },
+            ),
+            a2a_log_payloads=False,
+            a2a_enable_session_shell=True,
+            **_BASE_SETTINGS,
+        )
+    )
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(
+            test_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "token-ops",
+                    "principal": "ops-bot",
+                    "capabilities": ["session_shell"],
+                },
+            ),
+            a2a_log_payloads=False,
+            a2a_enable_session_shell=True,
+            **_BASE_SETTINGS,
+        )
+    )
+    await _jsonrpc_app(app)._session_claim_finalize(  # noqa: SLF001
+        identity="ops-bot",
+        session_id="s-1",
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/",
+            headers={"Authorization": "Bearer token-ops"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 3342,
+                "method": "opencode.sessions.shell",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"agent": "code-reviewer", "command": "git status --short"},
+                },
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json().get("error") is None
+    assert len(dummy.shell_calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_session_command_extension_maps_500_to_upstream_http_error(monkeypatch):
     import opencode_a2a.server.application as app_module
 
@@ -454,7 +659,7 @@ async def test_session_command_extension_maps_500_to_upstream_http_error(monkeyp
 
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", UpstreamErrorCommandClient)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(test_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -492,7 +697,9 @@ async def test_session_shell_extension_maps_network_error_to_unreachable(monkeyp
     monkeypatch.setattr(app_module, "OpencodeUpstreamClient", NetworkErrorShellClient)
     app = app_module.create_app(
         make_settings(
-            a2a_bearer_token="t-1",
+            test_bearer_token="t-1",
+            test_basic_username="operator",
+            test_basic_password="op-pass",  # pragma: allowlist secret
             a2a_log_payloads=False,
             a2a_enable_session_shell=True,
             **_BASE_SETTINGS,
@@ -501,7 +708,7 @@ async def test_session_shell_extension_maps_network_error_to_unreachable(monkeyp
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = make_basic_auth_header("operator", "op-pass")
         resp = await client.post(
             "/",
             headers=headers,

@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import secrets
 from contextvars import ContextVar, Token
 from typing import cast
 
@@ -16,6 +15,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from starlette.responses import StreamingResponse
 
+from ..auth import (
+    authenticate_static_credential,
+    build_static_auth_credentials,
+)
 from ..execution.metrics import emit_metric
 from ..jsonrpc.error_responses import (
     adapt_jsonrpc_error_for_protocol,
@@ -51,13 +54,19 @@ _REQUEST_BODY_BYTES: ContextVar[bytes | None] = ContextVar(
 
 
 def add_auth_middleware(app: FastAPI, settings) -> None:  # noqa: ANN001
-    token = settings.a2a_bearer_token
+    configured_credentials = build_static_auth_credentials(settings)
+    advertised_schemes = {credential.auth_scheme for credential in configured_credentials}
 
     def _unauthorized_response() -> JSONResponse:
+        challenges: list[str] = []
+        if "bearer" in advertised_schemes:
+            challenges.append("Bearer")
+        if "basic" in advertised_schemes:
+            challenges.append('Basic realm="opencode-a2a"')
         return JSONResponse(
             {"error": "Unauthorized"},
             status_code=401,
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": ", ".join(challenges)},
         )
 
     @app.middleware("http")
@@ -69,12 +78,24 @@ def add_auth_middleware(app: FastAPI, settings) -> None:  # noqa: ANN001
             return await call_next(request)
 
         auth_header = request.headers.get("authorization", "")
-        if not auth_header.lower().startswith("bearer "):
+        try:
+            auth_scheme, auth_value = auth_header.split(" ", 1)
+        except ValueError:
             return _unauthorized_response()
-        provided = auth_header.split(" ", 1)[1].strip()
-        if not secrets.compare_digest(provided, token):
+        provided = auth_value.strip()
+
+        principal = authenticate_static_credential(
+            credentials=configured_credentials,
+            auth_scheme=auth_scheme,
+            auth_value=provided,
+        )
+        if principal is None:
             return _unauthorized_response()
-        request.state.user_identity = f"bearer:{hashlib.sha256(provided.encode()).hexdigest()[:12]}"
+        request.state.authenticated_principal = principal
+        request.state.user_identity = principal.identity
+        request.state.user_auth_scheme = principal.auth_scheme
+        if principal.credential_id:
+            request.state.user_credential_id = principal.credential_id
 
         return await call_next(request)
 

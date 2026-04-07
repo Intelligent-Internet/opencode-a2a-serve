@@ -4,7 +4,7 @@ from tests.support.helpers import make_settings
 
 def test_profile_runtime_splits_deployment_runtime_features_and_health_payload() -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_allow_directory_override=False,
         a2a_enable_session_shell=False,
         a2a_sandbox_mode="workspace-write",
@@ -105,7 +105,7 @@ def test_profile_runtime_splits_deployment_runtime_features_and_health_payload()
 
 
 def test_profile_runtime_uses_conservative_execution_environment_defaults() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(test_bearer_token="test-token")
 
     profile = build_runtime_profile(settings)
 
@@ -135,7 +135,7 @@ def test_profile_runtime_uses_conservative_execution_environment_defaults() -> N
 
 def test_profile_runtime_disables_shell_when_policy_is_read_only() -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_enable_session_shell=True,
         a2a_sandbox_mode="read-only",
         a2a_write_access_scope="workspace_only",
@@ -152,7 +152,7 @@ def test_profile_runtime_disables_shell_when_policy_is_read_only() -> None:
 
 def test_profile_runtime_disables_workspace_mutations_when_policy_is_read_only() -> None:
     settings = make_settings(
-        a2a_bearer_token="test-token",
+        test_bearer_token="test-token",
         a2a_enable_workspace_mutations=True,
         a2a_sandbox_mode="read-only",
         a2a_write_access_scope="workspace_only",

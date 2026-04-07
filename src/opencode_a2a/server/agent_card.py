@@ -13,6 +13,7 @@ from a2a.types import (
     TransportProtocol,
 )
 
+from ..auth import has_configured_auth_scheme
 from ..config import Settings
 from ..contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
@@ -103,6 +104,10 @@ def _build_agent_card_description(
                 "and authenticated extended Agent Card discovery."
             ),
             (
+                "Authenticated endpoints accept statically configured bearer/basic "
+                "credentials, including multi-credential registry deployments."
+            ),
+            (
                 "Single-tenant deployment; all consumers share the same underlying OpenCode "
                 "workspace/environment."
             ),
@@ -124,6 +129,10 @@ def _build_agent_card_description(
         "extensions, and shared interrupt callback extensions."
     )
     parts: list[str] = [base, summary]
+    parts.append(
+        "Authenticated endpoints accept statically configured bearer/basic credentials, "
+        "including multi-credential registry deployments."
+    )
     parts.append(
         "This runtime profile is intended for single-tenant, self-hosted coding workflows."
     )
@@ -562,16 +571,25 @@ def _build_agent_card(
 ) -> AgentCard:
     public_url = settings.a2a_public_url.rstrip("/")
     runtime_profile = build_runtime_profile(settings)
-    security_schemes: dict[str, SecurityScheme] = {
-        "bearerAuth": SecurityScheme(
+    security_schemes: dict[str, SecurityScheme] = {}
+    security: list[dict[str, list[str]]] = []
+    if has_configured_auth_scheme(settings, "bearer"):
+        security_schemes["bearerAuth"] = SecurityScheme(
             root=HTTPAuthSecurityScheme(
                 description="Bearer token authentication",
                 scheme="bearer",
                 bearer_format="opaque",
             )
         )
-    }
-    security: list[dict[str, list[str]]] = [{"bearerAuth": []}]
+        security.append({"bearerAuth": []})
+    if has_configured_auth_scheme(settings, "basic"):
+        security_schemes["basicAuth"] = SecurityScheme(
+            root=HTTPAuthSecurityScheme(
+                description="Basic authentication",
+                scheme="basic",
+            )
+        )
+        security.append({"basicAuth": []})
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
 
     return AgentCard(

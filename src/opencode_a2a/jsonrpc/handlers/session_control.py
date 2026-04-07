@@ -8,6 +8,10 @@ from a2a.types import JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
+from ...auth import (
+    CAPABILITY_SESSION_SHELL,
+    request_has_capability,
+)
 from ...contracts.extensions import SESSION_QUERY_ERROR_BUSINESS_CODES
 from ...invocation import call_with_supported_kwargs
 from ...opencode_upstream_client import UpstreamConcurrencyLimitError, UpstreamContractError
@@ -21,6 +25,7 @@ from ..methods import (
     _validate_shell_request_payload,
 )
 from .common import (
+    build_authorization_forbidden_response,
     build_internal_error_response,
     build_session_forbidden_response,
     build_success_response,
@@ -102,6 +107,19 @@ async def handle_session_control_request(
             context_id if isinstance(context_id, str) and context_id.strip() else "-",
             session_id,
             outcome,
+        )
+
+    if base_request.method == context.method_shell and not request_has_capability(
+        request,
+        CAPABILITY_SESSION_SHELL,
+    ):
+        _log_shell_audit("authorization_forbidden")
+        return build_authorization_forbidden_response(
+            context,
+            base_request.id,
+            method=base_request.method,
+            capability=CAPABILITY_SESSION_SHELL,
+            error_code=SESSION_QUERY_ERROR_BUSINESS_CODES["AUTHORIZATION_FORBIDDEN"],
         )
 
     try:

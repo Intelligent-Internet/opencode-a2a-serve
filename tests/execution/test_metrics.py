@@ -71,7 +71,7 @@ async def test_streaming_metrics_capture_tool_call_and_interrupt_events(caplog) 
             self.stream_timeout = None
             self.directory = None
             self.settings = make_settings(
-                a2a_bearer_token="test",
+                test_bearer_token="test",
                 opencode_base_url="http://localhost",
             )
             self._interrupt_requests: dict[str, str] = {}
@@ -163,7 +163,7 @@ async def test_streaming_retry_metric_increments_once_per_retry(monkeypatch, cap
             self.stream_timeout = None
             self.directory = None
             self.settings = make_settings(
-                a2a_bearer_token="test",
+                test_bearer_token="test",
                 opencode_base_url="http://localhost",
             )
 
