@@ -992,6 +992,7 @@ Behavior notes:
 
 - These methods target the active OpenCode deployment project. They are not routed through per-request workspace forwarding.
 - `metadata.opencode.workspace.id` is declared consistently across the adapter, but current workspace-control methods do not use it to change the target project.
+- `opencode.workspaces.*` and `opencode.worktrees.*` currently wrap upstream `/experimental/workspace` and `/experimental/worktree` endpoints; treat them as experimental-upstream surfaces even when declared by the adapter.
 - Mutating methods should be treated as operator-only control-plane actions and are disabled by default.
 
 ### Project Discovery (`opencode.projects.list`, `opencode.projects.current`)
@@ -1118,6 +1119,7 @@ Response shape:
 Notes:
 
 - Recovery results are scoped to the current authenticated caller identity when the runtime can resolve one.
+- If the runtime cannot resolve a caller identity for the current request, recovery queries return an empty item list.
 - The runtime stores normalized interrupt `details` alongside request bindings, so recovery results match the shape emitted in `metadata.shared.interrupt.details`.
 - The first implementation stage reads from the local interrupt registry rather than proxying upstream global `/permission` or `/question` pending lists.
 - Use recovery queries to rediscover pending requests after reconnecting; use `a2a.interrupt.*` methods to resolve them.

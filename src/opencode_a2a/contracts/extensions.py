@@ -600,6 +600,22 @@ WORKSPACE_DISCOVERY_METHOD_KEYS: tuple[str, ...] = (
 WORKSPACE_DISCOVERY_METHODS: dict[str, str] = {
     key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_DISCOVERY_METHOD_KEYS
 }
+WORKSPACE_STABLE_METHOD_KEYS: tuple[str, ...] = ("list_projects", "get_current_project")
+WORKSPACE_STABLE_METHODS: dict[str, str] = {
+    key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_STABLE_METHOD_KEYS
+}
+WORKSPACE_EXPERIMENTAL_UPSTREAM_METHOD_KEYS: tuple[str, ...] = (
+    "list_workspaces",
+    "list_worktrees",
+    "create_workspace",
+    "remove_workspace",
+    "create_worktree",
+    "remove_worktree",
+    "reset_worktree",
+)
+WORKSPACE_EXPERIMENTAL_UPSTREAM_METHODS: dict[str, str] = {
+    key: WORKSPACE_CONTROL_METHODS[key] for key in WORKSPACE_EXPERIMENTAL_UPSTREAM_METHOD_KEYS
+}
 WORKSPACE_MUTATION_METHOD_KEYS: tuple[str, ...] = (
     "create_workspace",
     "remove_workspace",
@@ -1182,6 +1198,11 @@ def build_interrupt_recovery_extension_params(
         "method_contracts": method_contracts,
         "supported_metadata": [],
         "provider_private_metadata": [],
+        "recovery_scope": {
+            "data_source": "local_interrupt_binding_registry",
+            "identity_scope": "current_authenticated_caller",
+            "empty_result_when_identity_unavailable": True,
+        },
         "item_fields": {
             "request_id": "items[].request_id",
             "session_id": "items[].session_id",
@@ -1203,6 +1224,10 @@ def build_interrupt_recovery_extension_params(
             (
                 "Results are scoped to the current authenticated caller identity when the "
                 "runtime can resolve one."
+            ),
+            (
+                "If the runtime cannot resolve a caller identity for the current request, "
+                "recovery queries return an empty item list."
             ),
             (
                 "Use a2a.interrupt.* methods to resolve requests; opencode.permissions.list "
@@ -1325,6 +1350,17 @@ def build_workspace_control_extension_params(
         "methods": methods,
         "control_method_flags": capability_snapshot.workspace_mutation_method_flags(),
         "method_contracts": method_contracts,
+        "upstream_stability": {
+            WORKSPACE_CONTROL_METHODS["list_projects"]: "stable",
+            WORKSPACE_CONTROL_METHODS["get_current_project"]: "stable",
+            WORKSPACE_CONTROL_METHODS["list_workspaces"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["list_worktrees"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["create_workspace"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["remove_workspace"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["create_worktree"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["remove_worktree"]: "experimental",
+            WORKSPACE_CONTROL_METHODS["reset_worktree"]: "experimental",
+        },
         "supported_metadata": ["opencode.workspace.id", "opencode.directory"],
         "provider_private_metadata": ["opencode.workspace.id", "opencode.directory"],
         "routing_fields": {
@@ -1350,6 +1386,10 @@ def build_workspace_control_extension_params(
                 "Workspace routing metadata is declared for consistency, but the current "
                 "control-plane methods operate on the active deployment project rather than "
                 "per-request workspace forwarding."
+            ),
+            (
+                "Workspace/worktree discovery and mutation methods currently wrap upstream "
+                "/experimental/workspace and /experimental/worktree endpoints."
             ),
         ],
     }
@@ -1412,7 +1452,21 @@ def build_compatibility_profile_params(
                 "retention": "stable",
                 "extension_uri": WORKSPACE_CONTROL_EXTENSION_URI,
             }
-            for method in WORKSPACE_DISCOVERY_METHODS.values()
+            for method in WORKSPACE_STABLE_METHODS.values()
+        }
+    )
+    method_retention.update(
+        {
+            method: {
+                "surface": "extension",
+                "availability": "always",
+                "retention": "experimental-upstream",
+                "extension_uri": WORKSPACE_CONTROL_EXTENSION_URI,
+            }
+            for method in (
+                WORKSPACE_EXPERIMENTAL_UPSTREAM_METHODS["list_workspaces"],
+                WORKSPACE_EXPERIMENTAL_UPSTREAM_METHODS["list_worktrees"],
+            )
         }
     )
     method_retention.update(
@@ -1422,10 +1476,16 @@ def build_compatibility_profile_params(
                 "availability": "always",
                 "retention": "stable",
                 "extension_uri": INTERRUPT_RECOVERY_EXTENSION_URI,
+                "implementation_scope": "adapter-local",
+                "identity_scope": "current_authenticated_caller",
             }
             for method in INTERRUPT_RECOVERY_METHODS.values()
         }
     )
+    for method in WORKSPACE_MUTATION_METHODS.values():
+        retention = method_retention.get(method)
+        if retention is not None:
+            retention["upstream_stability"] = "experimental"
     method_retention.update(
         {
             method: {
@@ -1475,12 +1535,15 @@ def build_compatibility_profile_params(
             WORKSPACE_CONTROL_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
                 "availability": "always",
-                "retention": "stable",
+                "retention": "mixed",
+                "upstream_stability": "mixed",
             },
             INTERRUPT_RECOVERY_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
                 "availability": "always",
                 "retention": "stable",
+                "implementation_scope": "adapter-local",
+                "identity_scope": "current_authenticated_caller",
             },
             INTERRUPT_CALLBACK_EXTENSION_URI: {
                 "surface": "jsonrpc-extension",
@@ -1519,6 +1582,15 @@ def build_compatibility_profile_params(
                 "Treat opencode.workspaces.create/remove and opencode.worktrees.create/remove/"
                 "reset as deployment-conditional operator surfaces rather than baseline "
                 "workspace discovery methods."
+            ),
+            (
+                "Treat opencode.workspaces.list and opencode.worktrees.list as declared "
+                "adapter contracts over upstream experimental endpoints, not the same "
+                "stability tier as project discovery."
+            ),
+            (
+                "Treat opencode.permissions.list and opencode.questions.list as adapter-local, "
+                "identity-scoped recovery views rather than upstream global pending queues."
             ),
             (
                 "Treat declared service behaviors as stable server-level semantic "

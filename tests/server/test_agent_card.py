@@ -539,6 +539,17 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "enabled_by_default": False,
         "config_key": "A2A_ENABLE_WORKSPACE_MUTATIONS",
     }
+    assert workspace_control.params["upstream_stability"] == {
+        "opencode.projects.list": "stable",
+        "opencode.projects.current": "stable",
+        "opencode.workspaces.list": "experimental",
+        "opencode.worktrees.list": "experimental",
+        "opencode.workspaces.create": "experimental",
+        "opencode.workspaces.remove": "experimental",
+        "opencode.worktrees.create": "experimental",
+        "opencode.worktrees.remove": "experimental",
+        "opencode.worktrees.reset": "experimental",
+    }
     assert workspace_control.params["routing_fields"]["workspace_id"] == (
         "metadata.opencode.workspace.id"
     )
@@ -558,6 +569,11 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert interrupt_recovery.params["method_contracts"]["opencode.permissions.list"]["result"] == {
         "fields": ["items"],
         "items_type": "InterruptRequest[]",
+    }
+    assert interrupt_recovery.params["recovery_scope"] == {
+        "data_source": "local_interrupt_binding_registry",
+        "identity_scope": "current_authenticated_caller",
+        "empty_result_when_identity_unavailable": True,
     }
     assert interrupt_recovery.params["item_fields"]["details"] == "items[].details"
     assert interrupt_recovery.params["errors"]["invalid_params_data_fields"] == [
@@ -632,9 +648,26 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "availability": "always",
         "retention": "stable",
     }
+    assert compatibility.params["extension_retention"][WORKSPACE_CONTROL_EXTENSION_URI] == {
+        "surface": "jsonrpc-extension",
+        "availability": "always",
+        "retention": "mixed",
+        "upstream_stability": "mixed",
+    }
+    assert compatibility.params["extension_retention"][INTERRUPT_RECOVERY_EXTENSION_URI] == {
+        "surface": "jsonrpc-extension",
+        "availability": "always",
+        "retention": "stable",
+        "implementation_scope": "adapter-local",
+        "identity_scope": "current_authenticated_caller",
+    }
     shell_policy = compatibility.params["method_retention"]["opencode.sessions.shell"]
+    workspace_list_policy = compatibility.params["method_retention"]["opencode.workspaces.list"]
     workspace_mutation_policy = compatibility.params["method_retention"][
         "opencode.workspaces.create"
+    ]
+    interrupt_recovery_policy = compatibility.params["method_retention"][
+        "opencode.permissions.list"
     ]
     assert compatibility.params["deployment"]["id"] == "single_tenant_shared_workspace"
     assert compatibility.params["runtime_features"]["session_shell"]["availability"] == "disabled"
@@ -644,9 +677,24 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert shell_policy["availability"] == "disabled"
     assert shell_policy["retention"] == "deployment-conditional"
     assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
+    assert workspace_list_policy == {
+        "surface": "extension",
+        "availability": "always",
+        "retention": "experimental-upstream",
+        "extension_uri": WORKSPACE_CONTROL_EXTENSION_URI,
+    }
     assert workspace_mutation_policy["availability"] == "disabled"
     assert workspace_mutation_policy["retention"] == "deployment-conditional"
     assert workspace_mutation_policy["toggle"] == "A2A_ENABLE_WORKSPACE_MUTATIONS"
+    assert workspace_mutation_policy["upstream_stability"] == "experimental"
+    assert interrupt_recovery_policy == {
+        "surface": "extension",
+        "availability": "always",
+        "retention": "stable",
+        "extension_uri": INTERRUPT_RECOVERY_EXTENSION_URI,
+        "implementation_scope": "adapter-local",
+        "identity_scope": "current_authenticated_caller",
+    }
     assert compatibility.params["method_retention"]["agent/getAuthenticatedExtendedCard"] == {
         "surface": "core",
         "availability": "always",
@@ -796,6 +844,10 @@ def test_agent_card_contracts_include_workspace_mutations_when_enabled() -> None
     assert workspace_control.params["methods"]["create_worktree"] == "opencode.worktrees.create"
     assert "opencode.workspaces.create" in workspace_control.params["method_contracts"]
     assert "opencode.worktrees.reset" in workspace_control.params["method_contracts"]
+    assert (
+        workspace_control.params["upstream_stability"]["opencode.workspaces.create"]
+        == "experimental"
+    )
 
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
     workspace_mutation_policy = compatibility.params["method_retention"][

@@ -327,9 +327,10 @@ def _build_agent_extensions(
             uri=WORKSPACE_CONTROL_EXTENSION_URI,
             required=False,
             description=(
-                "Expose OpenCode-specific project/workspace/worktree discovery methods "
-                "plus deployment-conditional control-plane mutations through JSON-RPC "
-                "extensions."
+                "Expose OpenCode-specific project discovery plus workspace/worktree "
+                "discovery and deployment-conditional control-plane mutations through "
+                "JSON-RPC extensions. Workspace/worktree surfaces depend on upstream "
+                "experimental endpoints."
             ),
             params=workspace_control_extension_params if include_detailed_contracts else None,
         ),
@@ -337,8 +338,9 @@ def _build_agent_extensions(
             uri=INTERRUPT_RECOVERY_EXTENSION_URI,
             required=False,
             description=(
-                "Expose provider-private interrupt recovery methods so clients can "
-                "list pending permission/question requests after reconnecting."
+                "Expose adapter-local, identity-scoped interrupt recovery methods so "
+                "clients can rediscover pending permission/question requests after "
+                "reconnecting."
             ),
             params=interrupt_recovery_extension_params if include_detailed_contracts else None,
         ),
@@ -428,8 +430,10 @@ def _build_agent_skills(
                 id="opencode.workspace.control",
                 name="OpenCode Workspace Control",
                 description=(
-                    "Manage OpenCode projects, workspaces, and worktrees through "
-                    "provider-private JSON-RPC extensions."
+                    "Discover OpenCode projects, workspaces, and worktrees through "
+                    "provider-private JSON-RPC extensions. Mutation methods are "
+                    "deployment-conditional and workspace/worktree surfaces depend on "
+                    "upstream experimental endpoints."
                 ),
                 input_modes=list(_JSON_RPC_MODES),
                 output_modes=list(_JSON_RPC_MODES),
@@ -439,8 +443,8 @@ def _build_agent_skills(
                 id="opencode.interrupt.recovery",
                 name="OpenCode Interrupt Recovery",
                 description=(
-                    "Recover pending permission and question interrupts through "
-                    "provider-private JSON-RPC extensions."
+                    "Recover pending permission and question interrupts from the "
+                    "adapter-local interrupt registry for the current caller."
                 ),
                 input_modes=list(_JSON_RPC_MODES),
                 output_modes=list(_JSON_RPC_MODES),
@@ -508,9 +512,10 @@ def _build_agent_skills(
             id="opencode.workspace.control",
             name="OpenCode Workspace Control",
             description=(
-                "provider-private OpenCode project/workspace/worktree discovery surface "
-                "with deployment-conditional mutation methods exposed through JSON-RPC "
-                "extensions."
+                "provider-private OpenCode project discovery plus workspace/worktree "
+                "discovery surface with deployment-conditional mutation methods exposed "
+                "through JSON-RPC extensions; workspace/worktree methods currently wrap "
+                "upstream experimental endpoints."
             ),
             input_modes=list(_JSON_RPC_MODES),
             output_modes=list(_JSON_RPC_MODES),
@@ -523,8 +528,8 @@ def _build_agent_skills(
             id="opencode.interrupt.recovery",
             name="OpenCode Interrupt Recovery",
             description=(
-                "provider-private OpenCode interrupt recovery surface exposed through "
-                "JSON-RPC extensions."
+                "adapter-local, identity-scoped interrupt recovery surface exposed "
+                "through JSON-RPC extensions."
             ),
             input_modes=list(_JSON_RPC_MODES),
             output_modes=list(_JSON_RPC_MODES),

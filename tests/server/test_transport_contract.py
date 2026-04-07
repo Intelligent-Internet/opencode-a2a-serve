@@ -609,7 +609,10 @@ async def test_global_http_gzip_applies_to_eligible_non_streaming_responses(monk
     assert extended_response.status_code == 200
     assert extended_response.headers.get("content-encoding") == "gzip"
     assert public_response.status_code == 200
-    assert public_response.headers.get("content-encoding") is None
+    if len(public_response.content) >= 2048:
+        assert public_response.headers.get("content-encoding") == "gzip"
+    else:
+        assert public_response.headers.get("content-encoding") is None
     assert health_response.status_code == 200
     assert health_response.headers.get("content-encoding") is None
 
