@@ -150,8 +150,7 @@ async def test_build_client_uses_settings_and_transport_config(
     assert config.polling is False
     assert config.use_client_preference is True
     assert config.supported_transports == ["HTTP+JSON"]
-    assert factory_calls["interceptors"] is not None
-    assert len(factory_calls["interceptors"]) == 1
+    assert factory_calls["interceptors"] is None
     assert actual is fake_sdk_client
 
 
