@@ -13,6 +13,7 @@ from a2a.utils.constants import (
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 
+from ..trace_context import current_trace_headers
 from .request_context import build_default_headers
 
 
@@ -70,6 +71,9 @@ def build_resolver_http_kwargs(
 ) -> dict[str, Any]:
     http_kwargs: dict[str, Any] = {"timeout": timeout}
     default_headers = build_default_headers(bearer_token, basic_auth)
+    trace_headers = current_trace_headers()
+    if trace_headers:
+        default_headers.update(trace_headers)
     if default_headers:
         http_kwargs["headers"] = default_headers
     return http_kwargs

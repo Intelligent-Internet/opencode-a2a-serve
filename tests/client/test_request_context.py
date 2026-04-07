@@ -6,12 +6,11 @@ import pytest
 
 from opencode_a2a.client.request_context import (
     ClientCallContext,
-    HeaderInterceptor,
     build_call_context,
-    build_client_interceptors,
     build_default_headers,
     split_request_metadata,
 )
+from opencode_a2a.trace_context import TraceContext, bind_trace_context
 
 
 def test_split_request_metadata_and_default_headers() -> None:
@@ -19,6 +18,8 @@ def test_split_request_metadata_and_default_headers() -> None:
         {
             "authorization": "Bearer explicit-token",
             "A2A-Version": "1.0.0",
+            "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            "tracestate": "vendor=value",
             "trace_id": "trace-1",
         }
     )
@@ -27,6 +28,8 @@ def test_split_request_metadata_and_default_headers() -> None:
     assert extra_headers == {
         "Authorization": "Bearer explicit-token",
         "A2A-Version": "1.0",
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "tracestate": "vendor=value",
     }
     assert build_default_headers("peer-token") == {"Authorization": "Bearer peer-token"}
 
@@ -65,29 +68,56 @@ def test_build_call_context_without_headers_returns_none() -> None:
     assert build_call_context(None, None) is None
 
 
-def test_build_client_interceptors_uses_header_interceptor() -> None:
-    interceptors = build_client_interceptors("peer-token")
+def test_build_call_context_includes_current_trace_headers() -> None:
+    with bind_trace_context(
+        TraceContext(
+            traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            trace_id="4bf92f3577b34da6a3ce929d0e0e4736",
+            tracestate="vendor=value",
+        )
+    ):
+        context = build_call_context(None, None)
 
-    assert len(interceptors) == 1
-    assert isinstance(interceptors[0], HeaderInterceptor)
+    assert context is not None
+    assert context.state["headers"] == {
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "tracestate": "vendor=value",
+    }
 
 
-@pytest.mark.asyncio
-async def test_header_interceptor_merges_static_and_dynamic_headers() -> None:
-    interceptor = HeaderInterceptor({"Authorization": "Bearer peer-token"})
-    context = ClientCallContext(state={"headers": {"X-Trace-Id": "trace-1"}})
+def test_build_call_context_preserves_explicit_trace_headers_over_current_context() -> None:
+    with bind_trace_context(
+        TraceContext(
+            traceparent="00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
+            trace_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            tracestate="upstream=1",
+        )
+    ):
+        context = build_call_context(
+            "peer-token",
+            {
+                "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                "tracestate": "vendor=value",
+            },
+        )
 
-    request_payload, http_kwargs = await interceptor.intercept(
-        "message/send",
-        {"jsonrpc": "2.0"},
-        {"headers": {"Accept": "application/json"}},
-        agent_card=None,
-        context=context,
-    )
+    assert context is not None
+    assert context.state["headers"] == {
+        "Authorization": "Bearer peer-token",
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "tracestate": "vendor=value",
+    }
 
-    assert request_payload == {"jsonrpc": "2.0"}
-    assert http_kwargs["headers"] == {
-        "Accept": "application/json",
+
+def test_build_call_context_carries_default_headers_without_interceptor_layer() -> None:
+    context = build_call_context("peer-token", {"X-Trace-Id": "trace-1"})
+
+    assert isinstance(context, ClientCallContext)
+    assert context.state["headers"] == {
+        "Authorization": "Bearer peer-token",
+        "X-Trace-Id": "trace-1",
+    }
+    assert context.state["http_kwargs"]["headers"] == {
         "Authorization": "Bearer peer-token",
         "X-Trace-Id": "trace-1",
     }

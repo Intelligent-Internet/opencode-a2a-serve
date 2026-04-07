@@ -37,6 +37,9 @@ Key variables to understand protocol behavior:
 - `A2A_PUBLIC_URL`: public base URL advertised by the Agent Card. Default: `http://127.0.0.1:8000`.
 - `A2A_LOG_LEVEL`: runtime log level. Default: `WARNING`.
 - `A2A_LOG_PAYLOADS` / `A2A_LOG_BODY_LIMIT`: payload logging behavior and truncation. When `A2A_LOG_LEVEL=DEBUG`, upstream OpenCode stream events are also logged with preview truncation controlled by `A2A_LOG_BODY_LIMIT`.
+- The runtime accepts W3C `traceparent` / `tracestate` headers on inbound requests. When `traceparent` is missing or invalid, the runtime generates a fresh valid value and exposes it on the HTTP response header.
+- The active `traceparent` / `tracestate` pair is propagated across inbound A2A handling, OpenCode upstream requests, and outbound peer A2A calls triggered through the embedded client or `a2a_call` tool path.
+- Logs derive a stable `trace_id` from the active `traceparent` so request-scoped log lines can be correlated without introducing high-cardinality metric labels.
 - `A2A_HTTP_GZIP_MINIMUM_SIZE`: minimum eligible response-body size in bytes for global non-streaming HTTP gzip compression. Default: `8192`.
 - `A2A_MAX_REQUEST_BODY_BYTES`: runtime request-body limit. Oversized requests return HTTP `413`.
 - `A2A_PENDING_SESSION_CLAIM_TTL_SECONDS`: lease duration for pending preferred session claims before they expire and stop blocking other identities.

@@ -35,7 +35,7 @@ from .error_mapping import (
 from .errors import A2ATimeoutError, A2AUnsupportedBindingError
 from .payload_text import extract_text as extract_text_from_payload
 from .polling import PollingFallbackPolicy
-from .request_context import build_call_context, build_client_interceptors, split_request_metadata
+from .request_context import build_call_context, split_request_metadata
 
 
 class A2AClient:
@@ -302,14 +302,7 @@ class A2AClient:
         )
         try:
             factory = ClientFactory(config, consumers=None)
-            client = factory.create(
-                card,
-                interceptors=build_client_interceptors(
-                    self._settings.bearer_token,
-                    self._settings.basic_auth,
-                    self._settings.protocol_version,
-                ),
-            )
+            client = factory.create(card)
         except ValueError as exc:
             raise A2AUnsupportedBindingError(
                 f"No supported transport found for {self.agent_url}"

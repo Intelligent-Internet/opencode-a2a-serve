@@ -26,6 +26,7 @@ from opencode_a2a.server.application import (
     build_agent_card,
     create_app,
 )
+from opencode_a2a.trace_context import parse_traceparent
 from tests.support.helpers import (
     DummyChatOpencodeUpstreamClient,
     make_basic_auth_header,
@@ -79,6 +80,36 @@ def test_agent_card_declares_dual_stack_with_http_json_preferred() -> None:
 
 def test_normalize_log_level_falls_back_to_warning_for_invalid_value() -> None:
     assert _normalize_log_level("warn") == "WARNING"
+
+
+@pytest.mark.asyncio
+async def test_public_agent_card_response_echoes_supplied_traceparent() -> None:
+    app = create_app(make_settings(test_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/.well-known/agent.json",
+            headers={"traceparent": traceparent, "tracestate": "vendor=value"},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["traceparent"] == traceparent
+
+
+@pytest.mark.asyncio
+async def test_public_agent_card_response_generates_traceparent_when_missing() -> None:
+    app = create_app(make_settings(test_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/.well-known/agent.json")
+
+    assert response.status_code == 200
+    generated = response.headers.get("traceparent")
+    assert isinstance(generated, str)
+    assert parse_traceparent(generated) is not None
 
 
 def test_rest_subscription_route_matches_current_sdk_contract() -> None:
