@@ -11,6 +11,7 @@ from opencode_a2a.opencode_upstream_client import (
     UpstreamConcurrencyLimitError,
     UpstreamContractError,
 )
+from opencode_a2a.trace_context import TraceContext, bind_trace_context
 from tests.support.helpers import make_settings
 
 
@@ -207,6 +208,91 @@ async def test_session_prompt_async_posts_prompt_async_endpoint(monkeypatch):
     assert seen["path"] == "/session/ses-1/prompt_async"
     assert seen["params"]["directory"] == "/safe"
     assert seen["json"] == payload
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_session_status_forwards_current_trace_headers(monkeypatch):
+    client = OpencodeUpstreamClient(
+        make_settings(
+            test_bearer_token="t-1",
+            opencode_workspace_root="/safe",
+            opencode_timeout=1.0,
+            a2a_log_level="DEBUG",
+            a2a_log_payloads=False,
+        )
+    )
+
+    seen = {}
+
+    async def fake_get(path: str, *, params=None, headers=None, **_kwargs):
+        seen["path"] = path
+        seen["params"] = params
+        seen["headers"] = headers
+        return _DummyResponse({})
+
+    monkeypatch.setattr(client._client, "get", fake_get)
+
+    with bind_trace_context(
+        TraceContext(
+            traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            trace_id="4bf92f3577b34da6a3ce929d0e0e4736",
+            tracestate="vendor=value",
+        )
+    ):
+        await client.session_status()
+
+    assert seen["path"] == "/session/status"
+    assert seen["headers"] == {
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "tracestate": "vendor=value",
+    }
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_stream_events_merges_trace_headers_with_stream_accept_header(monkeypatch):
+    client = OpencodeUpstreamClient(
+        make_settings(
+            test_bearer_token="t-1",
+            opencode_workspace_root="/safe",
+            opencode_timeout=1.0,
+            a2a_log_level="DEBUG",
+            a2a_log_payloads=False,
+        )
+    )
+
+    seen = {}
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    def fake_stream(method: str, path: str, *, params=None, timeout=None, headers=None, **_kwargs):
+        seen["method"] = method
+        seen["path"] = path
+        seen["params"] = params
+        seen["timeout"] = timeout
+        seen["headers"] = headers
+        release.set()
+        return _HoldingStreamContext(started, release)
+
+    monkeypatch.setattr(client._client, "stream", fake_stream)
+
+    with bind_trace_context(
+        TraceContext(
+            traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            trace_id="4bf92f3577b34da6a3ce929d0e0e4736",
+            tracestate=None,
+        )
+    ):
+        events = [event async for event in client.stream_events()]
+
+    assert events == [{"kind": "tick"}]
+    assert seen["headers"] == {
+        "Accept": "text/event-stream",
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+    }
 
     await client.close()
 

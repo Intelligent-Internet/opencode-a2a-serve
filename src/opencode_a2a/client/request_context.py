@@ -8,6 +8,7 @@ from typing import Any
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 
 from ..protocol_versions import normalize_protocol_version
+from ..trace_context import current_trace_headers
 from .auth import encode_basic_auth
 
 
@@ -68,6 +69,14 @@ def split_request_metadata(
             if value is not None:
                 extra_headers["A2A-Version"] = normalize_protocol_version(str(value))
             continue
+        if isinstance(key, str) and key.lower() == "traceparent":
+            if value is not None:
+                extra_headers["traceparent"] = str(value)
+            continue
+        if isinstance(key, str) and key.lower() == "tracestate":
+            if value is not None:
+                extra_headers["tracestate"] = str(value)
+            continue
         request_metadata[key] = value
     return request_metadata or None, extra_headers or None
 
@@ -79,6 +88,7 @@ def build_call_context(
     protocol_version: str | None = None,
 ) -> ClientCallContext | None:
     merged_headers = build_default_headers(bearer_token, basic_auth, protocol_version)
+    merged_headers.update(current_trace_headers())
     if extra_headers:
         merged_headers.update(extra_headers)
     if not merged_headers:

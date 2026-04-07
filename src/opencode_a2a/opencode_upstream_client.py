@@ -15,6 +15,7 @@ from .config import Settings
 from .parts.text import extract_text_from_parts
 from .runtime_state import InterruptRequestBinding
 from .server.state_store import InterruptRequestRepository, MemoryInterruptRequestRepository
+from .trace_context import current_trace_headers
 
 _UNSET = object()
 logger = logging.getLogger(__name__)
@@ -143,6 +144,13 @@ class OpencodeUpstreamClient:
             headers={"Accept": "application/json"},
         )
 
+    @staticmethod
+    def _request_headers(headers: Mapping[str, str] | None = None) -> dict[str, str] | None:
+        merged_headers = current_trace_headers()
+        if headers:
+            merged_headers.update(dict(headers))
+        return merged_headers or None
+
     async def close(self) -> None:
         await self._client.aclose()
 
@@ -185,7 +193,11 @@ class OpencodeUpstreamClient:
         params: Mapping[str, Any] | None = None,
     ) -> Any:
         async with self._request_budget.reserve(operation=endpoint):
-            response = await self._client.get(path, params=params)
+            response = await self._client.get(
+                path,
+                params=params,
+                headers=self._request_headers(),
+            )
             response.raise_for_status()
             return self._decode_json_response(response, endpoint=endpoint)
 
@@ -207,6 +219,7 @@ class OpencodeUpstreamClient:
             response = await self._client.post(
                 path,
                 params=params,
+                headers=self._request_headers(),
                 **request_kwargs,
             )
             response.raise_for_status()
@@ -238,7 +251,11 @@ class OpencodeUpstreamClient:
         params: Mapping[str, Any] | None = None,
     ) -> Any:
         async with self._request_budget.reserve(operation=endpoint):
-            response = await self._client.delete(path, params=params)
+            response = await self._client.delete(
+                path,
+                params=params,
+                headers=self._request_headers(),
+            )
             response.raise_for_status()
             return self._decode_json_response(response, endpoint=endpoint)
 
@@ -402,7 +419,7 @@ class OpencodeUpstreamClient:
                 "/event",
                 params=params,
                 timeout=None,
-                headers={"Accept": "text/event-stream"},
+                headers=self._request_headers({"Accept": "text/event-stream"}),
             ) as response:
                 response.raise_for_status()
                 data_lines: list[str] = []
@@ -555,6 +572,7 @@ class OpencodeUpstreamClient:
             response = await self._client.get(
                 f"/session/{session_id}/message",
                 params=self._merge_params(params, workspace_id=workspace_id),
+                headers=self._request_headers(),
             )
             response.raise_for_status()
             payload = self._decode_json_response(response, endpoint=endpoint)
@@ -594,6 +612,7 @@ class OpencodeUpstreamClient:
                 f"/session/{session_id}/prompt_async",
                 params=self._query_params(directory=directory, workspace_id=workspace_id),
                 json=request,
+                headers=self._request_headers(),
             )
             response.raise_for_status()
             if response.status_code != 204:
@@ -748,7 +767,10 @@ class OpencodeUpstreamClient:
 
     async def remove_workspace(self, workspace_id: str) -> Any:
         async with self._request_budget.reserve(operation="/experimental/workspace/{id}"):
-            response = await self._client.delete(f"/experimental/workspace/{workspace_id}")
+            response = await self._client.delete(
+                f"/experimental/workspace/{workspace_id}",
+                headers=self._request_headers(),
+            )
             response.raise_for_status()
             return self._decode_json_response(
                 response,
@@ -774,6 +796,7 @@ class OpencodeUpstreamClient:
                 "DELETE",
                 "/experimental/worktree",
                 json=request,
+                headers=self._request_headers(),
             )
             response.raise_for_status()
             payload = self._decode_json_response(response, endpoint="/experimental/worktree")

@@ -12,6 +12,7 @@ from opencode_a2a.client.request_context import (
     build_default_headers,
     split_request_metadata,
 )
+from opencode_a2a.trace_context import TraceContext, bind_trace_context
 
 
 def test_split_request_metadata_and_default_headers() -> None:
@@ -19,6 +20,8 @@ def test_split_request_metadata_and_default_headers() -> None:
         {
             "authorization": "Bearer explicit-token",
             "A2A-Version": "1.0.0",
+            "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            "tracestate": "vendor=value",
             "trace_id": "trace-1",
         }
     )
@@ -27,6 +30,8 @@ def test_split_request_metadata_and_default_headers() -> None:
     assert extra_headers == {
         "Authorization": "Bearer explicit-token",
         "A2A-Version": "1.0",
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "tracestate": "vendor=value",
     }
     assert build_default_headers("peer-token") == {"Authorization": "Bearer peer-token"}
 
@@ -63,6 +68,47 @@ def test_build_default_headers_includes_protocol_version() -> None:
 
 def test_build_call_context_without_headers_returns_none() -> None:
     assert build_call_context(None, None) is None
+
+
+def test_build_call_context_includes_current_trace_headers() -> None:
+    with bind_trace_context(
+        TraceContext(
+            traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            trace_id="4bf92f3577b34da6a3ce929d0e0e4736",
+            tracestate="vendor=value",
+        )
+    ):
+        context = build_call_context(None, None)
+
+    assert context is not None
+    assert context.state["headers"] == {
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "tracestate": "vendor=value",
+    }
+
+
+def test_build_call_context_preserves_explicit_trace_headers_over_current_context() -> None:
+    with bind_trace_context(
+        TraceContext(
+            traceparent="00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01",
+            trace_id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            tracestate="upstream=1",
+        )
+    ):
+        context = build_call_context(
+            "peer-token",
+            {
+                "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                "tracestate": "vendor=value",
+            },
+        )
+
+    assert context is not None
+    assert context.state["headers"] == {
+        "Authorization": "Bearer peer-token",
+        "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "tracestate": "vendor=value",
+    }
 
 
 def test_build_client_interceptors_uses_header_interceptor() -> None:

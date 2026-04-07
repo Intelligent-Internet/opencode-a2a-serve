@@ -66,6 +66,7 @@ from ..jsonrpc.application import (
 from ..opencode_upstream_client import OpencodeUpstreamClient
 from ..output_modes import normalize_accepted_output_modes
 from ..profile.runtime import build_runtime_profile
+from ..trace_context import install_log_record_factory
 from .agent_card import (
     _CHAT_OUTPUT_MODES,
     _build_agent_card_description,
@@ -514,6 +515,15 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
         credential_id = getattr(request.state, "user_credential_id", None)
         if credential_id:
             context.state["credential_id"] = credential_id
+        traceparent = getattr(request.state, "traceparent", None)
+        if traceparent:
+            context.state["traceparent"] = traceparent
+        tracestate = getattr(request.state, "tracestate", None)
+        if tracestate:
+            context.state["tracestate"] = tracestate
+        trace_id = getattr(request.state, "trace_id", None)
+        if trace_id:
+            context.state["trace_id"] = trace_id
         negotiated_protocol_version = getattr(request.state, "a2a_protocol_version", None)
         if negotiated_protocol_version:
             context.state["a2a_protocol_version"] = negotiated_protocol_version
@@ -525,6 +535,7 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
 
 
 def create_app(settings: Settings) -> FastAPI:
+    install_log_record_factory()
     database_engine = (
         build_database_engine(settings) if settings.a2a_task_store_backend == "database" else None
     )
@@ -663,9 +674,10 @@ def _normalize_log_level(value: str) -> str:
 
 
 def _configure_logging(level: str) -> None:
+    install_log_record_factory()
     logging.basicConfig(
         level=getattr(logging, level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        format="%(asctime)s %(levelname)s %(name)s [trace_id=%(trace_id)s]: %(message)s",
     )
     logging.getLogger("uvicorn.error").setLevel(level)
     logging.getLogger("uvicorn.access").setLevel(level)

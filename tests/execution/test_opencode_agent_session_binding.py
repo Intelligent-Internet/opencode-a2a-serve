@@ -31,6 +31,7 @@ from opencode_a2a.execution.executor import OpencodeAgentExecutor
 from opencode_a2a.execution.tool_error_mapping import map_a2a_tool_exception
 from opencode_a2a.opencode_upstream_client import OpencodeMessage
 from opencode_a2a.server.client_manager import A2AClientManager
+from opencode_a2a.trace_context import TraceContext, bind_trace_context
 from tests.support.helpers import (
     DummyChatOpencodeUpstreamClient,
     DummyEventQueue,
@@ -618,6 +619,87 @@ async def test_agent_a2a_call_uses_server_side_basic_auth_headers(
     assert kwargs["context"].state["headers"]["Authorization"] == (
         f"Basic {b64encode(b'user:pass').decode()}"
     )
+
+    await manager.close_all()
+
+
+@pytest.mark.asyncio
+async def test_agent_a2a_call_propagates_current_trace_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_sdk_client = _FakeOutboundClient(
+        events=[
+            (
+                Task(
+                    id="remote-task",
+                    context_id="remote-ctx",
+                    status=TaskStatus(state=TaskState.working),
+                ),
+                TaskArtifactUpdateEvent(
+                    task_id="remote-task",
+                    context_id="remote-ctx",
+                    artifact=Artifact(
+                        artifact_id="artifact-1",
+                        name="response",
+                        parts=[Part(root=TextPart(text="remote response"))],
+                    ),
+                ),
+            )
+        ]
+    )
+    monkeypatch.setattr(A2AClient, "_build_client", AsyncMock(return_value=fake_sdk_client))
+
+    manager = A2AClientManager(
+        SimpleNamespace(
+            a2a_client_timeout_seconds=30.0,
+            a2a_client_card_fetch_timeout_seconds=5.0,
+            a2a_client_use_client_preference=False,
+            a2a_client_bearer_token=None,
+            a2a_client_basic_auth=None,
+            a2a_client_protocol_version=None,
+            a2a_protocol_version="0.3",
+            a2a_client_supported_transports=("JSONRPC", "HTTP+JSON"),
+            a2a_client_cache_ttl_seconds=60.0,
+            a2a_client_cache_maxsize=1,
+        )
+    )
+    executor = OpencodeAgentExecutor(
+        DummyChatOpencodeUpstreamClient(),
+        streaming_enabled=False,
+        a2a_client_manager=manager,
+    )
+
+    with bind_trace_context(
+        TraceContext(
+            traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            trace_id="4bf92f3577b34da6a3ce929d0e0e4736",
+            tracestate="vendor=value",
+        )
+    ):
+        results = await executor._maybe_handle_tools(
+            {
+                "parts": [
+                    {
+                        "type": "tool",
+                        "tool": "a2a_call",
+                        "callID": "c-trace",
+                        "state": {
+                            "status": "calling",
+                            "input": {"url": "http://remote", "message": "hello"},
+                        },
+                    }
+                ]
+            }
+        )
+
+    assert results is not None
+    assert results[0]["output"] == "remote response"
+    _, _, kwargs = fake_sdk_client.send_message_inputs[0]
+    assert kwargs["context"] is not None
+    assert kwargs["context"].state["headers"]["traceparent"] == (
+        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    )
+    assert kwargs["context"].state["headers"]["tracestate"] == "vendor=value"
 
     await manager.close_all()
 

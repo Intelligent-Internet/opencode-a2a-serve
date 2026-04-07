@@ -30,6 +30,13 @@ from ..protocol_versions import (
     negotiate_protocol_version,
     normalize_protocol_version,
 )
+from ..trace_context import (
+    TRACEPARENT_HEADER,
+    TRACESTATE_HEADER,
+    reset_current_trace_context,
+    resolve_trace_context,
+    set_current_trace_context,
+)
 from .request_parsing import (
     _decode_payload_preview,
     _detect_sensitive_extension_method,
@@ -157,6 +164,24 @@ def install_runtime_middlewares(
             return normalize_protocol_version(raw_value) == "1.0"
         except ValueError:
             return False
+
+    @app.middleware("http")
+    async def bind_trace_context(request: Request, call_next):
+        trace_context = resolve_trace_context(
+            request.headers.get(TRACEPARENT_HEADER),
+            request.headers.get(TRACESTATE_HEADER),
+        )
+        request.state.traceparent = trace_context.traceparent
+        request.state.trace_id = trace_context.trace_id
+        if trace_context.tracestate:
+            request.state.tracestate = trace_context.tracestate
+        token = set_current_trace_context(trace_context)
+        try:
+            response = await call_next(request)
+        finally:
+            reset_current_trace_context(token)
+        response.headers[TRACEPARENT_HEADER] = trace_context.traceparent
+        return response
 
     @app.middleware("http")
     async def negotiate_a2a_protocol_version(request: Request, call_next):
