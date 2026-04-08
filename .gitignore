@@ -225,3 +225,6 @@ temp_*.*
 docs/operations/opencode/
 .swival/
 *.db
+.codex-a2a/
+opencode-a2a.db
+opencode-a2a.db*
