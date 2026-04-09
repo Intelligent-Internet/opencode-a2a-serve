@@ -46,15 +46,14 @@ def test_scripts_index_documents_split_health_entrypoints() -> None:
     assert "external A2A conformance experiment entrypoint" in SCRIPTS_INDEX_TEXT
     assert "dependency review entrypoint" in SCRIPTS_INDEX_TEXT
     assert "health_common.sh" in SCRIPTS_INDEX_TEXT
-    assert "weekly Dependabot version updates" in SCRIPTS_INDEX_TEXT
+    assert "single weekly grouped Dependabot PR for `uv`" in SCRIPTS_INDEX_TEXT
 
 
-def test_dependabot_configuration_covers_uv_and_github_actions() -> None:
+def test_dependabot_configuration_prefers_a_single_grouped_uv_pr() -> None:
     assert 'package-ecosystem: "uv"' in DEPENDABOT_TEXT
-    assert 'package-ecosystem: "github-actions"' in DEPENDABOT_TEXT
-    assert "open-pull-requests-limit: 5" in DEPENDABOT_TEXT
-    assert "open-pull-requests-limit: 3" in DEPENDABOT_TEXT
-    assert "uv-minor-and-patch" in DEPENDABOT_TEXT
+    assert 'package-ecosystem: "github-actions"' not in DEPENDABOT_TEXT
+    assert "open-pull-requests-limit: 1" in DEPENDABOT_TEXT
+    assert "uv-all-updates" in DEPENDABOT_TEXT
 
 
 def test_conformance_script_keeps_external_experiment_scope() -> None:
