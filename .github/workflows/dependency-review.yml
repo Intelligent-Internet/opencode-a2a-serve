@@ -1,4 +1,4 @@
-name: Dependency Health
+name: Review Development Dependencies
 
 on:
   workflow_dispatch:
@@ -11,18 +11,19 @@ permissions:
 
 jobs:
   dependency-health:
+    name: Audit Development Dependencies
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
-      - name: Setup uv
+      - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false

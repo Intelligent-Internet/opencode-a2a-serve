@@ -1,4 +1,4 @@
-name: Publish
+name: Release Publish and Repair
 
 on:
   push:
@@ -31,6 +31,7 @@ permissions:
 
 jobs:
   publish:
+    name: Build and Publish Release Artifacts
     runs-on: ubuntu-latest
 
     steps:
@@ -40,17 +41,17 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
-      - name: Setup uv
+      - name: Set up uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
 
-      - name: Run regression baseline
+      - name: Run default regression baseline
         run: bash ./scripts/doctor.sh
 
       - name: Export runtime requirements for vulnerability audit
@@ -94,10 +95,10 @@ jobs:
           print(f"Validated release version: {version}")
           PY
 
-      - name: Smoke test wheel install
+      - name: Smoke test wheel artifact
         run: bash ./scripts/smoke_test_built_cli.sh dist/opencode_a2a-*.whl
 
-      - name: Smoke test sdist install
+      - name: Smoke test sdist artifact
         run: bash ./scripts/smoke_test_built_cli.sh dist/opencode_a2a-*.tar.gz
 
       - name: Publish to PyPI
