@@ -21,4 +21,5 @@ Executable scripts live in this directory. This file is the entry index for the 
 ## Notes
 
 - `doctor.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
+- [`.github/dependabot.yml`](../.github/dependabot.yml) enables weekly Dependabot version updates for `uv` and GitHub Actions with grouped low-risk updates, while `dependency_health.sh` remains the explicit review/audit entrypoint.
 - External conformance experiments remain intentionally separate from the default regression path. See [`../docs/conformance.md`](../docs/conformance.md).
