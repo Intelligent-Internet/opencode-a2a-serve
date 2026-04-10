@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+import httpx
 from a2a.types import A2AError, InternalError
 from starlette.responses import Response
 
@@ -331,6 +333,61 @@ def extract_interrupt_callback_directory_hint(
         request_id=request_id,
         params=params,
     )
+
+
+async def invoke_upstream_or_error(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    *,
+    invoke: Callable[[], Awaitable[Any]],
+    upstream_http_error_code: int,
+    upstream_unreachable_error_code: int,
+    internal_log_message: str,
+    method: str | None = None,
+    session_id: str | None = None,
+    interrupt_request_id: str | None = None,
+    on_not_found: Callable[[], Response] | None = None,
+) -> tuple[Any | None, Response | None]:
+    try:
+        return await invoke(), None
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404 and on_not_found is not None:
+            return None, on_not_found()
+        return None, build_upstream_http_error_response(
+            context,
+            request_id,
+            upstream_http_error_code,
+            upstream_status=exc.response.status_code,
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+        )
+    except httpx.HTTPError:
+        return None, build_upstream_unreachable_error_response(
+            context,
+            request_id,
+            upstream_unreachable_error_code,
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+        )
+    except UpstreamConcurrencyLimitError as exc:
+        return None, build_upstream_concurrency_error_response(
+            context,
+            request_id,
+            upstream_unreachable_error_code,
+            exc=exc,
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+        )
+    except Exception as exc:
+        return None, build_internal_error_response(
+            context,
+            request_id,
+            log_message=internal_log_message,
+            exc=exc,
+        )
 
 
 def build_upstream_http_error_response(
