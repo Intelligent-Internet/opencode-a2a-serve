@@ -236,7 +236,9 @@ async def test_streaming_execute_http_error_emits_status_update_with_metadata(ca
 
 
 @pytest.mark.asyncio
-async def test_streaming_execute_upstream_backpressure_emits_status_update_with_metadata() -> None:
+async def test_streaming_execute_upstream_backpressure_emits_status_update_with_metadata(
+    caplog,
+) -> None:
     client = AsyncMock()
 
     async def create_session(title: str | None = None, *, directory: str | None = None) -> str:
@@ -265,7 +267,8 @@ async def test_streaming_execute_upstream_backpressure_emits_status_update_with_
     )
     event_queue = AsyncMock(spec=EventQueue)
 
-    await executor.execute(context, event_queue)
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.execution.coordinator"):
+        await executor.execute(context, event_queue)
 
     status = None
     for call in event_queue.enqueue_event.call_args_list:
@@ -283,6 +286,13 @@ async def test_streaming_execute_upstream_backpressure_emits_status_update_with_
     assert status is not None
     assert status.status.state == TaskState.failed
     assert status.metadata["opencode"]["error"]["type"] == "UPSTREAM_BACKPRESSURE"
+    backpressure_logs = [
+        record
+        for record in caplog.records
+        if "OpenCode request rejected by concurrency budget" in record.message
+    ]
+    assert len(backpressure_logs) == 1
+    assert backpressure_logs[0].levelno == logging.DEBUG
 
 
 @pytest.mark.asyncio

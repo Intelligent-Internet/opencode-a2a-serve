@@ -220,7 +220,7 @@ class ExecutionCoordinator:
                 streaming_request=self._prepared.streaming_request,
             )
         except UpstreamConcurrencyLimitError as exc:
-            logger.warning("OpenCode request rejected by concurrency budget: %s", exc)
+            logger.debug("OpenCode request rejected by concurrency budget: %s", exc)
             await self._executor._emit_error(
                 self._event_queue,
                 task_id=self._task_id,
@@ -312,11 +312,11 @@ class ExecutionCoordinator:
         )
 
         logger.debug(
-            "OpenCode response task_id=%s session_id=%s message_id=%s text=%s",
+            "OpenCode response task_id=%s session_id=%s message_id=%s text_len=%s",
             self._task_id,
             response.session_id,
             resolved_message_id,
-            response_text,
+            len(response_text),
         )
 
         if response_error is not None:

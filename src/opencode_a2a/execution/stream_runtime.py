@@ -138,14 +138,14 @@ class StreamRuntime:
                 )
                 logger.debug(
                     "Stream chunk task_id=%s session_id=%s block_type=%s append=%s "
-                    "shared_source=%s internal_source=%s text=%s",
+                    "shared_source=%s internal_source=%s content_len=%s",
                     task_id,
                     session_id,
                     chunk.block_type,
                     effective_append,
                     chunk.shared_source,
                     chunk.internal_source,
-                    chunk.content_key,
+                    len(chunk.content_key),
                 )
                 if chunk.block_type == BlockType.TOOL_CALL:
                     self._emit_metric("tool_call_chunks_emitted_total")
