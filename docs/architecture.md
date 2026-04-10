@@ -92,6 +92,7 @@ That is why deployments should still be treated as trusted or controlled unless 
 Use the docs by responsibility:
 
 - [README](../README.md): project overview, install/start path, and entry navigation
+- [Compatibility Guide](compatibility.md): compatibility-sensitive surface and stability expectations
 - [Usage Guide](guide.md): runtime configuration, transport contracts, extensions, and examples
 - [Maintainer Architecture Guide](maintainer-architecture.md): internal module boundaries, request call chains, and persistence touchpoints
 - [Extension Specifications](extension-specifications.md): stable extension URI/spec index and disclosure policy

@@ -1,6 +1,6 @@
 # Usage Guide
 
-This guide covers configuration, authentication, API behavior, streaming re-subscription, and A2A client examples. It is the canonical document for implementation-level protocol contracts and JSON-RPC extension details; [README](../README.md) stays at overview level, [architecture.md](./architecture.md) explains the service boundary, and [maintainer-architecture.md](./maintainer-architecture.md) covers the internal module view for contributors.
+This guide covers configuration, authentication, API behavior, streaming re-subscription, and A2A client examples. It is the canonical document for implementation-level protocol contracts and JSON-RPC extension details; [README](../README.md) stays at overview level, [architecture.md](./architecture.md) explains the service boundary, [maintainer-architecture.md](./maintainer-architecture.md) covers the internal module view for contributors, and [compatibility.md](./compatibility.md) defines the compatibility-sensitive surface.
 
 ## Transport Contracts
 

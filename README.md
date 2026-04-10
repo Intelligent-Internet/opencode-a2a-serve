@@ -98,7 +98,7 @@ curl http://127.0.0.1:8000/.well-known/agent-card.json
 - Declared supported protocol lines: `0.3`, `1.0`
 - `0.3` is the stable interoperability baseline for the current runtime surface.
 - `1.0` currently covers version negotiation plus protocol-aware JSON-RPC and REST error shaping, while transport payloads, enums, pagination, signatures, and interface-level protocol declarations still follow the shipped SDK baseline.
-- The detailed compatibility matrix and machine-readable support boundary are documented in [`docs/guide.md`](docs/guide.md).
+- The detailed compatibility matrix and machine-readable support boundary are documented in [`docs/guide.md`](docs/guide.md) and [`docs/compatibility.md`](docs/compatibility.md).
 
 ## Peering Node / Outbound Access
 
@@ -164,6 +164,7 @@ Read before deployment:
 
 - [docs/architecture.md](docs/architecture.md) Service responsibility boundaries and request flow.
 - [docs/maintainer-architecture.md](docs/maintainer-architecture.md) Internal module boundaries and maintainer call chains.
+- [docs/compatibility.md](docs/compatibility.md) Compatibility-sensitive surface and contract-honesty guidance.
 - [docs/guide.md](docs/guide.md) Usage guide, transport details, streaming behavior, extensions, and examples.
 - [docs/conformance.md](docs/conformance.md) External TCK experiment workflow and artifact handling.
 - [SECURITY.md](SECURITY.md) Threat model, deployment caveats, and vulnerability disclosure guidance.
