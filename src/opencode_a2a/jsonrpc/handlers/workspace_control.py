@@ -19,6 +19,7 @@ from .common import (
     build_success_response,
     build_upstream_payload_error_response,
     invoke_upstream_or_error,
+    reject_unknown_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,74 +29,145 @@ ERR_UPSTREAM_HTTP_ERROR = WORKSPACE_CONTROL_ERROR_BUSINESS_CODES["UPSTREAM_HTTP_
 ERR_UPSTREAM_PAYLOAD_ERROR = WORKSPACE_CONTROL_ERROR_BUSINESS_CODES["UPSTREAM_PAYLOAD_ERROR"]
 
 
-def _parse_optional_request_object(
-    params: dict[str, Any],
+def _invalid_field_response(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
     *,
-    required: bool,
-) -> dict[str, Any] | None:
+    field: str,
+    message: str,
+) -> Response:
+    return context.error_response(
+        request_id,
+        invalid_params_error(message, data={"type": "INVALID_FIELD", "field": field}),
+    )
+
+
+def _missing_field_response(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    *,
+    field: str,
+    error_field: str | None = None,
+) -> Response:
+    return context.error_response(
+        request_id,
+        invalid_params_error(
+            f"Missing required params.{field}",
+            data={"type": "MISSING_FIELD", "field": error_field or field},
+        ),
+    )
+
+
+def _parse_required_request_object(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    params: dict[str, Any],
+) -> tuple[dict[str, Any] | None, Response | None]:
     value = params.get("request")
     if value is None:
-        if required:
-            raise ValueError("Missing required params.request")
-        return None
+        return None, _missing_field_response(context, request_id, field="request")
     if not isinstance(value, dict):
-        raise TypeError("params.request must be an object")
-    return dict(value)
+        return None, _invalid_field_response(
+            context,
+            request_id,
+            field="request",
+            message="params.request must be an object",
+        )
+    return dict(value), None
 
 
-def _parse_workspace_id(params: dict[str, Any]) -> str:
+def _parse_workspace_id(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    params: dict[str, Any],
+) -> tuple[str | None, Response | None]:
     raw_workspace_id = params.get("workspace_id")
     if not isinstance(raw_workspace_id, str) or not raw_workspace_id.strip():
-        raise ValueError("Missing required params.workspace_id")
-    return raw_workspace_id.strip()
+        return None, _missing_field_response(context, request_id, field="workspace_id")
+    return raw_workspace_id.strip(), None
 
 
-def _validate_workspace_request(method: str, request: dict[str, Any]) -> None:
+def _validate_workspace_request(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    method: str,
+    request: dict[str, Any],
+) -> Response | None:
     if method == "create_workspace":
         allowed_fields = {"id", "type", "branch", "extra"}
         if "type" not in request:
-            raise ValueError("Missing required params.request.type")
+            return _missing_field_response(
+                context,
+                request_id,
+                field="request.type",
+                error_field="request",
+            )
         request_type = request.get("type")
         if not isinstance(request_type, str) or not request_type.strip():
-            raise TypeError("params.request.type must be a non-empty string")
+            return _invalid_field_response(
+                context,
+                request_id,
+                field="request.type",
+                message="params.request.type must be a non-empty string",
+            )
     elif method == "create_worktree":
         allowed_fields = {"name", "startCommand"}
     elif method in {"remove_worktree", "reset_worktree"}:
         allowed_fields = {"directory"}
         directory = request.get("directory")
         if not isinstance(directory, str) or not directory.strip():
-            raise TypeError("params.request.directory must be a non-empty string")
+            return _invalid_field_response(
+                context,
+                request_id,
+                field="request.directory",
+                message="params.request.directory must be a non-empty string",
+            )
     else:
         allowed_fields = set()
 
-    unknown_fields = sorted(set(request) - allowed_fields)
-    if unknown_fields:
-        raise ValueError(
-            "Unsupported request fields: "
-            + ", ".join(f"request.{field}" for field in unknown_fields)
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        request_id,
+        request,
+        allowed_fields=allowed_fields,
+        field_prefix="request.",
+        message_prefix="Unsupported request fields",
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     for field in ("id", "type", "branch", "name", "startCommand", "directory"):
         if field not in request:
             continue
         value = request[field]
         if value is not None and not isinstance(value, str):
-            raise TypeError(f"params.request.{field} must be a string")
+            return _invalid_field_response(
+                context,
+                request_id,
+                field=f"request.{field}",
+                message=f"params.request.{field} must be a string",
+            )
+    return None
 
 
 def _validate_allowed_fields(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
     method: str,
     params: dict[str, Any],
-) -> None:
+) -> Response | None:
     allowed_fields = {"metadata"}
     if method in {"create_workspace", "create_worktree", "remove_worktree", "reset_worktree"}:
         allowed_fields.add("request")
     if method == "remove_workspace":
         allowed_fields.add("workspace_id")
 
-    unknown_fields = sorted(set(params) - allowed_fields)
-    if unknown_fields:
-        raise ValueError("Unsupported fields: " + ", ".join(unknown_fields))
+    return reject_unknown_fields(
+        context,
+        request_id,
+        params,
+        allowed_fields=allowed_fields,
+    )
 
 
 def _validate_response_payload(method: str, payload: Any) -> dict[str, Any]:
@@ -163,35 +235,38 @@ async def handle_workspace_control_request(
             error_code=WORKSPACE_CONTROL_ERROR_BUSINESS_CODES["AUTHORIZATION_FORBIDDEN"],
         )
 
-    try:
-        _validate_allowed_fields(method_key, params)
-        request_body: dict[str, Any] | None = None
-        workspace_id: str | None = None
-        if method_key == "remove_workspace":
-            workspace_id = _parse_workspace_id(params)
-        elif method_key in {
-            "create_workspace",
-            "create_worktree",
-            "remove_worktree",
-            "reset_worktree",
-        }:
-            request_body = _parse_optional_request_object(
-                params,
-                required=True,
-            )
-            assert request_body is not None
-            _validate_workspace_request(method_key, request_body)
-    except ValueError as exc:
-        field = "workspace_id" if "workspace_id" in str(exc) else "request"
-        return context.error_response(
+    allowed_fields_error = _validate_allowed_fields(context, base_request.id, method_key, params)
+    if allowed_fields_error is not None:
+        return allowed_fields_error
+
+    request_body: dict[str, Any] | None = None
+    workspace_id: str | None = None
+    if method_key == "remove_workspace":
+        workspace_id, workspace_error = _parse_workspace_id(context, base_request.id, params)
+        if workspace_error is not None:
+            return workspace_error
+    elif method_key in {
+        "create_workspace",
+        "create_worktree",
+        "remove_worktree",
+        "reset_worktree",
+    }:
+        request_body, request_error = _parse_required_request_object(
+            context,
             base_request.id,
-            invalid_params_error(str(exc), data={"type": "INVALID_FIELD", "field": field}),
+            params,
         )
-    except TypeError as exc:
-        return context.error_response(
+        if request_error is not None:
+            return request_error
+        assert request_body is not None
+        request_validation_error = _validate_workspace_request(
+            context,
             base_request.id,
-            invalid_params_error(str(exc), data={"type": "INVALID_FIELD"}),
+            method_key,
+            request_body,
         )
+        if request_validation_error is not None:
+            return request_validation_error
 
     async def _invoke_workspace_method() -> Any:
         if method_key == "list_projects":
