@@ -58,6 +58,7 @@ Service-level behavior layered on top of those core methods should also be decla
 
 - `tasks/resubscribe` replay-once behavior for terminal updates
 - first-terminal-state-wins task persistence policy
+- task-scoped `acceptedOutputModes` negotiation persistence across send / stream / get / resubscribe
 - request-body rejection behavior for oversized transport payloads
 
 ## Deployment Profile
@@ -83,6 +84,7 @@ Task-store behavior that should remain stable for clients:
 
 - once a task reaches a terminal state, later conflicting writes are dropped on a first-terminal-state-wins basis
 - task-store I/O failures are surfaced as stable service errors instead of leaking backend-specific exceptions
+- accepted output-mode negotiation for a task is persisted with the task so later reads keep the same filtered output contract
 - adapter-managed migrations only own adapter state tables; SDK-managed task schema remains SDK-owned
 
 The default SQLite-first profile is intended for local or controlled single-instance deployments. Wider SQLAlchemy dialect compatibility should be treated as implementation latitude rather than a strong public promise unless explicitly documented later.

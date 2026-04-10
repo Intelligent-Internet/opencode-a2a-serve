@@ -64,7 +64,12 @@ from ..jsonrpc.application import (
     OpencodeSessionManagementJSONRPCApplication,
 )
 from ..opencode_upstream_client import OpencodeUpstreamClient
-from ..output_modes import normalize_accepted_output_modes
+from ..output_modes import (
+    NegotiatingResultAggregator,
+    apply_accepted_output_modes,
+    extract_accepted_output_modes_from_metadata,
+    normalize_accepted_output_modes,
+)
 from ..profile.runtime import build_runtime_profile
 from ..trace_context import install_log_record_factory
 from .agent_card import (
@@ -260,6 +265,33 @@ class OpencodeRequestHandler(DefaultRequestHandler):
         normalized = normalize_accepted_output_modes(configuration)
         return list(normalized) if normalized is not None else None
 
+    @staticmethod
+    def _apply_task_output_negotiation(task: Task) -> Task:
+        negotiated = apply_accepted_output_modes(
+            task,
+            extract_accepted_output_modes_from_metadata(task.metadata),
+        )
+        if isinstance(negotiated, Task):
+            return negotiated
+        return task
+
+    async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+        (
+            task_manager,
+            task_id,
+            queue,
+            _result_aggregator,
+            producer_task,
+        ) = await super()._setup_message_execution(params, context)
+        accepted_output_modes = self._extract_accepted_output_modes(params)
+        return (
+            task_manager,
+            task_id,
+            queue,
+            NegotiatingResultAggregator(task_manager, accepted_output_modes),
+            producer_task,
+        )
+
     @classmethod
     def _validate_chat_output_modes(cls, params) -> None:  # noqa: ANN001
         accepted_output_modes = cls._extract_accepted_output_modes(params)
@@ -298,7 +330,10 @@ class OpencodeRequestHandler(DefaultRequestHandler):
         context=None,
     ) -> Task | None:
         try:
-            return await super().on_get_task(params, context)
+            task = await super().on_get_task(params, context)
+            if task is None:
+                return None
+            return self._apply_task_output_negotiation(task)
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc
 
@@ -347,11 +382,16 @@ class OpencodeRequestHandler(DefaultRequestHandler):
 
             # Subscribe contract: terminal tasks replay once and then close stream.
             if task.status.state in TERMINAL_TASK_STATES:
-                yield task
+                yield self._apply_task_output_negotiation(task)
                 return
 
             async for event in super().on_resubscribe_to_task(params, context):
-                yield event
+                negotiated = apply_accepted_output_modes(
+                    event,
+                    extract_accepted_output_modes_from_metadata(getattr(event, "metadata", None)),
+                )
+                if negotiated is not None:
+                    yield negotiated
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc
 
