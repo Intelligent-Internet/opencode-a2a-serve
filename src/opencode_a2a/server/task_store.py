@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import Task, TaskState
+from a2a.types import Task
 from sqlalchemy import event, or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert

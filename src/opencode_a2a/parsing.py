@@ -84,4 +84,3 @@ def parse_timestamp_field(
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
-

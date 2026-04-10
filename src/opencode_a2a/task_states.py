@@ -10,4 +10,3 @@ TERMINAL_TASK_STATES = frozenset(
         TaskState.rejected,
     }
 )
-

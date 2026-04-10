@@ -37,4 +37,3 @@ def extract_first_namespaced_string(
             if value:
                 return value
     return None
-

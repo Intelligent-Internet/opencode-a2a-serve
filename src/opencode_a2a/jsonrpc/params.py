@@ -9,7 +9,11 @@ from ..contracts.extensions import (
 )
 from ..parsing import (
     parse_bool_field as parse_shared_bool_field,
+)
+from ..parsing import (
     parse_int_field as parse_shared_int_field,
+)
+from ..parsing import (
     parse_string_field as parse_shared_string_field,
 )
 

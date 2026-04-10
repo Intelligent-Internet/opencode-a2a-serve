@@ -47,4 +47,3 @@ def test_extract_first_namespaced_string_prefers_first_non_empty_value() -> None
         )
         == "services/api"
     )
-

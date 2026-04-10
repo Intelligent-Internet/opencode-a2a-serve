@@ -23,7 +23,6 @@ from ..params import (
     parse_list_sessions_params,
 )
 from .common import (
-    build_internal_error_response,
     build_success_response,
     build_upstream_payload_error_response,
     invoke_upstream_or_error,
@@ -85,6 +84,7 @@ async def handle_session_query_request(
         )
         if routing_error is not None:
             return routing_error
+
     def _session_not_found_response() -> Response:
         assert session_id is not None
         return context.error_response(

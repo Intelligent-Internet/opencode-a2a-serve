@@ -489,7 +489,9 @@ async def handle_session_lifecycle_request(
 
             await session_claim.finalize()
             if forked_session_id is not None and identity:
-                await context.session_claim_finalize(identity=identity, session_id=forked_session_id)
+                await context.session_claim_finalize(
+                    identity=identity, session_id=forked_session_id
+                )
     except httpx.HTTPStatusError as exc:
         upstream_status = exc.response.status_code
         if upstream_status == 404 and session_id is not None:
