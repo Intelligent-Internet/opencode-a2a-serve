@@ -9,6 +9,7 @@ from a2a.types import A2AError, InternalError
 from starlette.responses import Response
 
 from ...contracts.extensions import SESSION_QUERY_ERROR_BUSINESS_CODES
+from ...metadata_access import extract_namespaced_value
 from ...opencode_upstream_client import UpstreamConcurrencyLimitError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import (
@@ -181,7 +182,11 @@ def extract_directory_from_metadata(
 
     directory = None
     if opencode_metadata is not None:
-        directory = opencode_metadata.get("directory")
+        directory = extract_namespaced_value(
+            {"opencode": opencode_metadata},
+            namespace="opencode",
+            path=("directory",),
+        )
     if directory is not None and not isinstance(directory, str):
         return None, context.error_response(
             request_id,
@@ -224,7 +229,11 @@ def extract_workspace_id_from_metadata(
             ),
         )
 
-    raw_workspace = raw_opencode_metadata.get("workspace")
+    raw_workspace = extract_namespaced_value(
+        {"opencode": raw_opencode_metadata},
+        namespace="opencode",
+        path=("workspace",),
+    )
     if raw_workspace is None:
         return None, None
     if not isinstance(raw_workspace, dict):
@@ -236,7 +245,11 @@ def extract_workspace_id_from_metadata(
             ),
         )
 
-    raw_workspace_id = raw_workspace.get("id")
+    raw_workspace_id = extract_namespaced_value(
+        {"workspace": raw_workspace},
+        namespace="workspace",
+        path=("id",),
+    )
     if raw_workspace_id is None:
         return None, None
     if not isinstance(raw_workspace_id, str):
