@@ -88,7 +88,7 @@ def test_normalize_accepted_output_modes_treats_wildcards_as_unrestricted() -> N
 
 
 @pytest.mark.asyncio
-async def test_negotiating_result_aggregator_persists_task_scoped_metadata_for_artifact_first_flow() -> None:
+async def test_negotiating_result_aggregator_persists_metadata_for_artifact_first_flow() -> None:
     store = InMemoryTaskStore()
     task_manager = TaskManager(
         task_id="task-artifact-first",

@@ -12,6 +12,10 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from ..jsonrpc.error_responses import build_http_error_body
+from ..output_modes import (
+    apply_accepted_output_modes,
+    extract_accepted_output_modes_from_metadata,
+)
 from .task_store import TaskStoreOperationError, list_stored_tasks
 
 logger = logging.getLogger(__name__)
@@ -141,6 +145,13 @@ def _serialize_task(
     history_length: int,
     include_artifacts: bool,
 ) -> dict:
+    negotiated = apply_accepted_output_modes(
+        task,
+        extract_accepted_output_modes_from_metadata(task.metadata),
+    )
+    if isinstance(negotiated, Task):
+        task = negotiated
+
     payload = task.model_dump(mode="json", by_alias=True, exclude_none=True)
 
     history = payload.get("history")
