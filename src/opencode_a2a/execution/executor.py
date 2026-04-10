@@ -73,7 +73,7 @@ from .stream_state import (
     _StreamOutputState,
     _TTLCache,
 )
-from .tool_orchestration import handle_a2a_call_tool, maybe_handle_tools, merge_streamed_tool_output
+from .tool_orchestration import maybe_handle_tools, merge_streamed_tool_output
 from .upstream_error_translator import (
     _await_stream_terminal_signal,
     _extract_upstream_error_detail,
@@ -183,12 +183,6 @@ class OpencodeAgentExecutor(AgentExecutor):
     ) -> list[dict[str, Any]] | None:
         return await maybe_handle_tools(
             raw_response,
-            a2a_client_manager=self._a2a_client_manager,
-        )
-
-    async def _handle_a2a_call_tool(self, part: dict[str, Any]) -> dict[str, Any]:
-        return await handle_a2a_call_tool(
-            part,
             a2a_client_manager=self._a2a_client_manager,
         )
 
