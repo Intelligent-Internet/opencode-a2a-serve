@@ -1,5 +1,6 @@
 import asyncio
 import json as json_module
+import logging
 
 import httpx
 import pytest
@@ -593,6 +594,7 @@ async def test_send_message_raises_upstream_contract_error_for_non_json_response
 @pytest.mark.asyncio
 async def test_send_message_raises_concurrency_limit_error_when_request_budget_exhausted(
     monkeypatch,
+    caplog,
 ):
     client = OpencodeUpstreamClient(
         make_settings(
@@ -618,11 +620,20 @@ async def test_send_message_raises_concurrency_limit_error_when_request_budget_e
     first_request = asyncio.create_task(client.send_message("ses-1", "hello"))
     await started.wait()
 
-    with pytest.raises(
-        UpstreamConcurrencyLimitError,
-        match="request concurrency limit exceeded",
-    ):
-        await client.send_message("ses-2", "blocked")
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.opencode_upstream_client"):
+        with pytest.raises(
+            UpstreamConcurrencyLimitError,
+            match="request concurrency limit exceeded",
+        ):
+            await client.send_message("ses-2", "blocked")
+
+    budget_logs = [
+        record
+        for record in caplog.records
+        if "OpenCode upstream concurrency limit exceeded" in record.message
+    ]
+    assert len(budget_logs) == 1
+    assert budget_logs[0].levelno == logging.DEBUG
 
     release.set()
     await first_request

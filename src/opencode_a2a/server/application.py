@@ -430,7 +430,7 @@ class OpencodeRequestHandler(DefaultRequestHandler):
             ):
                 yield event
         except (asyncio.CancelledError, GeneratorExit):
-            logger.warning("Client disconnected. Cancelling producer task %s", task_id)
+            logger.debug("Client disconnected. Cancelling producer task %s", task_id)
             producer_task.cancel()
             await queue.close(immediate=True)
             raise
@@ -504,7 +504,7 @@ class OpencodeRequestHandler(DefaultRequestHandler):
                 try:
                     current_task = asyncio.current_task()
                     if current_task is not None and current_task.cancelled():
-                        logger.warning(
+                        logger.debug(
                             "Client disconnected from message request. Cancelling task %s", task_id
                         )
                         producer_task.cancel()

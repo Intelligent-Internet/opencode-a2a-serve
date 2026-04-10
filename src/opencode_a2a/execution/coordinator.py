@@ -174,7 +174,11 @@ class ExecutionCoordinator:
                 break
 
         except httpx.HTTPStatusError as exc:
-            logger.exception("OpenCode request failed with HTTP error")
+            logger.warning(
+                "OpenCode request failed with HTTP status=%s",
+                exc.response.status_code,
+                exc_info=logger.isEnabledFor(logging.DEBUG),
+            )
             error_type, state, message = _format_upstream_error(
                 exc,
                 request="send_message",
@@ -190,7 +194,11 @@ class ExecutionCoordinator:
                 streaming_request=self._prepared.streaming_request,
             )
         except httpx.TimeoutException as exc:
-            logger.exception("OpenCode request timed out")
+            logger.warning(
+                "OpenCode request timed out: %s",
+                exc,
+                exc_info=logger.isEnabledFor(logging.DEBUG),
+            )
             await self._executor._emit_error(
                 self._event_queue,
                 task_id=self._task_id,
@@ -212,7 +220,7 @@ class ExecutionCoordinator:
                 streaming_request=self._prepared.streaming_request,
             )
         except UpstreamConcurrencyLimitError as exc:
-            logger.warning("OpenCode request rejected by concurrency budget: %s", exc)
+            logger.debug("OpenCode request rejected by concurrency budget: %s", exc)
             await self._executor._emit_error(
                 self._event_queue,
                 task_id=self._task_id,
@@ -304,11 +312,11 @@ class ExecutionCoordinator:
         )
 
         logger.debug(
-            "OpenCode response task_id=%s session_id=%s message_id=%s text=%s",
+            "OpenCode response task_id=%s session_id=%s message_id=%s text_len=%s",
             self._task_id,
             response.session_id,
             resolved_message_id,
-            response_text,
+            len(response_text),
         )
 
         if response_error is not None:

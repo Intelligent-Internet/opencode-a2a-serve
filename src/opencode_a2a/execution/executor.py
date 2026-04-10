@@ -310,7 +310,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             (
                 "Received message identity=%s credential_id=%s auth_scheme=%s trace_id=%s "
                 "task_id=%s context_id=%s "
-                "streaming=%s text=%s part_count=%s"
+                "streaming=%s text_len=%s part_count=%s"
             ),
             identity,
             credential_id,
@@ -319,7 +319,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             task_id,
             context_id,
             streaming_request,
-            user_text,
+            len(user_text),
             len(request_parts),
         )
         prepared = PreparedExecution(

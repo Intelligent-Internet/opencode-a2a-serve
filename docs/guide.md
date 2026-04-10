@@ -1247,7 +1247,8 @@ If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscr
 - Idempotency contract: repeated `tasks/cancel` on an already `canceled` task returns the current terminal task state without error.
 - Terminal subscribe contract: calling `subscribe` on a terminal task replays one terminal `Task` snapshot and then closes the stream.
 - These two semantics are also declared as machine-readable `service_behaviors` in the compatibility profile and wire contract extensions.
-- The service emits lightweight metric log records (`logger=opencode_a2a.execution.executor`):
+- At `A2A_LOG_LEVEL=DEBUG`, the service emits lightweight metric log records
+  (`logger=opencode_a2a.execution.executor`):
   - `a2a_stream_requests_total`
   - `a2a_stream_active` (`value=1` when a stream starts, `value=-1` when it closes)
   - `opencode_stream_retries_total`

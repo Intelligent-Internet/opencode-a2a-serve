@@ -138,14 +138,14 @@ class StreamRuntime:
                 )
                 logger.debug(
                     "Stream chunk task_id=%s session_id=%s block_type=%s append=%s "
-                    "shared_source=%s internal_source=%s text=%s",
+                    "shared_source=%s internal_source=%s content_len=%s",
                     task_id,
                     session_id,
                     chunk.block_type,
                     effective_append,
                     chunk.shared_source,
                     chunk.internal_source,
-                    chunk.content_key,
+                    len(chunk.content_key),
                 )
                 if chunk.block_type == BlockType.TOOL_CALL:
                     self._emit_metric("tool_call_chunks_emitted_total")
@@ -343,7 +343,7 @@ class StreamRuntime:
                     )
                 ]
             state.buffer = snapshot
-            logger.warning(
+            logger.debug(
                 "Suppressing non-prefix snapshot rewrite "
                 "task_id=%s session_id=%s part_id=%s block_type=%s had_delta=%s",
                 task_id,
@@ -593,7 +593,7 @@ class StreamRuntime:
                     if stop_event.is_set():
                         break
                     self._emit_metric("opencode_stream_retries_total")
-                    logger.exception("OpenCode event stream failed; retrying")
+                    logger.debug("OpenCode event stream failed; retrying", exc_info=True)
                     await self._sleep(backoff)
                     backoff = min(backoff * 2, max_backoff)
         except Exception:

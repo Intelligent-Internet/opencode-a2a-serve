@@ -19,6 +19,50 @@ from tests.support.streaming_output import (
 
 
 @pytest.mark.asyncio
+async def test_execute_debug_log_records_text_length_without_raw_user_text(caplog) -> None:
+    raw_text = "do not write this prompt to logs"
+    response_text = "do not write this response to logs"
+    client = DummyStreamingClient(
+        stream_events_payload=[],
+        response_text=response_text,
+    )
+    client.settings = make_settings(
+        test_bearer_token="test",
+        opencode_base_url="http://localhost",
+        a2a_log_body_limit=64,
+    )
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    with caplog.at_level(logging.DEBUG, logger="opencode_a2a.execution"):
+        await executor.execute(
+            make_request_context(
+                task_id="task-debug-input",
+                context_id="ctx-debug-input",
+                text=raw_text,
+            ),
+            queue,
+        )
+
+    received_messages = [
+        record.message for record in caplog.records if record.message.startswith("Received message")
+    ]
+    assert len(received_messages) == 1
+    assert f"text_len={len(raw_text)}" in received_messages[0]
+    opencode_response_messages = [
+        record.message
+        for record in caplog.records
+        if record.message.startswith("OpenCode response")
+    ]
+    assert len(opencode_response_messages) == 1
+    assert f"text_len={len(response_text)}" in opencode_response_messages[0]
+    all_messages = "\n".join(record.message for record in caplog.records)
+    assert raw_text not in all_messages
+    assert response_text not in all_messages
+
+
+@pytest.mark.asyncio
 async def test_streaming_logs_raw_upstream_events_at_debug(caplog) -> None:
     client = DummyStreamingClient(
         stream_events_payload=[

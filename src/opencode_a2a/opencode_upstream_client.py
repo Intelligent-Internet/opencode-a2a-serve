@@ -72,7 +72,7 @@ class _FastFailConcurrencyBudget:
         async with self._lock:
             inflight = self._inflight
             if inflight >= self._limit:
-                logger.warning(
+                logger.debug(
                     "OpenCode upstream concurrency limit exceeded "
                     "category=%s operation=%s limit=%s inflight=%s",
                     self._category,
