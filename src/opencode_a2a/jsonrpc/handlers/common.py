@@ -155,14 +155,18 @@ def build_authorization_forbidden_response(
     )
 
 
-def extract_directory_from_metadata(
+def _parse_metadata_objects(
     context: ExtensionHandlerContext,
     *,
     request_id: str | int | None,
     params: dict[str, Any],
-) -> tuple[str | None, Response | None]:
+    strict_top_level: bool = False,
+    validate_shared_object: bool = False,
+) -> tuple[dict[str, Any] | None, Response | None]:
     metadata = params.get("metadata")
-    if metadata is not None and not isinstance(metadata, dict):
+    if metadata is None:
+        return None, None
+    if not isinstance(metadata, dict):
         return None, context.error_response(
             request_id,
             invalid_params_error(
@@ -171,8 +175,7 @@ def extract_directory_from_metadata(
             ),
         )
 
-    opencode_metadata: dict[str, Any] | None = None
-    if isinstance(metadata, dict):
+    if strict_top_level:
         unknown_metadata_fields = sorted(set(metadata) - {"opencode", "shared"})
         if unknown_metadata_fields:
             prefixed_fields = [f"metadata.{field}" for field in unknown_metadata_fields]
@@ -183,17 +186,18 @@ def extract_directory_from_metadata(
                     data={"type": "INVALID_FIELD", "fields": prefixed_fields},
                 ),
             )
-        raw_opencode_metadata = metadata.get("opencode")
-        if raw_opencode_metadata is not None and not isinstance(raw_opencode_metadata, dict):
-            return None, context.error_response(
-                request_id,
-                invalid_params_error(
-                    "metadata.opencode must be an object",
-                    data={"type": "INVALID_FIELD", "field": "metadata.opencode"},
-                ),
-            )
-        if isinstance(raw_opencode_metadata, dict):
-            opencode_metadata = raw_opencode_metadata
+
+    raw_opencode_metadata = metadata.get("opencode")
+    if raw_opencode_metadata is not None and not isinstance(raw_opencode_metadata, dict):
+        return None, context.error_response(
+            request_id,
+            invalid_params_error(
+                "metadata.opencode must be an object",
+                data={"type": "INVALID_FIELD", "field": "metadata.opencode"},
+            ),
+        )
+
+    if validate_shared_object:
         raw_shared_metadata = metadata.get("shared")
         if raw_shared_metadata is not None and not isinstance(raw_shared_metadata, dict):
             return None, context.error_response(
@@ -203,6 +207,28 @@ def extract_directory_from_metadata(
                     data={"type": "INVALID_FIELD", "field": "metadata.shared"},
                 ),
             )
+
+    return (
+        raw_opencode_metadata if isinstance(raw_opencode_metadata, dict) else None,
+        None,
+    )
+
+
+def extract_directory_from_metadata(
+    context: ExtensionHandlerContext,
+    *,
+    request_id: str | int | None,
+    params: dict[str, Any],
+) -> tuple[str | None, Response | None]:
+    opencode_metadata, metadata_error = _parse_metadata_objects(
+        context,
+        request_id=request_id,
+        params=params,
+        strict_top_level=True,
+        validate_shared_object=True,
+    )
+    if metadata_error is not None:
+        return None, metadata_error
 
     directory = None
     if opencode_metadata is not None:
@@ -229,29 +255,15 @@ def extract_workspace_id_from_metadata(
     request_id: str | int | None,
     params: dict[str, Any],
 ) -> tuple[str | None, Response | None]:
-    metadata = params.get("metadata")
-    if metadata is None:
-        return None, None
-    if not isinstance(metadata, dict):
-        return None, context.error_response(
-            request_id,
-            invalid_params_error(
-                "metadata must be an object",
-                data={"type": "INVALID_FIELD", "field": "metadata"},
-            ),
-        )
-
-    raw_opencode_metadata = metadata.get("opencode")
+    raw_opencode_metadata, metadata_error = _parse_metadata_objects(
+        context,
+        request_id=request_id,
+        params=params,
+    )
+    if metadata_error is not None:
+        return None, metadata_error
     if raw_opencode_metadata is None:
         return None, None
-    if not isinstance(raw_opencode_metadata, dict):
-        return None, context.error_response(
-            request_id,
-            invalid_params_error(
-                "metadata.opencode must be an object",
-                data={"type": "INVALID_FIELD", "field": "metadata.opencode"},
-            ),
-        )
 
     raw_workspace = extract_namespaced_value(
         {"opencode": raw_opencode_metadata},
