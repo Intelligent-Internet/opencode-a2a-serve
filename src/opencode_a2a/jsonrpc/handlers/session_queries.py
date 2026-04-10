@@ -3,14 +3,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from a2a.types import JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
 from ...contracts.extensions import SESSION_QUERY_ERROR_BUSINESS_CODES
 from ...invocation import call_with_supported_kwargs
-from ...opencode_upstream_client import UpstreamConcurrencyLimitError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import invalid_params_error, session_not_found_error
 from ..methods import (
@@ -25,12 +23,9 @@ from ..params import (
     parse_list_sessions_params,
 )
 from .common import (
-    build_internal_error_response,
     build_success_response,
-    build_upstream_concurrency_error_response,
-    build_upstream_http_error_response,
     build_upstream_payload_error_response,
-    build_upstream_unreachable_error_response,
+    invoke_upstream_or_error,
     resolve_routing_context,
 )
 
@@ -89,56 +84,46 @@ async def handle_session_query_request(
         )
         if routing_error is not None:
             return routing_error
-    try:
+
+    def _session_not_found_response() -> Response:
+        assert session_id is not None
+        return context.error_response(
+            base_request.id,
+            session_not_found_error(ERR_SESSION_NOT_FOUND, session_id=session_id),
+        )
+
+    async def _invoke_session_query() -> Any:
         if base_request.method == context.method_list_sessions:
-            raw_result = await call_with_supported_kwargs(
+            return await call_with_supported_kwargs(
                 context.upstream_client.list_sessions,
                 params=query,
                 directory=directory,
                 workspace_id=workspace_id,
             )
-        else:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.list_messages,
-                session_id,
-                params=query,
-                workspace_id=workspace_id,
-            )
-    except httpx.HTTPStatusError as exc:
-        upstream_status = exc.response.status_code
-        if upstream_status == 404 and base_request.method == context.method_get_session_messages:
-            assert session_id is not None
-            return context.error_response(
-                base_request.id,
-                session_not_found_error(ERR_SESSION_NOT_FOUND, session_id=session_id),
-            )
-        return build_upstream_http_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_HTTP_ERROR,
-            upstream_status=upstream_status,
+        assert session_id is not None
+        return await call_with_supported_kwargs(
+            context.upstream_client.list_messages,
+            session_id,
+            params=query,
+            workspace_id=workspace_id,
         )
-    except httpx.HTTPError:
-        return build_upstream_unreachable_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
-        )
-    except UpstreamConcurrencyLimitError as exc:
-        return build_upstream_concurrency_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
-            exc=exc,
-        )
-    except Exception as exc:
-        return build_internal_error_response(
-            context,
-            base_request.id,
-            log_message="OpenCode session query JSON-RPC method failed",
-            exc=exc,
-        )
+
+    raw_result, upstream_error = await invoke_upstream_or_error(
+        context,
+        base_request.id,
+        invoke=_invoke_session_query,
+        upstream_http_error_code=ERR_UPSTREAM_HTTP_ERROR,
+        upstream_unreachable_error_code=ERR_UPSTREAM_UNREACHABLE,
+        internal_log_message="OpenCode session query JSON-RPC method failed",
+        on_not_found=(
+            _session_not_found_response
+            if base_request.method == context.method_get_session_messages
+            else None
+        ),
+    )
+    if upstream_error is not None:
+        return upstream_error
+    assert raw_result is not None
 
     try:
         if base_request.method == context.method_list_sessions:

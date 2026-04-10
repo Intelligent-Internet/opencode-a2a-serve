@@ -8,6 +8,7 @@ import pytest
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.types import (
     Artifact,
+    DataPart,
     Message,
     Part,
     Role,
@@ -18,6 +19,7 @@ from a2a.types import (
     TransportProtocol,
 )
 
+from opencode_a2a.output_modes import build_output_negotiation_metadata
 from opencode_a2a.server.application import (
     AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL,
     PUBLIC_AGENT_CARD_CACHE_CONTROL,
@@ -341,6 +343,64 @@ async def test_list_tasks_route_supports_history_artifacts_and_filters(monkeypat
     assert returned_task["id"] == "task-filtered"
     assert len(returned_task["history"]) == 2
     assert returned_task["artifacts"][0]["artifactId"] == "task-filtered-artifact"
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_route_applies_persisted_output_negotiation(monkeypatch) -> None:
+    import opencode_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeUpstreamClient", DummyChatOpencodeUpstreamClient)
+    app = app_module.create_app(
+        make_settings(
+            test_bearer_token="test-token",
+            a2a_task_store_backend="memory",
+        )
+    )
+    task_store = app.state.task_store
+    metadata = build_output_negotiation_metadata(["text/plain"])
+    assert metadata is not None
+
+    task = Task(
+        id="task-negotiated-list",
+        context_id="ctx-negotiated-list",
+        status=TaskStatus(state=TaskState.completed, timestamp=datetime.now(UTC).isoformat()),
+        artifacts=[
+            Artifact(
+                artifact_id="task-negotiated-list-text",
+                parts=[Part(root=TextPart(text="plain"))],
+            ),
+            Artifact(
+                artifact_id="task-negotiated-list-json",
+                parts=[Part(root=DataPart(data={"tool": "bash", "status": "completed"}))],
+            ),
+        ],
+        metadata=metadata,
+    )
+    await task_store.save(task)
+
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/v1/tasks",
+            headers=headers,
+            params={
+                "contextId": "ctx-negotiated-list",
+                "includeArtifacts": "true",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["totalSize"] == 1
+    assert payload["tasks"][0]["id"] == "task-negotiated-list"
+    assert [artifact["artifactId"] for artifact in payload["tasks"][0]["artifacts"]] == [
+        "task-negotiated-list-text",
+        "task-negotiated-list-json",
+    ]
+    assert payload["tasks"][0]["artifacts"][1]["parts"][0]["text"] == (
+        '{"status":"completed","tool":"bash"}'
+    )
 
 
 @pytest.mark.asyncio

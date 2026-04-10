@@ -1,6 +1,6 @@
 # Usage Guide
 
-This guide covers configuration, authentication, API behavior, streaming re-subscription, and A2A client examples. It is the canonical document for implementation-level protocol contracts and JSON-RPC extension details; README stays at overview level.
+This guide covers configuration, authentication, API behavior, streaming re-subscription, and A2A client examples. It is the canonical document for implementation-level protocol contracts and JSON-RPC extension details; [README](../README.md) stays at overview level, [architecture.md](./architecture.md) explains the service boundary, [maintainer-architecture.md](./maintainer-architecture.md) covers the internal module view for contributors, and [compatibility.md](./compatibility.md) defines the compatibility-sensitive surface.
 
 ## Transport Contracts
 
@@ -199,6 +199,8 @@ If one deployment works while another fails against the same upstream provider, 
 - Main chat requests that explicitly send `configuration.acceptedOutputModes` must stay compatible with the declared chat output modes.
 - Current main chat requests must continue accepting `text/plain`; requests that only accept `application/json` or other incompatible modes are rejected before execution starts.
 - `application/json` is additive structured-output support for incremental `tool_call` payloads. It does not guarantee that ordinary assistant prose can always be losslessly represented as JSON, so consumers that expect normal chat text should keep accepting `text/plain`.
+- When a client accepts `text/plain` but not `application/json`, structured `tool_call` payloads are downgraded to compact JSON text instead of being silently dropped.
+- Accepted output-mode negotiation is persisted as task-scoped metadata so later `tasks/get` and `tasks/resubscribe` reads keep the same filtered response contract as the original `message/send` or `message:stream` request.
 - Main chat input supports structured A2A `parts` passthrough:
   - `TextPart` is forwarded as an OpenCode text part.
   - `FilePart(FileWithBytes)` is forwarded as a `file` part with a `data:` URL.
@@ -220,6 +222,8 @@ If one deployment works while another fails against the same upstream provider, 
 - `message.part.delta` and `message.part.updated` are merged per `part_id`; out-of-order deltas are buffered and replayed when the corresponding `part.updated` arrives.
 - Structured `tool` parts are emitted as `tool_call` blocks backed by `DataPart(data={...})`, while `text` and `reasoning` continue to use `TextPart`.
 - `tool_call` block payloads are normalized structured objects that may expose fields such as `call_id`, `tool`, `status`, `title`, `subtitle`, `input`, `output`, and `error`.
+- If `application/json` is not accepted but `text/plain` is still accepted, those `tool_call` blocks are downgraded to stable compact JSON text so text-only clients retain the same observable state transitions.
+- When a request restricts `acceptedOutputModes`, the stream applies the same output filtering before persistence so later task snapshots do not re-expose filtered structured blocks.
 - Final status event metadata may include normalized token usage at `metadata.shared.usage` with fields such as `input_tokens`, `output_tokens`, `total_tokens`, optional `reasoning_tokens`, optional `cache_tokens.read_tokens` / `cache_tokens.write_tokens`, and optional `cost`.
 - Usage is extracted from documented info payloads and supported usage parts such as `step-finish`; non-usage parts with similar fields are ignored.
 - Interrupt events (`permission.asked` / `question.asked`) are mapped to `TaskStatusUpdateEvent(final=false, state=input-required)` with details at `metadata.shared.interrupt`, including `request_id`, interrupt `type`, `phase=asked`, and a normalized minimal callback payload.

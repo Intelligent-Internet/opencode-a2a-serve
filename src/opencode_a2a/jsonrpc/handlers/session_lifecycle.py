@@ -3,14 +3,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from a2a.types import JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
 from ...contracts.extensions import SESSION_QUERY_ERROR_BUSINESS_CODES
 from ...invocation import call_with_supported_kwargs
-from ...opencode_upstream_client import UpstreamConcurrencyLimitError, UpstreamContractError
+from ...opencode_upstream_client import UpstreamContractError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import invalid_params_error, session_not_found_error
 from ..methods import (
@@ -23,13 +22,11 @@ from ..methods import (
     _normalize_todo_items,
 )
 from .common import (
-    build_internal_error_response,
     build_session_forbidden_response,
     build_success_response,
-    build_upstream_concurrency_error_response,
-    build_upstream_http_error_response,
-    build_upstream_payload_error_response,
-    build_upstream_unreachable_error_response,
+    build_upstream_exception_response,
+    claim_session,
+    reject_unknown_fields,
     resolve_routing_context,
 )
 
@@ -113,15 +110,15 @@ def _parse_fork_request(
             request_id,
             _invalid_field_error("request", "params.request must be an object"),
         )
-    unknown_fields = sorted(set(raw_request) - {"messageID"})
-    if unknown_fields:
-        return {}, context.error_response(
-            request_id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(f'request.{field}' for field in unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        request_id,
+        raw_request,
+        allowed_fields={"messageID"},
+        field_prefix="request.",
+    )
+    if unknown_fields_error is not None:
+        return {}, unknown_fields_error
     message_id = raw_request.get("messageID")
     if message_id is None:
         return {}, None
@@ -146,15 +143,15 @@ def _parse_summarize_request(
             request_id,
             _invalid_field_error("request", "params.request must be an object"),
         )
-    unknown_fields = sorted(set(raw_request) - {"providerID", "modelID", "auto"})
-    if unknown_fields:
-        return None, context.error_response(
-            request_id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(f'request.{field}' for field in unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        request_id,
+        raw_request,
+        allowed_fields={"providerID", "modelID", "auto"},
+        field_prefix="request.",
+    )
+    if unknown_fields_error is not None:
+        return None, unknown_fields_error
     provider_id = raw_request.get("providerID")
     model_id = raw_request.get("modelID")
     auto = raw_request.get("auto")
@@ -195,15 +192,15 @@ def _parse_revert_request(
             request_id,
             _invalid_field_error("request", "params.request must be an object"),
         )
-    unknown_fields = sorted(set(raw_request) - {"messageID", "partID"})
-    if unknown_fields:
-        return {}, context.error_response(
-            request_id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(f'request.{field}' for field in unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        request_id,
+        raw_request,
+        allowed_fields={"messageID", "partID"},
+        field_prefix="request.",
+    )
+    if unknown_fields_error is not None:
+        return {}, unknown_fields_error
     message_id = raw_request.get("messageID")
     if not isinstance(message_id, str) or not message_id.strip():
         return {}, context.error_response(
@@ -261,15 +258,14 @@ async def handle_session_lifecycle_request(
     }:
         allowed_fields.add("request")
 
-    unknown_fields = sorted(set(params) - allowed_fields)
-    if unknown_fields:
-        return context.error_response(
-            base_request.id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        base_request.id,
+        params,
+        allowed_fields=allowed_fields,
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     directory, directory_error = _parse_directory_hint(context, base_request.id, params)
     if directory_error is not None:
@@ -338,235 +334,189 @@ async def handle_session_lifecycle_request(
         context.method_unrevert_session,
     }
 
-    pending_claim = False
-    claim_finalized = False
-    if method in mutating_methods and session_id is not None and identity:
-        try:
-            pending_claim = await context.session_claim(identity=identity, session_id=session_id)
-        except PermissionError:
-            return build_session_forbidden_response(
-                context,
-                base_request.id,
-                session_id=session_id,
-            )
-
+    claim_identity = identity if method in mutating_methods else None
     try:
-        result: dict[str, Any]
-        forked_session_id: str | None = None
+        async with claim_session(
+            context,
+            identity=claim_identity,
+            session_id=session_id,
+            logger=logger,
+        ) as session_claim:
+            result: dict[str, Any]
+            forked_session_id: str | None = None
 
-        if method == context.method_session_status:
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.session_status,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"items": _normalize_session_status_items(raw_result)}
-        elif method == context.method_get_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.get_session,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            item = _as_a2a_session_task(raw_result)
-            if item is None:
-                raise UpstreamContractError(
-                    "OpenCode /session/{sessionID} response could not be mapped to A2A Task"
+            if method == context.method_session_status:
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.session_status,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
                 )
-            result = {"item": item}
-        elif method == context.method_get_session_children:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.list_child_sessions,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            raw_items = _extract_raw_items(raw_result, kind="child sessions")
-            result = {
-                "items": [
-                    task for item in raw_items if (task := _as_a2a_session_task(item)) is not None
-                ]
-            }
-        elif method == context.method_get_session_todo:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.get_session_todo,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"items": _normalize_todo_items(raw_result)}
-        elif method == context.method_get_session_diff:
-            assert session_id is not None
-            query = {"messageID": message_id} if message_id else None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.get_session_diff,
-                session_id,
-                params=query,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"items": _normalize_diff_items(raw_result)}
-        elif method == context.method_get_session_message:
-            assert session_id is not None
-            assert message_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.get_message,
-                session_id,
-                message_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            item = _as_a2a_message(session_id, raw_result)
-            if item is None:
-                raise UpstreamContractError(
-                    "OpenCode /session/{sessionID}/message/{messageID} response could not be "
-                    "mapped to A2A Message"
+                result = {"items": _normalize_session_status_items(raw_result)}
+            elif method == context.method_get_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.get_session,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
                 )
-            result = {"item": item}
-        elif method == context.method_fork_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.fork_session,
-                session_id,
-                request=fork_request,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            item = _normalize_session_summary(raw_result)
-            forked_session_id = item["id"]
-            result = {"item": item}
-        elif method == context.method_share_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.share_session,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"item": _normalize_session_summary(raw_result)}
-        elif method == context.method_summarize_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.summarize_session,
-                session_id,
-                request=summarize_request,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            if not isinstance(raw_result, bool):
-                raise ValueError("Upstream summarize response must be a boolean")
-            result = {"ok": raw_result, "session_id": session_id}
-        elif method == context.method_revert_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.revert_session,
-                session_id,
-                request=revert_request,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"item": _normalize_session_summary(raw_result)}
-        elif method == context.method_unrevert_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.unrevert_session,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"item": _normalize_session_summary(raw_result)}
-        else:
-            assert method == context.method_unshare_session
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.unshare_session,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"item": _normalize_session_summary(raw_result)}
+                item = _as_a2a_session_task(raw_result)
+                if item is None:
+                    raise UpstreamContractError(
+                        "OpenCode /session/{sessionID} response could not be mapped to A2A Task"
+                    )
+                result = {"item": item}
+            elif method == context.method_get_session_children:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.list_child_sessions,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                raw_items = _extract_raw_items(raw_result, kind="child sessions")
+                result = {
+                    "items": [
+                        task
+                        for item in raw_items
+                        if (task := _as_a2a_session_task(item)) is not None
+                    ]
+                }
+            elif method == context.method_get_session_todo:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.get_session_todo,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"items": _normalize_todo_items(raw_result)}
+            elif method == context.method_get_session_diff:
+                assert session_id is not None
+                query = {"messageID": message_id} if message_id else None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.get_session_diff,
+                    session_id,
+                    params=query,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"items": _normalize_diff_items(raw_result)}
+            elif method == context.method_get_session_message:
+                assert session_id is not None
+                assert message_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.get_message,
+                    session_id,
+                    message_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                item = _as_a2a_message(session_id, raw_result)
+                if item is None:
+                    raise UpstreamContractError(
+                        "OpenCode /session/{sessionID}/message/{messageID} response could not "
+                        "be mapped to A2A Message"
+                    )
+                result = {"item": item}
+            elif method == context.method_fork_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.fork_session,
+                    session_id,
+                    request=fork_request,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                item = _normalize_session_summary(raw_result)
+                forked_session_id = item["id"]
+                result = {"item": item}
+            elif method == context.method_share_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.share_session,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"item": _normalize_session_summary(raw_result)}
+            elif method == context.method_summarize_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.summarize_session,
+                    session_id,
+                    request=summarize_request,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                if not isinstance(raw_result, bool):
+                    raise ValueError("Upstream summarize response must be a boolean")
+                result = {"ok": raw_result, "session_id": session_id}
+            elif method == context.method_revert_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.revert_session,
+                    session_id,
+                    request=revert_request,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"item": _normalize_session_summary(raw_result)}
+            elif method == context.method_unrevert_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.unrevert_session,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"item": _normalize_session_summary(raw_result)}
+            else:
+                assert method == context.method_unshare_session
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.unshare_session,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"item": _normalize_session_summary(raw_result)}
 
-        if pending_claim and identity and session_id is not None:
-            await context.session_claim_finalize(identity=identity, session_id=session_id)
-            claim_finalized = True
-        if forked_session_id is not None and identity:
-            await context.session_claim_finalize(identity=identity, session_id=forked_session_id)
-    except httpx.HTTPStatusError as exc:
-        upstream_status = exc.response.status_code
-        if upstream_status == 404 and session_id is not None:
+            await session_claim.finalize()
+            if forked_session_id is not None and identity:
+                await context.session_claim_finalize(
+                    identity=identity, session_id=forked_session_id
+                )
+    except Exception as exc:
+
+        def _session_not_found_response() -> Response:
+            assert session_id is not None
             return context.error_response(
                 base_request.id,
                 session_not_found_error(ERR_SESSION_NOT_FOUND, session_id=session_id),
             )
-        return build_upstream_http_error_response(
+
+        return build_upstream_exception_response(
             context,
             base_request.id,
-            ERR_UPSTREAM_HTTP_ERROR,
-            upstream_status=upstream_status,
-            method=method,
-            session_id=session_id,
-        )
-    except httpx.HTTPError:
-        return build_upstream_unreachable_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
-            method=method,
-            session_id=session_id,
-        )
-    except UpstreamConcurrencyLimitError as exc:
-        return build_upstream_concurrency_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
             exc=exc,
+            upstream_http_error_code=ERR_UPSTREAM_HTTP_ERROR,
+            upstream_unreachable_error_code=ERR_UPSTREAM_UNREACHABLE,
+            upstream_payload_error_code=ERR_UPSTREAM_PAYLOAD_ERROR,
+            internal_log_message="OpenCode session lifecycle JSON-RPC method failed",
             method=method,
             session_id=session_id,
-        )
-    except UpstreamContractError as exc:
-        return build_upstream_payload_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_PAYLOAD_ERROR,
-            detail=str(exc),
-            method=method,
-            session_id=session_id,
-        )
-    except ValueError as exc:
-        logger.warning("Upstream OpenCode payload mismatch: %s", exc)
-        return build_upstream_payload_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_PAYLOAD_ERROR,
-            detail=str(exc),
-            method=method,
-            session_id=session_id,
-        )
-    except PermissionError:
-        assert session_id is not None
-        return build_session_forbidden_response(
-            context,
-            base_request.id,
-            session_id=session_id,
-        )
-    except Exception as exc:
-        return build_internal_error_response(
-            context,
-            base_request.id,
-            log_message="OpenCode session lifecycle JSON-RPC method failed",
-            exc=exc,
-        )
-    finally:
-        if pending_claim and not claim_finalized and identity and session_id is not None:
-            try:
-                await context.session_claim_release(identity=identity, session_id=session_id)
-            except Exception:
-                logger.exception(
-                    "Failed to release pending session claim for session_id=%s",
-                    session_id,
+            on_not_found=_session_not_found_response if session_id is not None else None,
+            on_permission_error=(
+                lambda: build_session_forbidden_response(
+                    context,
+                    base_request.id,
+                    session_id=session_id,
                 )
+            )
+            if session_id is not None
+            else None,
+            payload_warning_message="Upstream OpenCode payload mismatch",
+        )
 
     return build_success_response(context, base_request.id, result)

@@ -26,13 +26,11 @@ from ..methods import (
 )
 from .common import (
     build_authorization_forbidden_response,
-    build_internal_error_response,
     build_session_forbidden_response,
     build_success_response,
-    build_upstream_concurrency_error_response,
-    build_upstream_http_error_response,
-    build_upstream_payload_error_response,
-    build_upstream_unreachable_error_response,
+    build_upstream_exception_response,
+    claim_session,
+    reject_unknown_fields,
     resolve_routing_context,
 )
 
@@ -44,22 +42,36 @@ ERR_UPSTREAM_HTTP_ERROR = SESSION_QUERY_ERROR_BUSINESS_CODES["UPSTREAM_HTTP_ERRO
 ERR_UPSTREAM_PAYLOAD_ERROR = SESSION_QUERY_ERROR_BUSINESS_CODES["UPSTREAM_PAYLOAD_ERROR"]
 
 
+def _shell_audit_outcome(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code == 404:
+            return "upstream_404"
+        return "upstream_http_error"
+    if isinstance(exc, httpx.HTTPError):
+        return "upstream_unreachable"
+    if isinstance(exc, UpstreamConcurrencyLimitError):
+        return "upstream_backpressure"
+    if isinstance(exc, (UpstreamContractError, ValueError)):
+        return "upstream_payload_error"
+    if isinstance(exc, PermissionError):
+        return "forbidden"
+    return "internal_error"
+
+
 async def handle_session_control_request(
     context: ExtensionHandlerContext,
     base_request: JSONRPCRequest,
     params: dict[str, Any],
     request: Request,
 ) -> Response:
-    allowed_fields = {"session_id", "request", "metadata"}
-    unknown_fields = sorted(set(params) - allowed_fields)
-    if unknown_fields:
-        return context.error_response(
-            base_request.id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        base_request.id,
+        params,
+        allowed_fields={"session_id", "request", "metadata"},
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     session_id = params.get("session_id")
     if not isinstance(session_id, str) or not session_id.strip():
@@ -150,143 +162,77 @@ async def handle_session_control_request(
     if routing_error is not None:
         return routing_error
 
-    pending_claim = False
-    claim_finalized = False
-    if identity:
-        try:
-            pending_claim = await context.session_claim(
-                identity=identity,
-                session_id=session_id,
-            )
-        except PermissionError:
-            _log_shell_audit("forbidden")
-            return build_session_forbidden_response(
+    try:
+        async with claim_session(
+            context,
+            identity=identity,
+            session_id=session_id,
+            logger=logger,
+        ) as session_claim:
+            result: dict[str, Any]
+            if base_request.method == context.method_prompt_async:
+                await call_with_supported_kwargs(
+                    context.upstream_client.session_prompt_async,
+                    session_id,
+                    request=dict(raw_request),
+                    directory=directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"ok": True, "session_id": session_id}
+            elif base_request.method == context.method_command:
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.session_command,
+                    session_id,
+                    request=dict(raw_request),
+                    directory=directory,
+                    workspace_id=workspace_id,
+                )
+                item = _as_a2a_message(session_id, raw_result)
+                if item is None:
+                    raise UpstreamContractError(
+                        "OpenCode /session/{sessionID}/command response could not be mapped "
+                        "to A2A Message"
+                    )
+                result = {"item": item}
+            else:
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.session_shell,
+                    session_id,
+                    request=dict(raw_request),
+                    directory=directory,
+                    workspace_id=workspace_id,
+                )
+                item = _as_a2a_message(session_id, raw_result)
+                if item is None:
+                    raise UpstreamContractError(
+                        "OpenCode /session/{sessionID}/shell response could not be mapped "
+                        "to A2A Message"
+                    )
+                result = {"item": item}
+
+            await session_claim.finalize()
+            _log_shell_audit("success")
+    except Exception as exc:
+        _log_shell_audit(_shell_audit_outcome(exc))
+        return build_upstream_exception_response(
+            context,
+            base_request.id,
+            exc=exc,
+            upstream_http_error_code=ERR_UPSTREAM_HTTP_ERROR,
+            upstream_unreachable_error_code=ERR_UPSTREAM_UNREACHABLE,
+            upstream_payload_error_code=ERR_UPSTREAM_PAYLOAD_ERROR,
+            internal_log_message="OpenCode session control JSON-RPC method failed",
+            method=base_request.method,
+            session_id=session_id,
+            on_not_found=lambda: context.error_response(
+                base_request.id,
+                session_not_found_error(ERR_SESSION_NOT_FOUND, session_id=session_id),
+            ),
+            on_permission_error=lambda: build_session_forbidden_response(
                 context,
                 base_request.id,
                 session_id=session_id,
-            )
-
-    try:
-        result: dict[str, Any]
-        if base_request.method == context.method_prompt_async:
-            await call_with_supported_kwargs(
-                context.upstream_client.session_prompt_async,
-                session_id,
-                request=dict(raw_request),
-                directory=directory,
-                workspace_id=workspace_id,
-            )
-            result = {"ok": True, "session_id": session_id}
-        elif base_request.method == context.method_command:
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.session_command,
-                session_id,
-                request=dict(raw_request),
-                directory=directory,
-                workspace_id=workspace_id,
-            )
-            item = _as_a2a_message(session_id, raw_result)
-            if item is None:
-                raise UpstreamContractError(
-                    "OpenCode /session/{sessionID}/command response could not be mapped "
-                    "to A2A Message"
-                )
-            result = {"item": item}
-        else:
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.session_shell,
-                session_id,
-                request=dict(raw_request),
-                directory=directory,
-                workspace_id=workspace_id,
-            )
-            item = _as_a2a_message(session_id, raw_result)
-            if item is None:
-                raise UpstreamContractError(
-                    "OpenCode /session/{sessionID}/shell response could not be mapped "
-                    "to A2A Message"
-                )
-            result = {"item": item}
-
-        if pending_claim and identity:
-            await context.session_claim_finalize(
-                identity=identity,
-                session_id=session_id,
-            )
-            claim_finalized = True
-        _log_shell_audit("success")
-    except httpx.HTTPStatusError as exc:
-        upstream_status = exc.response.status_code
-        if upstream_status == 404:
-            _log_shell_audit("upstream_404")
-            return context.error_response(
-                base_request.id,
-                session_not_found_error(ERR_SESSION_NOT_FOUND, session_id=session_id),
-            )
-        _log_shell_audit("upstream_http_error")
-        return build_upstream_http_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_HTTP_ERROR,
-            upstream_status=upstream_status,
-            method=base_request.method,
-            session_id=session_id,
+            ),
         )
-    except httpx.HTTPError:
-        _log_shell_audit("upstream_unreachable")
-        return build_upstream_unreachable_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
-            method=base_request.method,
-            session_id=session_id,
-        )
-    except UpstreamConcurrencyLimitError as exc:
-        _log_shell_audit("upstream_backpressure")
-        return build_upstream_concurrency_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
-            exc=exc,
-            method=base_request.method,
-            session_id=session_id,
-        )
-    except UpstreamContractError as exc:
-        _log_shell_audit("upstream_payload_error")
-        return build_upstream_payload_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_PAYLOAD_ERROR,
-            detail=str(exc),
-            method=base_request.method,
-            session_id=session_id,
-        )
-    except PermissionError:
-        _log_shell_audit("forbidden")
-        return build_session_forbidden_response(
-            context,
-            base_request.id,
-            session_id=session_id,
-        )
-    except Exception as exc:
-        _log_shell_audit("internal_error")
-        return build_internal_error_response(
-            context,
-            base_request.id,
-            log_message="OpenCode session control JSON-RPC method failed",
-            exc=exc,
-        )
-    finally:
-        if pending_claim and not claim_finalized and identity:
-            try:
-                await context.session_claim_release(
-                    identity=identity,
-                    session_id=session_id,
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to release pending session claim for session_id=%s",
-                    session_id,
-                )
 
     return build_success_response(context, base_request.id, result)

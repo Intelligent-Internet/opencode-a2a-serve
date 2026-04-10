@@ -12,6 +12,19 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from ..jsonrpc.error_responses import build_http_error_body
+from ..output_modes import (
+    apply_accepted_output_modes,
+    extract_accepted_output_modes_from_metadata,
+)
+from ..parsing import (
+    parse_bool_field as parse_shared_bool_field,
+)
+from ..parsing import (
+    parse_int_field as parse_shared_int_field,
+)
+from ..parsing import (
+    parse_timestamp_field as parse_shared_timestamp_field,
+)
 from .task_store import TaskStoreOperationError, list_stored_tasks
 
 logger = logging.getLogger(__name__)
@@ -42,6 +55,10 @@ class _ListTasksValidationError(ValueError):
         super().__init__(message)
         self.field = field
         self.message = message
+
+
+def _validation_error(field: str, message: str) -> _ListTasksValidationError:
+    return _ListTasksValidationError(field=field, message=message)
 
 
 def build_list_tasks_route(
@@ -141,6 +158,13 @@ def _serialize_task(
     history_length: int,
     include_artifacts: bool,
 ) -> dict:
+    negotiated = apply_accepted_output_modes(
+        task,
+        extract_accepted_output_modes_from_metadata(task.metadata),
+    )
+    if isinstance(negotiated, Task):
+        task = negotiated
+
     payload = task.model_dump(mode="json", by_alias=True, exclude_none=True)
 
     history = payload.get("history")
@@ -216,43 +240,38 @@ def _parse_list_tasks_query(request: Request) -> _ListTasksQuery:
 
 
 def _parse_int(raw_value: str, *, field: str) -> int:
-    try:
-        return int(raw_value)
-    except ValueError as exc:
-        raise _ListTasksValidationError(
-            field=field,
-            message=f"{field} must be an integer.",
-        ) from exc
+    parsed = parse_shared_int_field(
+        raw_value,
+        field=field,
+        error_factory=lambda error_field, _message: _validation_error(
+            error_field,
+            f"{error_field} must be an integer.",
+        ),
+    )
+    assert parsed is not None
+    return parsed
 
 
 def _parse_bool(raw_value: str | None, *, field: str, default: bool) -> bool:
-    if raw_value is None:
-        return default
-    normalized = raw_value.strip().lower()
-    if normalized in {"true", "1"}:
-        return True
-    if normalized in {"false", "0"}:
-        return False
-    raise _ListTasksValidationError(
+    parsed = parse_shared_bool_field(
+        raw_value,
         field=field,
-        message=f"{field} must be a boolean.",
+        error_factory=lambda error_field, _message: _validation_error(
+            error_field,
+            f"{error_field} must be a boolean.",
+        ),
+        true_values=("true", "1"),
+        false_values=("false", "0"),
     )
+    return default if parsed is None else parsed
 
 
 def _parse_timestamp(raw_value: str, *, field: str) -> datetime:
-    normalized = raw_value.strip()
-    if normalized.endswith("Z"):
-        normalized = normalized[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError as exc:
-        raise _ListTasksValidationError(
-            field=field,
-            message=f"{field} must be a valid ISO 8601 timestamp.",
-        ) from exc
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+    return parse_shared_timestamp_field(
+        raw_value,
+        field=field,
+        error_factory=_validation_error,
+    )
 
 
 def _task_status_timestamp(task: Task) -> datetime:

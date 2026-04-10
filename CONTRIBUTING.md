@@ -44,9 +44,10 @@ uv run opencode-a2a serve
 Run the default validation baseline before opening a PR:
 
 ```bash
-uv run pre-commit run --all-files
-uv run pytest
+bash ./scripts/doctor.sh
 ```
+
+`doctor.sh` is the primary repository validation entrypoint. It currently runs locked-environment sync, dependency compatibility checks, `pre-commit`, `mypy`, `pytest`, the repository coverage gate, package build, and a built-wheel smoke test.
 
 If you change shell scripts, also run `bash -n` on each modified script, for example:
 
@@ -63,7 +64,7 @@ bash ./scripts/conformance.sh
 
 Treat that output as investigation input. Do not fold it into `doctor.sh` or the default CI quality gate unless the repository explicitly decides to promote a specific experiment into a maintained policy.
 
-If you change extension methods, extension metadata, or Agent Card/OpenAPI contract surfaces, also run:
+If you change extension methods, extension metadata, or Agent Card/OpenAPI contract surfaces, also make sure the targeted contract checks stay green:
 
 ```bash
 uv run pytest tests/contracts/test_extension_contract_consistency.py
@@ -107,7 +108,7 @@ Update docs together with code whenever you change:
 - user-facing request or response shapes
 - operational scripts
 
-Keep compatibility guidance centralized in [docs/guide.md](docs/guide.md) unless a new standalone document is clearly necessary.
+Keep usage details in [docs/guide.md](docs/guide.md) and compatibility-sensitive stability guidance in [docs/compatibility.md](docs/compatibility.md).
 
 When changing extension contracts, update [`src/opencode_a2a/contracts/extensions.py`](src/opencode_a2a/contracts/extensions.py) first and keep these generated/documented surfaces aligned:
 

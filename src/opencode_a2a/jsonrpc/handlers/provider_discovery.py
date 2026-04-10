@@ -3,14 +3,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from a2a.types import JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
 from ...contracts.extensions import PROVIDER_DISCOVERY_ERROR_BUSINESS_CODES
 from ...invocation import call_with_supported_kwargs
-from ...opencode_upstream_client import UpstreamConcurrencyLimitError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import invalid_params_error
 from ..methods import (
@@ -19,12 +17,10 @@ from ..methods import (
     _normalize_provider_summaries,
 )
 from .common import (
-    build_internal_error_response,
     build_success_response,
-    build_upstream_concurrency_error_response,
-    build_upstream_http_error_response,
     build_upstream_payload_error_response,
-    build_upstream_unreachable_error_response,
+    invoke_upstream_or_error,
+    reject_unknown_fields,
     resolve_routing_context,
 )
 
@@ -47,16 +43,16 @@ async def handle_provider_discovery_request(
     allowed_fields = {"metadata"}
     if base_request.method == context.method_list_models:
         allowed_fields.add("provider_id")
-    unknown_fields = sorted(set(params) - allowed_fields)
-    if unknown_fields:
-        prefixed_fields = [f"params.{field}" for field in unknown_fields]
-        return context.error_response(
-            base_request.id,
-            invalid_params_error(
-                f"Unsupported params fields: {', '.join(prefixed_fields)}",
-                data={"type": "INVALID_FIELD", "fields": prefixed_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        base_request.id,
+        params,
+        allowed_fields=allowed_fields,
+        field_prefix="params.",
+        message_prefix="Unsupported params fields",
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     provider_id: str | None = None
     if base_request.method == context.method_list_models:
@@ -80,43 +76,22 @@ async def handle_provider_discovery_request(
     if routing_error is not None:
         return routing_error
 
-    try:
-        raw_result = await call_with_supported_kwargs(
+    raw_result, upstream_error = await invoke_upstream_or_error(
+        context,
+        base_request.id,
+        invoke=lambda: call_with_supported_kwargs(
             context.upstream_client.list_provider_catalog,
             directory=directory,
             workspace_id=workspace_id,
-        )
-    except httpx.HTTPStatusError as exc:
-        upstream_status = exc.response.status_code
-        return build_upstream_http_error_response(
-            context,
-            base_request.id,
-            ERR_DISCOVERY_UPSTREAM_HTTP_ERROR,
-            upstream_status=upstream_status,
-            method=base_request.method,
-        )
-    except httpx.HTTPError:
-        return build_upstream_unreachable_error_response(
-            context,
-            base_request.id,
-            ERR_DISCOVERY_UPSTREAM_UNREACHABLE,
-            method=base_request.method,
-        )
-    except UpstreamConcurrencyLimitError as exc:
-        return build_upstream_concurrency_error_response(
-            context,
-            base_request.id,
-            ERR_DISCOVERY_UPSTREAM_UNREACHABLE,
-            exc=exc,
-            method=base_request.method,
-        )
-    except Exception as exc:
-        return build_internal_error_response(
-            context,
-            base_request.id,
-            log_message="OpenCode provider discovery JSON-RPC method failed",
-            exc=exc,
-        )
+        ),
+        upstream_http_error_code=ERR_DISCOVERY_UPSTREAM_HTTP_ERROR,
+        upstream_unreachable_error_code=ERR_DISCOVERY_UPSTREAM_UNREACHABLE,
+        internal_log_message="OpenCode provider discovery JSON-RPC method failed",
+        method=base_request.method,
+    )
+    if upstream_error is not None:
+        return upstream_error
+    assert raw_result is not None
 
     try:
         raw_providers, default_by_provider, connected = _extract_provider_catalog(raw_result)

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+import httpx
 from a2a.types import A2AError, InternalError
 from starlette.responses import Response
 
 from ...contracts.extensions import SESSION_QUERY_ERROR_BUSINESS_CODES
-from ...opencode_upstream_client import UpstreamConcurrencyLimitError
+from ...metadata_access import extract_namespaced_value
+from ...opencode_upstream_client import UpstreamConcurrencyLimitError, UpstreamContractError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import (
     authorization_forbidden_error,
@@ -23,6 +26,69 @@ ERR_AUTHORIZATION_FORBIDDEN = SESSION_QUERY_ERROR_BUSINESS_CODES["AUTHORIZATION_
 logger = logging.getLogger(__name__)
 
 
+class SessionClaimGuard:
+    def __init__(
+        self,
+        context: ExtensionHandlerContext,
+        *,
+        identity: str | None,
+        session_id: str | None,
+        logger: logging.Logger,
+    ) -> None:
+        self._context = context
+        self._identity = identity
+        self._session_id = session_id
+        self._logger = logger
+        self._pending = False
+        self._finalized = False
+
+    async def __aenter__(self) -> SessionClaimGuard:
+        if self._identity and self._session_id:
+            self._pending = await self._context.session_claim(
+                identity=self._identity,
+                session_id=self._session_id,
+            )
+        return self
+
+    async def finalize(self) -> None:
+        if self._pending and not self._finalized and self._identity and self._session_id:
+            await self._context.session_claim_finalize(
+                identity=self._identity,
+                session_id=self._session_id,
+            )
+            self._finalized = True
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+        del exc_type, exc, tb
+        if self._pending and not self._finalized and self._identity and self._session_id:
+            try:
+                await self._context.session_claim_release(
+                    identity=self._identity,
+                    session_id=self._session_id,
+                )
+            except Exception:
+                self._logger.exception(
+                    "Failed to release pending session claim for session_id=%s",
+                    self._session_id,
+                )
+        return False
+
+
+def claim_session(
+    context: ExtensionHandlerContext,
+    *,
+    identity: str | None,
+    session_id: str | None,
+    logger: logging.Logger,
+) -> SessionClaimGuard:
+    return SessionClaimGuard(
+        context,
+        identity=identity,
+        session_id=session_id,
+        logger=logger,
+    )
+
+
 def build_success_response(
     context: ExtensionHandlerContext,
     request_id: str | int | None,
@@ -31,6 +97,30 @@ def build_success_response(
     if request_id is None:
         return Response(status_code=204)
     return context.success_response(request_id, result)
+
+
+def reject_unknown_fields(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    payload: dict[str, Any],
+    *,
+    allowed_fields: set[str] | frozenset[str],
+    field_prefix: str = "",
+    message_prefix: str = "Unsupported fields",
+) -> Response | None:
+    unknown_fields = sorted(set(payload) - set(allowed_fields))
+    if not unknown_fields:
+        return None
+    reported_fields = (
+        [f"{field_prefix}{field}" for field in unknown_fields] if field_prefix else unknown_fields
+    )
+    return context.error_response(
+        request_id,
+        invalid_params_error(
+            f"{message_prefix}: {', '.join(reported_fields)}",
+            data={"type": "INVALID_FIELD", "fields": reported_fields},
+        ),
+    )
 
 
 def build_session_forbidden_response(
@@ -65,14 +155,18 @@ def build_authorization_forbidden_response(
     )
 
 
-def extract_directory_from_metadata(
+def _parse_metadata_objects(
     context: ExtensionHandlerContext,
     *,
     request_id: str | int | None,
     params: dict[str, Any],
-) -> tuple[str | None, Response | None]:
+    strict_top_level: bool = False,
+    validate_shared_object: bool = False,
+) -> tuple[dict[str, Any] | None, Response | None]:
     metadata = params.get("metadata")
-    if metadata is not None and not isinstance(metadata, dict):
+    if metadata is None:
+        return None, None
+    if not isinstance(metadata, dict):
         return None, context.error_response(
             request_id,
             invalid_params_error(
@@ -81,8 +175,7 @@ def extract_directory_from_metadata(
             ),
         )
 
-    opencode_metadata: dict[str, Any] | None = None
-    if isinstance(metadata, dict):
+    if strict_top_level:
         unknown_metadata_fields = sorted(set(metadata) - {"opencode", "shared"})
         if unknown_metadata_fields:
             prefixed_fields = [f"metadata.{field}" for field in unknown_metadata_fields]
@@ -93,17 +186,18 @@ def extract_directory_from_metadata(
                     data={"type": "INVALID_FIELD", "fields": prefixed_fields},
                 ),
             )
-        raw_opencode_metadata = metadata.get("opencode")
-        if raw_opencode_metadata is not None and not isinstance(raw_opencode_metadata, dict):
-            return None, context.error_response(
-                request_id,
-                invalid_params_error(
-                    "metadata.opencode must be an object",
-                    data={"type": "INVALID_FIELD", "field": "metadata.opencode"},
-                ),
-            )
-        if isinstance(raw_opencode_metadata, dict):
-            opencode_metadata = raw_opencode_metadata
+
+    raw_opencode_metadata = metadata.get("opencode")
+    if raw_opencode_metadata is not None and not isinstance(raw_opencode_metadata, dict):
+        return None, context.error_response(
+            request_id,
+            invalid_params_error(
+                "metadata.opencode must be an object",
+                data={"type": "INVALID_FIELD", "field": "metadata.opencode"},
+            ),
+        )
+
+    if validate_shared_object:
         raw_shared_metadata = metadata.get("shared")
         if raw_shared_metadata is not None and not isinstance(raw_shared_metadata, dict):
             return None, context.error_response(
@@ -114,9 +208,35 @@ def extract_directory_from_metadata(
                 ),
             )
 
+    return (
+        raw_opencode_metadata if isinstance(raw_opencode_metadata, dict) else None,
+        None,
+    )
+
+
+def extract_directory_from_metadata(
+    context: ExtensionHandlerContext,
+    *,
+    request_id: str | int | None,
+    params: dict[str, Any],
+) -> tuple[str | None, Response | None]:
+    opencode_metadata, metadata_error = _parse_metadata_objects(
+        context,
+        request_id=request_id,
+        params=params,
+        strict_top_level=True,
+        validate_shared_object=True,
+    )
+    if metadata_error is not None:
+        return None, metadata_error
+
     directory = None
     if opencode_metadata is not None:
-        directory = opencode_metadata.get("directory")
+        directory = extract_namespaced_value(
+            {"opencode": opencode_metadata},
+            namespace="opencode",
+            path=("directory",),
+        )
     if directory is not None and not isinstance(directory, str):
         return None, context.error_response(
             request_id,
@@ -135,31 +255,21 @@ def extract_workspace_id_from_metadata(
     request_id: str | int | None,
     params: dict[str, Any],
 ) -> tuple[str | None, Response | None]:
-    metadata = params.get("metadata")
-    if metadata is None:
-        return None, None
-    if not isinstance(metadata, dict):
-        return None, context.error_response(
-            request_id,
-            invalid_params_error(
-                "metadata must be an object",
-                data={"type": "INVALID_FIELD", "field": "metadata"},
-            ),
-        )
-
-    raw_opencode_metadata = metadata.get("opencode")
+    raw_opencode_metadata, metadata_error = _parse_metadata_objects(
+        context,
+        request_id=request_id,
+        params=params,
+    )
+    if metadata_error is not None:
+        return None, metadata_error
     if raw_opencode_metadata is None:
         return None, None
-    if not isinstance(raw_opencode_metadata, dict):
-        return None, context.error_response(
-            request_id,
-            invalid_params_error(
-                "metadata.opencode must be an object",
-                data={"type": "INVALID_FIELD", "field": "metadata.opencode"},
-            ),
-        )
 
-    raw_workspace = raw_opencode_metadata.get("workspace")
+    raw_workspace = extract_namespaced_value(
+        {"opencode": raw_opencode_metadata},
+        namespace="opencode",
+        path=("workspace",),
+    )
     if raw_workspace is None:
         return None, None
     if not isinstance(raw_workspace, dict):
@@ -171,7 +281,11 @@ def extract_workspace_id_from_metadata(
             ),
         )
 
-    raw_workspace_id = raw_workspace.get("id")
+    raw_workspace_id = extract_namespaced_value(
+        {"workspace": raw_workspace},
+        namespace="workspace",
+        path=("id",),
+    )
     if raw_workspace_id is None:
         return None, None
     if not isinstance(raw_workspace_id, str):
@@ -267,6 +381,112 @@ def extract_interrupt_callback_directory_hint(
         context,
         request_id=request_id,
         params=params,
+    )
+
+
+async def invoke_upstream_or_error(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    *,
+    invoke: Callable[[], Awaitable[Any]],
+    upstream_http_error_code: int,
+    upstream_unreachable_error_code: int,
+    internal_log_message: str,
+    method: str | None = None,
+    session_id: str | None = None,
+    interrupt_request_id: str | None = None,
+    on_not_found: Callable[[], Response] | None = None,
+) -> tuple[Any | None, Response | None]:
+    try:
+        return await invoke(), None
+    except Exception as exc:
+        return None, build_upstream_exception_response(
+            context,
+            request_id,
+            exc=exc,
+            upstream_http_error_code=upstream_http_error_code,
+            upstream_unreachable_error_code=upstream_unreachable_error_code,
+            internal_log_message=internal_log_message,
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+            on_not_found=on_not_found,
+        )
+
+
+def build_upstream_exception_response(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    *,
+    exc: Exception,
+    upstream_http_error_code: int,
+    upstream_unreachable_error_code: int,
+    internal_log_message: str,
+    method: str | None = None,
+    session_id: str | None = None,
+    interrupt_request_id: str | None = None,
+    upstream_payload_error_code: int | None = None,
+    on_not_found: Callable[[], Response] | None = None,
+    on_permission_error: Callable[[], Response] | None = None,
+    payload_warning_message: str | None = None,
+) -> Response:
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code == 404 and on_not_found is not None:
+            return on_not_found()
+        return build_upstream_http_error_response(
+            context,
+            request_id,
+            upstream_http_error_code,
+            upstream_status=exc.response.status_code,
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+        )
+
+    if isinstance(exc, httpx.HTTPError):
+        return build_upstream_unreachable_error_response(
+            context,
+            request_id,
+            upstream_unreachable_error_code,
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+        )
+
+    if isinstance(exc, UpstreamConcurrencyLimitError):
+        return build_upstream_concurrency_error_response(
+            context,
+            request_id,
+            upstream_unreachable_error_code,
+            exc=exc,
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+        )
+
+    if upstream_payload_error_code is not None and isinstance(
+        exc, (UpstreamContractError, ValueError)
+    ):
+        if isinstance(exc, ValueError) and payload_warning_message is not None:
+            logger.warning("%s: %s", payload_warning_message, exc)
+        return build_upstream_payload_error_response(
+            context,
+            request_id,
+            upstream_payload_error_code,
+            detail=str(exc),
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+        )
+
+    if isinstance(exc, PermissionError) and on_permission_error is not None:
+        return on_permission_error()
+
+    return build_internal_error_response(
+        context,
+        request_id,
+        log_message=internal_log_message,
+        exc=exc,
     )
 
 

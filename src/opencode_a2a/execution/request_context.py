@@ -6,6 +6,8 @@ from typing import Any
 from a2a.server.agent_execution import RequestContext
 from a2a.types import Message
 
+from ..metadata_access import extract_first_namespaced_string
+
 
 def _build_history(context: RequestContext) -> list[Message]:
     if context.current_task and context.current_task.history:
@@ -17,23 +19,20 @@ def _build_history(context: RequestContext) -> list[Message]:
     return history
 
 
-def _iter_metadata_maps(context: RequestContext, namespace: str):
+def _metadata_sources(context: RequestContext) -> tuple[Mapping[str, Any] | None, ...]:
     try:
         meta = context.metadata
     except Exception:
         meta = None
 
+    sources: list[Mapping[str, Any] | None] = []
     if isinstance(meta, Mapping):
-        namespaced_meta = meta.get(namespace)
-        if isinstance(namespaced_meta, Mapping):
-            yield namespaced_meta
-
+        sources.append(meta)
     if context.message is not None:
         msg_meta = getattr(context.message, "metadata", None) or {}
         if isinstance(msg_meta, Mapping):
-            namespaced_meta = msg_meta.get(namespace)
-            if isinstance(namespaced_meta, Mapping):
-                yield namespaced_meta
+            sources.append(msg_meta)
+    return tuple(sources)
 
 
 def _extract_namespaced_string_metadata(
@@ -42,21 +41,11 @@ def _extract_namespaced_string_metadata(
     namespace: str,
     path: tuple[str, ...],
 ) -> str | None:
-    for namespaced_meta in _iter_metadata_maps(context, namespace):
-        current: Any = namespaced_meta
-        for part in path[:-1]:
-            if not isinstance(current, Mapping):
-                current = None
-                break
-            current = current.get(part)
-        if not isinstance(current, Mapping):
-            continue
-        candidate = current.get(path[-1])
-        if isinstance(candidate, str):
-            value = candidate.strip()
-            if value:
-                return value
-    return None
+    return extract_first_namespaced_string(
+        _metadata_sources(context),
+        namespace=namespace,
+        path=path,
+    )
 
 
 def _extract_shared_session_id(context: RequestContext) -> str | None:

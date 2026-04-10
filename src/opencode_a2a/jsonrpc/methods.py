@@ -57,6 +57,72 @@ def _raise_prompt_async_validation_error(*, field: str, message: str) -> None:
     raise _PromptAsyncValidationError(field=field, message=message)
 
 
+def _validate_allowed_request_fields(
+    value: dict[str, Any],
+    *,
+    allowed_fields: tuple[str, ...] | frozenset[str],
+) -> None:
+    unknown_fields = sorted(set(value) - set(allowed_fields))
+    if not unknown_fields:
+        return
+    joined = ", ".join(f"request.{field}" for field in unknown_fields)
+    _raise_prompt_async_validation_error(
+        field="request",
+        message=f"Unsupported fields: {joined}",
+    )
+
+
+def _validate_optional_message_id(value: Any, *, field: str) -> None:
+    if value is not None and (not isinstance(value, str) or not value.startswith("msg")):
+        _raise_prompt_async_validation_error(
+            field=field,
+            message=f"{field} must be a string starting with 'msg'",
+        )
+
+
+def _validate_optional_string_fields(
+    value: dict[str, Any],
+    *,
+    field_names: tuple[str, ...],
+) -> None:
+    for field_name in field_names:
+        field_value = value.get(field_name)
+        if field_value is not None and not isinstance(field_value, str):
+            _raise_prompt_async_validation_error(
+                field=f"request.{field_name}",
+                message=f"request.{field_name} must be a string",
+            )
+
+
+def _validate_required_non_empty_string_fields(
+    value: dict[str, Any],
+    *,
+    field_names: tuple[str, ...],
+) -> None:
+    for field_name in field_names:
+        field_value = value.get(field_name)
+        if not isinstance(field_value, str) or not field_value.strip():
+            _raise_prompt_async_validation_error(
+                field=f"request.{field_name}",
+                message=f"request.{field_name} must be a non-empty string",
+            )
+
+
+def _validate_parts_array(
+    value: Any,
+    *,
+    field: str,
+    part_validator: Any,
+) -> None:
+    if not isinstance(value, list):
+        _raise_prompt_async_validation_error(
+            field=field,
+            message=f"{field} must be an array",
+        )
+    for index, part in enumerate(cast(list[Any], value)):
+        part_validator(part, field=f"{field}[{index}]")
+
+
 def _validate_model_ref(value: Any, *, field: str) -> None:
     if not isinstance(value, dict):
         _raise_prompt_async_validation_error(field=field, message=f"{field} must be an object")
@@ -159,34 +225,13 @@ def _validate_prompt_async_part(value: Any, *, field: str) -> None:
 
 
 def _validate_prompt_async_request_payload(value: dict[str, Any]) -> None:
-    allowed_fields = set(PROMPT_ASYNC_REQUEST_ALLOWED_FIELDS)
-    unknown_fields = sorted(set(value) - allowed_fields)
-    if unknown_fields:
-        joined = ", ".join(f"request.{field}" for field in unknown_fields)
-        _raise_prompt_async_validation_error(
-            field="request",
-            message=f"Unsupported fields: {joined}",
-        )
+    _validate_allowed_request_fields(value, allowed_fields=PROMPT_ASYNC_REQUEST_ALLOWED_FIELDS)
+    _validate_optional_message_id(value.get("messageID"), field="request.messageID")
 
-    message_id = value.get("messageID")
-    if message_id is not None:
-        if not isinstance(message_id, str) or not message_id.startswith("msg"):
-            _raise_prompt_async_validation_error(
-                field="request.messageID",
-                message="request.messageID must be a string starting with 'msg'",
-            )
-
-    model = value.get("model")
-    if model is not None:
+    if (model := value.get("model")) is not None:
         _validate_model_ref(model, field="request.model")
 
-    for key in ("agent", "system", "variant"):
-        data = value.get(key)
-        if data is not None and not isinstance(data, str):
-            _raise_prompt_async_validation_error(
-                field=f"request.{key}",
-                message=f"request.{key} must be a string",
-            )
+    _validate_optional_string_fields(value, field_names=("agent", "system", "variant"))
 
     no_reply = value.get("noReply")
     if no_reply is not None and not isinstance(no_reply, bool):
@@ -218,15 +263,11 @@ def _validate_prompt_async_request_payload(value: dict[str, Any]) -> None:
     if fmt is not None:
         _validate_prompt_async_format(fmt, field="request.format")
 
-    parts = value.get("parts")
-    if not isinstance(parts, list):
-        _raise_prompt_async_validation_error(
-            field="request.parts",
-            message="request.parts must be an array",
-        )
-    parts_list = cast(list[Any], parts)
-    for index, part in enumerate(parts_list):
-        _validate_prompt_async_part(part, field=f"request.parts[{index}]")
+    _validate_parts_array(
+        value.get("parts"),
+        field="request.parts",
+        part_validator=_validate_prompt_async_part,
+    )
 
 
 def _validate_command_part(value: Any, *, field: str) -> None:
@@ -248,75 +289,24 @@ def _validate_command_part(value: Any, *, field: str) -> None:
 
 
 def _validate_command_request_payload(value: dict[str, Any]) -> None:
-    allowed_fields = set(COMMAND_REQUEST_ALLOWED_FIELDS)
-    unknown_fields = sorted(set(value) - allowed_fields)
-    if unknown_fields:
-        joined = ", ".join(f"request.{field}" for field in unknown_fields)
-        _raise_prompt_async_validation_error(
-            field="request",
-            message=f"Unsupported fields: {joined}",
-        )
+    _validate_allowed_request_fields(value, allowed_fields=COMMAND_REQUEST_ALLOWED_FIELDS)
+    _validate_required_non_empty_string_fields(value, field_names=("command", "arguments"))
+    _validate_optional_message_id(value.get("messageID"), field="request.messageID")
 
-    for key in ("command", "arguments"):
-        item = value.get(key)
-        if not isinstance(item, str) or not item.strip():
-            _raise_prompt_async_validation_error(
-                field=f"request.{key}",
-                message=f"request.{key} must be a non-empty string",
-            )
-
-    message_id = value.get("messageID")
-    if message_id is not None:
-        if not isinstance(message_id, str) or not message_id.startswith("msg"):
-            _raise_prompt_async_validation_error(
-                field="request.messageID",
-                message="request.messageID must be a string starting with 'msg'",
-            )
-
-    model = value.get("model")
-    if model is not None:
+    if (model := value.get("model")) is not None:
         _validate_model_ref(model, field="request.model")
 
-    for key in ("agent", "variant"):
-        data = value.get(key)
-        if data is not None and not isinstance(data, str):
-            _raise_prompt_async_validation_error(
-                field=f"request.{key}",
-                message=f"request.{key} must be a string",
-            )
+    _validate_optional_string_fields(value, field_names=("agent", "variant"))
 
     parts = value.get("parts")
     if parts is not None:
-        if not isinstance(parts, list):
-            _raise_prompt_async_validation_error(
-                field="request.parts",
-                message="request.parts must be an array",
-            )
-        parts_list = cast(list[Any], parts)
-        for index, part in enumerate(parts_list):
-            _validate_command_part(part, field=f"request.parts[{index}]")
+        _validate_parts_array(parts, field="request.parts", part_validator=_validate_command_part)
 
 
 def _validate_shell_request_payload(value: dict[str, Any]) -> None:
-    allowed_fields = set(SHELL_REQUEST_ALLOWED_FIELDS)
-    unknown_fields = sorted(set(value) - allowed_fields)
-    if unknown_fields:
-        joined = ", ".join(f"request.{field}" for field in unknown_fields)
-        _raise_prompt_async_validation_error(
-            field="request",
-            message=f"Unsupported fields: {joined}",
-        )
-
-    for key in ("agent", "command"):
-        item = value.get(key)
-        if not isinstance(item, str) or not item.strip():
-            _raise_prompt_async_validation_error(
-                field=f"request.{key}",
-                message=f"request.{key} must be a non-empty string",
-            )
-
-    model = value.get("model")
-    if model is not None:
+    _validate_allowed_request_fields(value, allowed_fields=SHELL_REQUEST_ALLOWED_FIELDS)
+    _validate_required_non_empty_string_fields(value, field_names=("agent", "command"))
+    if (model := value.get("model")) is not None:
         _validate_model_ref(model, field="request.model")
 
 

@@ -123,7 +123,7 @@ async def test_streaming_emits_structured_tool_part_updates() -> None:
 
 
 @pytest.mark.asyncio
-async def test_streaming_suppresses_structured_tool_updates_when_json_output_not_accepted() -> None:
+async def test_streaming_downgrades_structured_tool_updates_when_json_output_not_accepted() -> None:
     client = DummyStreamingClient(
         stream_events_payload=[
             _event(
@@ -157,7 +157,9 @@ async def test_streaming_suppresses_structured_tool_updates_when_json_output_not
 
     updates = _artifact_updates(queue)
     tool_updates = [ev for ev in updates if _artifact_stream_meta(ev)["block_type"] == "tool_call"]
-    assert tool_updates == []
+    assert len(tool_updates) == 1
+    assert _part_text(tool_updates[0]) == '{"call_id":"call-1","status":"running","tool":"bash"}'
+    assert getattr(tool_updates[0].artifact.parts[0].root, "kind", None) == "text"
     assert any(_artifact_stream_meta(ev)["block_type"] == "text" for ev in updates)
 
 

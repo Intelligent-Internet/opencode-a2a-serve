@@ -6,14 +6,8 @@ from dataclasses import dataclass
 
 from a2a.types import TaskState
 
-_TERMINAL_TASK_STATES = frozenset(
-    {
-        TaskState.completed,
-        TaskState.canceled,
-        TaskState.failed,
-        TaskState.rejected,
-    }
-)
+from ..task_states import TERMINAL_TASK_STATES
+
 _AUTO_POLLING_TASK_STATES = frozenset(
     {
         TaskState.submitted,
@@ -37,7 +31,7 @@ class PollingFallbackPolicy:
         return state in _AUTO_POLLING_TASK_STATES
 
     def is_terminal_state(self, state: TaskState) -> bool:
-        return state in _TERMINAL_TASK_STATES
+        return state in TERMINAL_TASK_STATES
 
     def next_interval_seconds(self, current_interval_seconds: float) -> float:
         return min(
