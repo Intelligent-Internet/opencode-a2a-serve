@@ -7,6 +7,11 @@ from ..contracts.extensions import (
     SESSION_QUERY_MAX_LIMIT,
     SESSION_QUERY_PAGINATION_UNSUPPORTED,
 )
+from ..parsing import (
+    parse_bool_field as parse_shared_bool_field,
+    parse_int_field as parse_shared_int_field,
+    parse_string_field as parse_shared_string_field,
+)
 
 
 class JsonRpcParamsValidationError(ValueError):
@@ -15,94 +20,44 @@ class JsonRpcParamsValidationError(ValueError):
         self.data = data
 
 
+def _validation_error(field: str, message: str) -> JsonRpcParamsValidationError:
+    return JsonRpcParamsValidationError(
+        message=message,
+        data={"type": "INVALID_FIELD", "field": field},
+    )
+
+
 def _parse_positive_int(value: Any, *, field: str) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        raise JsonRpcParamsValidationError(
-            message=f"{field} must be an integer",
-            data={"type": "INVALID_FIELD", "field": field},
-        )
-    if isinstance(value, int):
-        parsed = value
-    elif isinstance(value, str):
-        try:
-            parsed = int(value)
-        except ValueError as exc:
-            raise JsonRpcParamsValidationError(
-                message=f"{field} must be an integer",
-                data={"type": "INVALID_FIELD", "field": field},
-            ) from exc
-    else:
-        raise JsonRpcParamsValidationError(
-            message=f"{field} must be an integer",
-            data={"type": "INVALID_FIELD", "field": field},
-        )
-    if parsed < 1:
-        raise JsonRpcParamsValidationError(
-            message=f"{field} must be >= 1",
-            data={"type": "INVALID_FIELD", "field": field},
-        )
-    return parsed
+    return parse_shared_int_field(
+        value,
+        field=field,
+        error_factory=_validation_error,
+        minimum=1,
+    )
 
 
 def _parse_non_negative_int(value: Any, *, field: str) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        raise JsonRpcParamsValidationError(
-            message=f"{field} must be an integer",
-            data={"type": "INVALID_FIELD", "field": field},
-        )
-    if isinstance(value, int):
-        parsed = value
-    elif isinstance(value, str):
-        try:
-            parsed = int(value)
-        except ValueError as exc:
-            raise JsonRpcParamsValidationError(
-                message=f"{field} must be an integer",
-                data={"type": "INVALID_FIELD", "field": field},
-            ) from exc
-    else:
-        raise JsonRpcParamsValidationError(
-            message=f"{field} must be an integer",
-            data={"type": "INVALID_FIELD", "field": field},
-        )
-    if parsed < 0:
-        raise JsonRpcParamsValidationError(
-            message=f"{field} must be >= 0",
-            data={"type": "INVALID_FIELD", "field": field},
-        )
-    return parsed
+    return parse_shared_int_field(
+        value,
+        field=field,
+        error_factory=_validation_error,
+        minimum=0,
+    )
 
 
 def _parse_string_field(value: Any, *, field: str) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise JsonRpcParamsValidationError(
-            message=f"{field} must be a string",
-            data={"type": "INVALID_FIELD", "field": field},
-        )
-    normalized = value.strip()
-    return normalized or None
+    return parse_shared_string_field(
+        value,
+        field=field,
+        error_factory=_validation_error,
+    )
 
 
 def _parse_bool_field(value: Any, *, field: str) -> bool | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "1", "yes", "on"}:
-            return True
-        if normalized in {"false", "0", "no", "off"}:
-            return False
-    raise JsonRpcParamsValidationError(
-        message=f"{field} must be a boolean",
-        data={"type": "INVALID_FIELD", "field": field},
+    return parse_shared_bool_field(
+        value,
+        field=field,
+        error_factory=_validation_error,
     )
 
 
