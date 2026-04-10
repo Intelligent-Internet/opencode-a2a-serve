@@ -33,6 +33,7 @@ from .common import (
     build_upstream_http_error_response,
     build_upstream_payload_error_response,
     build_upstream_unreachable_error_response,
+    claim_session,
     resolve_routing_context,
 )
 
@@ -150,71 +151,56 @@ async def handle_session_control_request(
     if routing_error is not None:
         return routing_error
 
-    pending_claim = False
-    claim_finalized = False
-    if identity:
-        try:
-            pending_claim = await context.session_claim(
-                identity=identity,
-                session_id=session_id,
-            )
-        except PermissionError:
-            _log_shell_audit("forbidden")
-            return build_session_forbidden_response(
-                context,
-                base_request.id,
-                session_id=session_id,
-            )
-
     try:
-        result: dict[str, Any]
-        if base_request.method == context.method_prompt_async:
-            await call_with_supported_kwargs(
-                context.upstream_client.session_prompt_async,
-                session_id,
-                request=dict(raw_request),
-                directory=directory,
-                workspace_id=workspace_id,
-            )
-            result = {"ok": True, "session_id": session_id}
-        elif base_request.method == context.method_command:
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.session_command,
-                session_id,
-                request=dict(raw_request),
-                directory=directory,
-                workspace_id=workspace_id,
-            )
-            item = _as_a2a_message(session_id, raw_result)
-            if item is None:
-                raise UpstreamContractError(
-                    "OpenCode /session/{sessionID}/command response could not be mapped "
-                    "to A2A Message"
+        async with claim_session(
+            context,
+            identity=identity,
+            session_id=session_id,
+            logger=logger,
+        ) as session_claim:
+            result: dict[str, Any]
+            if base_request.method == context.method_prompt_async:
+                await call_with_supported_kwargs(
+                    context.upstream_client.session_prompt_async,
+                    session_id,
+                    request=dict(raw_request),
+                    directory=directory,
+                    workspace_id=workspace_id,
                 )
-            result = {"item": item}
-        else:
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.session_shell,
-                session_id,
-                request=dict(raw_request),
-                directory=directory,
-                workspace_id=workspace_id,
-            )
-            item = _as_a2a_message(session_id, raw_result)
-            if item is None:
-                raise UpstreamContractError(
-                    "OpenCode /session/{sessionID}/shell response could not be mapped "
-                    "to A2A Message"
+                result = {"ok": True, "session_id": session_id}
+            elif base_request.method == context.method_command:
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.session_command,
+                    session_id,
+                    request=dict(raw_request),
+                    directory=directory,
+                    workspace_id=workspace_id,
                 )
-            result = {"item": item}
+                item = _as_a2a_message(session_id, raw_result)
+                if item is None:
+                    raise UpstreamContractError(
+                        "OpenCode /session/{sessionID}/command response could not be mapped "
+                        "to A2A Message"
+                    )
+                result = {"item": item}
+            else:
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.session_shell,
+                    session_id,
+                    request=dict(raw_request),
+                    directory=directory,
+                    workspace_id=workspace_id,
+                )
+                item = _as_a2a_message(session_id, raw_result)
+                if item is None:
+                    raise UpstreamContractError(
+                        "OpenCode /session/{sessionID}/shell response could not be mapped "
+                        "to A2A Message"
+                    )
+                result = {"item": item}
 
-        if pending_claim and identity:
-            await context.session_claim_finalize(
-                identity=identity,
-                session_id=session_id,
-            )
-            claim_finalized = True
-        _log_shell_audit("success")
+            await session_claim.finalize()
+            _log_shell_audit("success")
     except httpx.HTTPStatusError as exc:
         upstream_status = exc.response.status_code
         if upstream_status == 404:
@@ -276,17 +262,5 @@ async def handle_session_control_request(
             log_message="OpenCode session control JSON-RPC method failed",
             exc=exc,
         )
-    finally:
-        if pending_claim and not claim_finalized and identity:
-            try:
-                await context.session_claim_release(
-                    identity=identity,
-                    session_id=session_id,
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to release pending session claim for session_id=%s",
-                    session_id,
-                )
 
     return build_success_response(context, base_request.id, result)

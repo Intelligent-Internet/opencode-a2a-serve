@@ -30,6 +30,7 @@ from .common import (
     build_upstream_http_error_response,
     build_upstream_payload_error_response,
     build_upstream_unreachable_error_response,
+    claim_session,
     resolve_routing_context,
 )
 
@@ -338,162 +339,157 @@ async def handle_session_lifecycle_request(
         context.method_unrevert_session,
     }
 
-    pending_claim = False
-    claim_finalized = False
-    if method in mutating_methods and session_id is not None and identity:
-        try:
-            pending_claim = await context.session_claim(identity=identity, session_id=session_id)
-        except PermissionError:
-            return build_session_forbidden_response(
-                context,
-                base_request.id,
-                session_id=session_id,
-            )
-
+    claim_identity = identity if method in mutating_methods else None
     try:
-        result: dict[str, Any]
-        forked_session_id: str | None = None
+        async with claim_session(
+            context,
+            identity=claim_identity,
+            session_id=session_id,
+            logger=logger,
+        ) as session_claim:
+            result: dict[str, Any]
+            forked_session_id: str | None = None
 
-        if method == context.method_session_status:
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.session_status,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"items": _normalize_session_status_items(raw_result)}
-        elif method == context.method_get_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.get_session,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            item = _as_a2a_session_task(raw_result)
-            if item is None:
-                raise UpstreamContractError(
-                    "OpenCode /session/{sessionID} response could not be mapped to A2A Task"
+            if method == context.method_session_status:
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.session_status,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
                 )
-            result = {"item": item}
-        elif method == context.method_get_session_children:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.list_child_sessions,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            raw_items = _extract_raw_items(raw_result, kind="child sessions")
-            result = {
-                "items": [
-                    task for item in raw_items if (task := _as_a2a_session_task(item)) is not None
-                ]
-            }
-        elif method == context.method_get_session_todo:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.get_session_todo,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"items": _normalize_todo_items(raw_result)}
-        elif method == context.method_get_session_diff:
-            assert session_id is not None
-            query = {"messageID": message_id} if message_id else None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.get_session_diff,
-                session_id,
-                params=query,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"items": _normalize_diff_items(raw_result)}
-        elif method == context.method_get_session_message:
-            assert session_id is not None
-            assert message_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.get_message,
-                session_id,
-                message_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            item = _as_a2a_message(session_id, raw_result)
-            if item is None:
-                raise UpstreamContractError(
-                    "OpenCode /session/{sessionID}/message/{messageID} response could not be "
-                    "mapped to A2A Message"
+                result = {"items": _normalize_session_status_items(raw_result)}
+            elif method == context.method_get_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.get_session,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
                 )
-            result = {"item": item}
-        elif method == context.method_fork_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.fork_session,
-                session_id,
-                request=fork_request,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            item = _normalize_session_summary(raw_result)
-            forked_session_id = item["id"]
-            result = {"item": item}
-        elif method == context.method_share_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.share_session,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"item": _normalize_session_summary(raw_result)}
-        elif method == context.method_summarize_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.summarize_session,
-                session_id,
-                request=summarize_request,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            if not isinstance(raw_result, bool):
-                raise ValueError("Upstream summarize response must be a boolean")
-            result = {"ok": raw_result, "session_id": session_id}
-        elif method == context.method_revert_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.revert_session,
-                session_id,
-                request=revert_request,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"item": _normalize_session_summary(raw_result)}
-        elif method == context.method_unrevert_session:
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.unrevert_session,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"item": _normalize_session_summary(raw_result)}
-        else:
-            assert method == context.method_unshare_session
-            assert session_id is not None
-            raw_result = await call_with_supported_kwargs(
-                context.upstream_client.unshare_session,
-                session_id,
-                directory=resolved_directory,
-                workspace_id=workspace_id,
-            )
-            result = {"item": _normalize_session_summary(raw_result)}
+                item = _as_a2a_session_task(raw_result)
+                if item is None:
+                    raise UpstreamContractError(
+                        "OpenCode /session/{sessionID} response could not be mapped to A2A Task"
+                    )
+                result = {"item": item}
+            elif method == context.method_get_session_children:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.list_child_sessions,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                raw_items = _extract_raw_items(raw_result, kind="child sessions")
+                result = {
+                    "items": [
+                        task
+                        for item in raw_items
+                        if (task := _as_a2a_session_task(item)) is not None
+                    ]
+                }
+            elif method == context.method_get_session_todo:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.get_session_todo,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"items": _normalize_todo_items(raw_result)}
+            elif method == context.method_get_session_diff:
+                assert session_id is not None
+                query = {"messageID": message_id} if message_id else None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.get_session_diff,
+                    session_id,
+                    params=query,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"items": _normalize_diff_items(raw_result)}
+            elif method == context.method_get_session_message:
+                assert session_id is not None
+                assert message_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.get_message,
+                    session_id,
+                    message_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                item = _as_a2a_message(session_id, raw_result)
+                if item is None:
+                    raise UpstreamContractError(
+                        "OpenCode /session/{sessionID}/message/{messageID} response could not "
+                        "be mapped to A2A Message"
+                    )
+                result = {"item": item}
+            elif method == context.method_fork_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.fork_session,
+                    session_id,
+                    request=fork_request,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                item = _normalize_session_summary(raw_result)
+                forked_session_id = item["id"]
+                result = {"item": item}
+            elif method == context.method_share_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.share_session,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"item": _normalize_session_summary(raw_result)}
+            elif method == context.method_summarize_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.summarize_session,
+                    session_id,
+                    request=summarize_request,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                if not isinstance(raw_result, bool):
+                    raise ValueError("Upstream summarize response must be a boolean")
+                result = {"ok": raw_result, "session_id": session_id}
+            elif method == context.method_revert_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.revert_session,
+                    session_id,
+                    request=revert_request,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"item": _normalize_session_summary(raw_result)}
+            elif method == context.method_unrevert_session:
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.unrevert_session,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"item": _normalize_session_summary(raw_result)}
+            else:
+                assert method == context.method_unshare_session
+                assert session_id is not None
+                raw_result = await call_with_supported_kwargs(
+                    context.upstream_client.unshare_session,
+                    session_id,
+                    directory=resolved_directory,
+                    workspace_id=workspace_id,
+                )
+                result = {"item": _normalize_session_summary(raw_result)}
 
-        if pending_claim and identity and session_id is not None:
-            await context.session_claim_finalize(identity=identity, session_id=session_id)
-            claim_finalized = True
-        if forked_session_id is not None and identity:
-            await context.session_claim_finalize(identity=identity, session_id=forked_session_id)
+            await session_claim.finalize()
+            if forked_session_id is not None and identity:
+                await context.session_claim_finalize(identity=identity, session_id=forked_session_id)
     except httpx.HTTPStatusError as exc:
         upstream_status = exc.response.status_code
         if upstream_status == 404 and session_id is not None:
@@ -559,14 +555,5 @@ async def handle_session_lifecycle_request(
             log_message="OpenCode session lifecycle JSON-RPC method failed",
             exc=exc,
         )
-    finally:
-        if pending_claim and not claim_finalized and identity and session_id is not None:
-            try:
-                await context.session_claim_release(identity=identity, session_id=session_id)
-            except Exception:
-                logger.exception(
-                    "Failed to release pending session claim for session_id=%s",
-                    session_id,
-                )
 
     return build_success_response(context, base_request.id, result)

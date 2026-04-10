@@ -23,6 +23,69 @@ ERR_AUTHORIZATION_FORBIDDEN = SESSION_QUERY_ERROR_BUSINESS_CODES["AUTHORIZATION_
 logger = logging.getLogger(__name__)
 
 
+class SessionClaimGuard:
+    def __init__(
+        self,
+        context: ExtensionHandlerContext,
+        *,
+        identity: str | None,
+        session_id: str | None,
+        logger: logging.Logger,
+    ) -> None:
+        self._context = context
+        self._identity = identity
+        self._session_id = session_id
+        self._logger = logger
+        self._pending = False
+        self._finalized = False
+
+    async def __aenter__(self) -> SessionClaimGuard:
+        if self._identity and self._session_id:
+            self._pending = await self._context.session_claim(
+                identity=self._identity,
+                session_id=self._session_id,
+            )
+        return self
+
+    async def finalize(self) -> None:
+        if self._pending and not self._finalized and self._identity and self._session_id:
+            await self._context.session_claim_finalize(
+                identity=self._identity,
+                session_id=self._session_id,
+            )
+            self._finalized = True
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+        del exc_type, exc, tb
+        if self._pending and not self._finalized and self._identity and self._session_id:
+            try:
+                await self._context.session_claim_release(
+                    identity=self._identity,
+                    session_id=self._session_id,
+                )
+            except Exception:
+                self._logger.exception(
+                    "Failed to release pending session claim for session_id=%s",
+                    self._session_id,
+                )
+        return False
+
+
+def claim_session(
+    context: ExtensionHandlerContext,
+    *,
+    identity: str | None,
+    session_id: str | None,
+    logger: logging.Logger,
+) -> SessionClaimGuard:
+    return SessionClaimGuard(
+        context,
+        identity=identity,
+        session_id=session_id,
+        logger=logger,
+    )
+
+
 def build_success_response(
     context: ExtensionHandlerContext,
     request_id: str | int | None,
