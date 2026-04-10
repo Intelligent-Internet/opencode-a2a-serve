@@ -26,13 +26,9 @@ from ..methods import (
 )
 from .common import (
     build_authorization_forbidden_response,
-    build_internal_error_response,
     build_session_forbidden_response,
     build_success_response,
-    build_upstream_concurrency_error_response,
-    build_upstream_http_error_response,
-    build_upstream_payload_error_response,
-    build_upstream_unreachable_error_response,
+    build_upstream_exception_response,
     claim_session,
     reject_unknown_fields,
     resolve_routing_context,
@@ -44,6 +40,22 @@ ERR_SESSION_NOT_FOUND = SESSION_QUERY_ERROR_BUSINESS_CODES["SESSION_NOT_FOUND"]
 ERR_UPSTREAM_UNREACHABLE = SESSION_QUERY_ERROR_BUSINESS_CODES["UPSTREAM_UNREACHABLE"]
 ERR_UPSTREAM_HTTP_ERROR = SESSION_QUERY_ERROR_BUSINESS_CODES["UPSTREAM_HTTP_ERROR"]
 ERR_UPSTREAM_PAYLOAD_ERROR = SESSION_QUERY_ERROR_BUSINESS_CODES["UPSTREAM_PAYLOAD_ERROR"]
+
+
+def _shell_audit_outcome(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code == 404:
+            return "upstream_404"
+        return "upstream_http_error"
+    if isinstance(exc, httpx.HTTPError):
+        return "upstream_unreachable"
+    if isinstance(exc, UpstreamConcurrencyLimitError):
+        return "upstream_backpressure"
+    if isinstance(exc, (UpstreamContractError, ValueError)):
+        return "upstream_payload_error"
+    if isinstance(exc, PermissionError):
+        return "forbidden"
+    return "internal_error"
 
 
 async def handle_session_control_request(
@@ -200,66 +212,27 @@ async def handle_session_control_request(
 
             await session_claim.finalize()
             _log_shell_audit("success")
-    except httpx.HTTPStatusError as exc:
-        upstream_status = exc.response.status_code
-        if upstream_status == 404:
-            _log_shell_audit("upstream_404")
-            return context.error_response(
+    except Exception as exc:
+        _log_shell_audit(_shell_audit_outcome(exc))
+        return build_upstream_exception_response(
+            context,
+            base_request.id,
+            exc=exc,
+            upstream_http_error_code=ERR_UPSTREAM_HTTP_ERROR,
+            upstream_unreachable_error_code=ERR_UPSTREAM_UNREACHABLE,
+            upstream_payload_error_code=ERR_UPSTREAM_PAYLOAD_ERROR,
+            internal_log_message="OpenCode session control JSON-RPC method failed",
+            method=base_request.method,
+            session_id=session_id,
+            on_not_found=lambda: context.error_response(
                 base_request.id,
                 session_not_found_error(ERR_SESSION_NOT_FOUND, session_id=session_id),
-            )
-        _log_shell_audit("upstream_http_error")
-        return build_upstream_http_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_HTTP_ERROR,
-            upstream_status=upstream_status,
-            method=base_request.method,
-            session_id=session_id,
-        )
-    except httpx.HTTPError:
-        _log_shell_audit("upstream_unreachable")
-        return build_upstream_unreachable_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
-            method=base_request.method,
-            session_id=session_id,
-        )
-    except UpstreamConcurrencyLimitError as exc:
-        _log_shell_audit("upstream_backpressure")
-        return build_upstream_concurrency_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
-            exc=exc,
-            method=base_request.method,
-            session_id=session_id,
-        )
-    except UpstreamContractError as exc:
-        _log_shell_audit("upstream_payload_error")
-        return build_upstream_payload_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_PAYLOAD_ERROR,
-            detail=str(exc),
-            method=base_request.method,
-            session_id=session_id,
-        )
-    except PermissionError:
-        _log_shell_audit("forbidden")
-        return build_session_forbidden_response(
-            context,
-            base_request.id,
-            session_id=session_id,
-        )
-    except Exception as exc:
-        _log_shell_audit("internal_error")
-        return build_internal_error_response(
-            context,
-            base_request.id,
-            log_message="OpenCode session control JSON-RPC method failed",
-            exc=exc,
+            ),
+            on_permission_error=lambda: build_session_forbidden_response(
+                context,
+                base_request.id,
+                session_id=session_id,
+            ),
         )
 
     return build_success_response(context, base_request.id, result)

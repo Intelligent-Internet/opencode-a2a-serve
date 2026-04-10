@@ -3,14 +3,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 from a2a.types import JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
 from ...contracts.extensions import SESSION_QUERY_ERROR_BUSINESS_CODES
 from ...invocation import call_with_supported_kwargs
-from ...opencode_upstream_client import UpstreamConcurrencyLimitError, UpstreamContractError
+from ...opencode_upstream_client import UpstreamContractError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import invalid_params_error, session_not_found_error
 from ..methods import (
@@ -23,13 +22,9 @@ from ..methods import (
     _normalize_todo_items,
 )
 from .common import (
-    build_internal_error_response,
     build_session_forbidden_response,
     build_success_response,
-    build_upstream_concurrency_error_response,
-    build_upstream_http_error_response,
-    build_upstream_payload_error_response,
-    build_upstream_unreachable_error_response,
+    build_upstream_exception_response,
     claim_session,
     reject_unknown_fields,
     resolve_routing_context,
@@ -492,70 +487,36 @@ async def handle_session_lifecycle_request(
                 await context.session_claim_finalize(
                     identity=identity, session_id=forked_session_id
                 )
-    except httpx.HTTPStatusError as exc:
-        upstream_status = exc.response.status_code
-        if upstream_status == 404 and session_id is not None:
+    except Exception as exc:
+
+        def _session_not_found_response() -> Response:
+            assert session_id is not None
             return context.error_response(
                 base_request.id,
                 session_not_found_error(ERR_SESSION_NOT_FOUND, session_id=session_id),
             )
-        return build_upstream_http_error_response(
+
+        return build_upstream_exception_response(
             context,
             base_request.id,
-            ERR_UPSTREAM_HTTP_ERROR,
-            upstream_status=upstream_status,
-            method=method,
-            session_id=session_id,
-        )
-    except httpx.HTTPError:
-        return build_upstream_unreachable_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
-            method=method,
-            session_id=session_id,
-        )
-    except UpstreamConcurrencyLimitError as exc:
-        return build_upstream_concurrency_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_UNREACHABLE,
             exc=exc,
+            upstream_http_error_code=ERR_UPSTREAM_HTTP_ERROR,
+            upstream_unreachable_error_code=ERR_UPSTREAM_UNREACHABLE,
+            upstream_payload_error_code=ERR_UPSTREAM_PAYLOAD_ERROR,
+            internal_log_message="OpenCode session lifecycle JSON-RPC method failed",
             method=method,
             session_id=session_id,
-        )
-    except UpstreamContractError as exc:
-        return build_upstream_payload_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_PAYLOAD_ERROR,
-            detail=str(exc),
-            method=method,
-            session_id=session_id,
-        )
-    except ValueError as exc:
-        logger.warning("Upstream OpenCode payload mismatch: %s", exc)
-        return build_upstream_payload_error_response(
-            context,
-            base_request.id,
-            ERR_UPSTREAM_PAYLOAD_ERROR,
-            detail=str(exc),
-            method=method,
-            session_id=session_id,
-        )
-    except PermissionError:
-        assert session_id is not None
-        return build_session_forbidden_response(
-            context,
-            base_request.id,
-            session_id=session_id,
-        )
-    except Exception as exc:
-        return build_internal_error_response(
-            context,
-            base_request.id,
-            log_message="OpenCode session lifecycle JSON-RPC method failed",
-            exc=exc,
+            on_not_found=_session_not_found_response if session_id is not None else None,
+            on_permission_error=(
+                lambda: build_session_forbidden_response(
+                    context,
+                    base_request.id,
+                    session_id=session_id,
+                )
+            )
+            if session_id is not None
+            else None,
+            payload_warning_message="Upstream OpenCode payload mismatch",
         )
 
     return build_success_response(context, base_request.id, result)

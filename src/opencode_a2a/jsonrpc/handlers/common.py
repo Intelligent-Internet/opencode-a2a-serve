@@ -10,7 +10,7 @@ from starlette.responses import Response
 
 from ...contracts.extensions import SESSION_QUERY_ERROR_BUSINESS_CODES
 from ...metadata_access import extract_namespaced_value
-from ...opencode_upstream_client import UpstreamConcurrencyLimitError
+from ...opencode_upstream_client import UpstreamConcurrencyLimitError, UpstreamContractError
 from ..dispatch import ExtensionHandlerContext
 from ..error_responses import (
     authorization_forbidden_error,
@@ -399,10 +399,41 @@ async def invoke_upstream_or_error(
 ) -> tuple[Any | None, Response | None]:
     try:
         return await invoke(), None
-    except httpx.HTTPStatusError as exc:
+    except Exception as exc:
+        return None, build_upstream_exception_response(
+            context,
+            request_id,
+            exc=exc,
+            upstream_http_error_code=upstream_http_error_code,
+            upstream_unreachable_error_code=upstream_unreachable_error_code,
+            internal_log_message=internal_log_message,
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
+            on_not_found=on_not_found,
+        )
+
+
+def build_upstream_exception_response(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    *,
+    exc: Exception,
+    upstream_http_error_code: int,
+    upstream_unreachable_error_code: int,
+    internal_log_message: str,
+    method: str | None = None,
+    session_id: str | None = None,
+    interrupt_request_id: str | None = None,
+    upstream_payload_error_code: int | None = None,
+    on_not_found: Callable[[], Response] | None = None,
+    on_permission_error: Callable[[], Response] | None = None,
+    payload_warning_message: str | None = None,
+) -> Response:
+    if isinstance(exc, httpx.HTTPStatusError):
         if exc.response.status_code == 404 and on_not_found is not None:
-            return None, on_not_found()
-        return None, build_upstream_http_error_response(
+            return on_not_found()
+        return build_upstream_http_error_response(
             context,
             request_id,
             upstream_http_error_code,
@@ -411,8 +442,9 @@ async def invoke_upstream_or_error(
             session_id=session_id,
             interrupt_request_id=interrupt_request_id,
         )
-    except httpx.HTTPError:
-        return None, build_upstream_unreachable_error_response(
+
+    if isinstance(exc, httpx.HTTPError):
+        return build_upstream_unreachable_error_response(
             context,
             request_id,
             upstream_unreachable_error_code,
@@ -420,8 +452,9 @@ async def invoke_upstream_or_error(
             session_id=session_id,
             interrupt_request_id=interrupt_request_id,
         )
-    except UpstreamConcurrencyLimitError as exc:
-        return None, build_upstream_concurrency_error_response(
+
+    if isinstance(exc, UpstreamConcurrencyLimitError):
+        return build_upstream_concurrency_error_response(
             context,
             request_id,
             upstream_unreachable_error_code,
@@ -430,13 +463,31 @@ async def invoke_upstream_or_error(
             session_id=session_id,
             interrupt_request_id=interrupt_request_id,
         )
-    except Exception as exc:
-        return None, build_internal_error_response(
+
+    if upstream_payload_error_code is not None and isinstance(
+        exc, (UpstreamContractError, ValueError)
+    ):
+        if isinstance(exc, ValueError) and payload_warning_message is not None:
+            logger.warning("%s: %s", payload_warning_message, exc)
+        return build_upstream_payload_error_response(
             context,
             request_id,
-            log_message=internal_log_message,
-            exc=exc,
+            upstream_payload_error_code,
+            detail=str(exc),
+            method=method,
+            session_id=session_id,
+            interrupt_request_id=interrupt_request_id,
         )
+
+    if isinstance(exc, PermissionError) and on_permission_error is not None:
+        return on_permission_error()
+
+    return build_internal_error_response(
+        context,
+        request_id,
+        log_message=internal_log_message,
+        exc=exc,
+    )
 
 
 def build_upstream_http_error_response(
