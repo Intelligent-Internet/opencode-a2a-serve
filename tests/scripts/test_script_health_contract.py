@@ -23,8 +23,11 @@ def test_doctor_keeps_local_regression_scope() -> None:
     assert 'source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/health_common.sh"' in DOCTOR_TEXT
     assert 'run_shared_repo_health_prerequisites "doctor"' in DOCTOR_TEXT
     assert "uv run pre-commit run --all-files" in DOCTOR_TEXT
+    assert "uv run mypy src/opencode_a2a" in DOCTOR_TEXT
     assert "uv run pytest" in DOCTOR_TEXT
     assert "uv run python ./scripts/check_coverage.py" in DOCTOR_TEXT
+    assert "uv build --no-sources" in DOCTOR_TEXT
+    assert "bash ./scripts/smoke_test_built_cli.sh dist/opencode_a2a-*.whl" in DOCTOR_TEXT
     assert "uv pip list --outdated" not in DOCTOR_TEXT
     assert "uv run pip-audit" not in DOCTOR_TEXT
 
@@ -46,6 +49,7 @@ def test_scripts_index_documents_split_health_entrypoints() -> None:
     assert "external A2A conformance experiment entrypoint" in SCRIPTS_INDEX_TEXT
     assert "dependency review entrypoint" in SCRIPTS_INDEX_TEXT
     assert "health_common.sh" in SCRIPTS_INDEX_TEXT
+    assert "built-wheel smoke test" in SCRIPTS_INDEX_TEXT
     assert "single weekly grouped Dependabot PR for `uv`" in SCRIPTS_INDEX_TEXT
 
 
