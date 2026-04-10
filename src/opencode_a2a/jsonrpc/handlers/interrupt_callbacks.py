@@ -26,6 +26,7 @@ from .common import (
     build_upstream_unreachable_error_response,
     extract_interrupt_callback_directory_hint,
     extract_workspace_id_from_metadata,
+    reject_unknown_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,15 +140,14 @@ async def handle_interrupt_callback_request(
         allowed_fields = {"request_id", "answers", "metadata"}
     else:
         allowed_fields = {"request_id", "metadata"}
-    unknown_fields = sorted(set(params) - allowed_fields)
-    if unknown_fields:
-        return context.error_response(
-            base_request.id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        base_request.id,
+        params,
+        allowed_fields=allowed_fields,
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     try:
         result: dict[str, Any] = {

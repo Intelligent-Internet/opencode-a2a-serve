@@ -31,6 +31,7 @@ from .common import (
     build_upstream_payload_error_response,
     build_upstream_unreachable_error_response,
     claim_session,
+    reject_unknown_fields,
     resolve_routing_context,
 )
 
@@ -114,15 +115,15 @@ def _parse_fork_request(
             request_id,
             _invalid_field_error("request", "params.request must be an object"),
         )
-    unknown_fields = sorted(set(raw_request) - {"messageID"})
-    if unknown_fields:
-        return {}, context.error_response(
-            request_id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(f'request.{field}' for field in unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        request_id,
+        raw_request,
+        allowed_fields={"messageID"},
+        field_prefix="request.",
+    )
+    if unknown_fields_error is not None:
+        return {}, unknown_fields_error
     message_id = raw_request.get("messageID")
     if message_id is None:
         return {}, None
@@ -147,15 +148,15 @@ def _parse_summarize_request(
             request_id,
             _invalid_field_error("request", "params.request must be an object"),
         )
-    unknown_fields = sorted(set(raw_request) - {"providerID", "modelID", "auto"})
-    if unknown_fields:
-        return None, context.error_response(
-            request_id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(f'request.{field}' for field in unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        request_id,
+        raw_request,
+        allowed_fields={"providerID", "modelID", "auto"},
+        field_prefix="request.",
+    )
+    if unknown_fields_error is not None:
+        return None, unknown_fields_error
     provider_id = raw_request.get("providerID")
     model_id = raw_request.get("modelID")
     auto = raw_request.get("auto")
@@ -196,15 +197,15 @@ def _parse_revert_request(
             request_id,
             _invalid_field_error("request", "params.request must be an object"),
         )
-    unknown_fields = sorted(set(raw_request) - {"messageID", "partID"})
-    if unknown_fields:
-        return {}, context.error_response(
-            request_id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(f'request.{field}' for field in unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        request_id,
+        raw_request,
+        allowed_fields={"messageID", "partID"},
+        field_prefix="request.",
+    )
+    if unknown_fields_error is not None:
+        return {}, unknown_fields_error
     message_id = raw_request.get("messageID")
     if not isinstance(message_id, str) or not message_id.strip():
         return {}, context.error_response(
@@ -262,15 +263,14 @@ async def handle_session_lifecycle_request(
     }:
         allowed_fields.add("request")
 
-    unknown_fields = sorted(set(params) - allowed_fields)
-    if unknown_fields:
-        return context.error_response(
-            base_request.id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        base_request.id,
+        params,
+        allowed_fields=allowed_fields,
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     directory, directory_error = _parse_directory_hint(context, base_request.id, params)
     if directory_error is not None:

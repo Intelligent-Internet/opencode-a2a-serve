@@ -20,6 +20,7 @@ from .common import (
     build_success_response,
     build_upstream_payload_error_response,
     invoke_upstream_or_error,
+    reject_unknown_fields,
     resolve_routing_context,
 )
 
@@ -42,16 +43,16 @@ async def handle_provider_discovery_request(
     allowed_fields = {"metadata"}
     if base_request.method == context.method_list_models:
         allowed_fields.add("provider_id")
-    unknown_fields = sorted(set(params) - allowed_fields)
-    if unknown_fields:
-        prefixed_fields = [f"params.{field}" for field in unknown_fields]
-        return context.error_response(
-            base_request.id,
-            invalid_params_error(
-                f"Unsupported params fields: {', '.join(prefixed_fields)}",
-                data={"type": "INVALID_FIELD", "fields": prefixed_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        base_request.id,
+        params,
+        allowed_fields=allowed_fields,
+        field_prefix="params.",
+        message_prefix="Unsupported params fields",
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     provider_id: str | None = None
     if base_request.method == context.method_list_models:

@@ -7,8 +7,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from ..dispatch import ExtensionHandlerContext
-from ..error_responses import invalid_params_error
-from .common import build_internal_error_response, build_success_response
+from .common import build_internal_error_response, build_success_response, reject_unknown_fields
 
 
 def _binding_to_result_item(binding: Any) -> dict[str, Any]:
@@ -29,15 +28,14 @@ async def handle_interrupt_query_request(
     params: dict[str, Any],
     request: Request,
 ) -> Response:
-    unknown_fields = sorted(params)
-    if unknown_fields:
-        return context.error_response(
-            base_request.id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        base_request.id,
+        params,
+        allowed_fields=set(),
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     request_identity = getattr(request.state, "user_identity", None)
     identity = request_identity.strip() if isinstance(request_identity, str) else ""

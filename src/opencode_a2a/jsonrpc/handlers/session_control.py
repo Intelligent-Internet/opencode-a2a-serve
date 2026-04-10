@@ -34,6 +34,7 @@ from .common import (
     build_upstream_payload_error_response,
     build_upstream_unreachable_error_response,
     claim_session,
+    reject_unknown_fields,
     resolve_routing_context,
 )
 
@@ -51,16 +52,14 @@ async def handle_session_control_request(
     params: dict[str, Any],
     request: Request,
 ) -> Response:
-    allowed_fields = {"session_id", "request", "metadata"}
-    unknown_fields = sorted(set(params) - allowed_fields)
-    if unknown_fields:
-        return context.error_response(
-            base_request.id,
-            invalid_params_error(
-                f"Unsupported fields: {', '.join(unknown_fields)}",
-                data={"type": "INVALID_FIELD", "fields": unknown_fields},
-            ),
-        )
+    unknown_fields_error = reject_unknown_fields(
+        context,
+        base_request.id,
+        params,
+        allowed_fields={"session_id", "request", "metadata"},
+    )
+    if unknown_fields_error is not None:
+        return unknown_fields_error
 
     session_id = params.get("session_id")
     if not isinstance(session_id, str) or not session_id.strip():

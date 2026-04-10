@@ -99,6 +99,30 @@ def build_success_response(
     return context.success_response(request_id, result)
 
 
+def reject_unknown_fields(
+    context: ExtensionHandlerContext,
+    request_id: str | int | None,
+    payload: dict[str, Any],
+    *,
+    allowed_fields: set[str] | frozenset[str],
+    field_prefix: str = "",
+    message_prefix: str = "Unsupported fields",
+) -> Response | None:
+    unknown_fields = sorted(set(payload) - set(allowed_fields))
+    if not unknown_fields:
+        return None
+    reported_fields = (
+        [f"{field_prefix}{field}" for field in unknown_fields] if field_prefix else unknown_fields
+    )
+    return context.error_response(
+        request_id,
+        invalid_params_error(
+            f"{message_prefix}: {', '.join(reported_fields)}",
+            data={"type": "INVALID_FIELD", "fields": reported_fields},
+        ),
+    )
+
+
 def build_session_forbidden_response(
     context: ExtensionHandlerContext,
     request_id: str | int | None,
