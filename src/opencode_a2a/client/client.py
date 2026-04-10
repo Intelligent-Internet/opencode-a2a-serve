@@ -295,7 +295,7 @@ class A2AClient:
         card = await self.get_agent_card()
         config = ClientConfig(
             streaming=True,
-            polling=False,
+            polling=self._polling_fallback_policy.enabled,
             httpx_client=await self._get_httpx_client(),
             supported_transports=list(self._settings.supported_transports),
             use_client_preference=self._settings.use_client_preference,

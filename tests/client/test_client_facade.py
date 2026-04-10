@@ -155,6 +155,46 @@ async def test_build_client_uses_settings_and_transport_config(
 
 
 @pytest.mark.asyncio
+async def test_build_client_enables_sdk_polling_when_polling_fallback_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = A2AClient(
+        "http://agent.example.com",
+        settings=A2AClientSettings(polling_fallback_enabled=True),
+    )
+    fake_sdk_client = _FakeClient()
+    factory_calls: dict[str, object] = {}
+
+    class _FakeFactory:
+        def __init__(self, config: ClientConfig, consumers: list[object] | None = None):
+            factory_calls["config"] = config
+            factory_calls["consumers"] = consumers
+
+        def create(
+            self,
+            _card: object,
+            consumers: list[object] | None = None,
+            interceptors: list[object] | None = None,
+            extensions: list[str] | None = None,
+        ) -> _FakeClient:
+            return fake_sdk_client
+
+    monkeypatch.setattr(client_module, "ClientFactory", _FakeFactory)
+    monkeypatch.setattr(
+        client_module,
+        "build_agent_card_resolver",
+        lambda *_args: _FakeCardResolver("agent-card"),
+    )
+
+    actual = await client._build_client()
+
+    config = factory_calls["config"]
+    assert isinstance(config, ClientConfig)
+    assert config.polling is True
+    assert actual is fake_sdk_client
+
+
+@pytest.mark.asyncio
 async def test_send_returns_last_event(monkeypatch: pytest.MonkeyPatch) -> None:
     client = A2AClient("http://agent.example.com")
     fake_client = _FakeClient(events=["a", "b", "last"])
