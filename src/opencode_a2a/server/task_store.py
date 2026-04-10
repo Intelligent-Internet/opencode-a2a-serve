@@ -17,6 +17,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import make_url
 
 from ..config import Settings
+from ..task_states import TERMINAL_TASK_STATES
 
 if TYPE_CHECKING:
     from a2a.server.context import ServerCallContext
@@ -24,15 +25,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_TERMINAL_TASK_STATES = frozenset(
-    {
-        TaskState.completed,
-        TaskState.canceled,
-        TaskState.failed,
-        TaskState.rejected,
-    }
-)
-_TERMINAL_TASK_STATE_VALUES = tuple(state.value for state in _TERMINAL_TASK_STATES)
+_TERMINAL_TASK_STATE_VALUES = tuple(state.value for state in TERMINAL_TASK_STATES)
 _ATOMIC_TERMINAL_GUARD_DIALECTS = frozenset({"postgresql", "sqlite"})
 _SQLITE_JOURNAL_MODE = "WAL"
 _SQLITE_BUSY_TIMEOUT_MS = 30_000
@@ -70,7 +63,7 @@ class FirstTerminalStateWinsPolicy(TaskWritePolicy):
         existing: Task | None,
         incoming: Task,
     ) -> TaskPersistenceDecision:
-        if existing is None or existing.status.state not in _TERMINAL_TASK_STATES:
+        if existing is None or existing.status.state not in TERMINAL_TASK_STATES:
             return TaskPersistenceDecision(persist=True)
         if incoming.status.state != existing.status.state:
             return TaskPersistenceDecision(
@@ -224,7 +217,7 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
                 return
             if (
                 existing is not None
-                and existing.status.state in _TERMINAL_TASK_STATES
+                and existing.status.state in TERMINAL_TASK_STATES
                 and existing.model_dump(mode="json") == task.model_dump(mode="json")
             ):
                 return
@@ -272,7 +265,7 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         incoming: Task,
         decision: TaskPersistenceDecision,
     ) -> None:
-        if existing is None or existing.status.state not in _TERMINAL_TASK_STATES:
+        if existing is None or existing.status.state not in TERMINAL_TASK_STATES:
             return
         logger.warning(
             "Received task persistence after terminal state task_id=%s existing_state=%s "
