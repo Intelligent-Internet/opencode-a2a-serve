@@ -395,8 +395,12 @@ async def test_list_tasks_route_applies_persisted_output_negotiation(monkeypatch
     assert payload["totalSize"] == 1
     assert payload["tasks"][0]["id"] == "task-negotiated-list"
     assert [artifact["artifactId"] for artifact in payload["tasks"][0]["artifacts"]] == [
-        "task-negotiated-list-text"
+        "task-negotiated-list-text",
+        "task-negotiated-list-json",
     ]
+    assert payload["tasks"][0]["artifacts"][1]["parts"][0]["text"] == (
+        '{"status":"completed","tool":"bash"}'
+    )
 
 
 @pytest.mark.asyncio

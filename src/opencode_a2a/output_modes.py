@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Collection, Iterable
 from typing import Any, cast
 
@@ -66,6 +67,14 @@ def accepts_output_mode(
     media_type: str,
 ) -> bool:
     return accepted_output_modes is None or media_type in accepted_output_modes
+
+
+def part_text_fallback(part: Any) -> str | None:
+    if isinstance(part, TextPart):
+        return part.text
+    if isinstance(part, DataPart):
+        return json.dumps(part.data, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return None
 
 
 def build_output_negotiation_metadata(
@@ -353,6 +362,11 @@ def _filter_parts(
         media_type = _part_media_type(part)
         if media_type is None or accepts_output_mode(accepted_output_modes, media_type):
             filtered.append(part)
+            continue
+        if accepts_output_mode(accepted_output_modes, _TEXT_PLAIN_MEDIA_TYPE):
+            fallback_text = part_text_fallback(part.root)
+            if fallback_text is not None:
+                filtered.append(Part(root=TextPart(text=fallback_text)))
     return filtered
 
 

@@ -24,9 +24,11 @@ from a2a.types import (
 
 from opencode_a2a.output_modes import (
     NegotiatingResultAggregator,
+    apply_accepted_output_modes,
     build_output_negotiation_metadata,
     extract_accepted_output_modes_from_metadata,
     normalize_accepted_output_modes,
+    part_text_fallback,
 )
 from opencode_a2a.server.application import OpencodeRequestHandler
 
@@ -85,6 +87,43 @@ def test_normalize_accepted_output_modes_treats_wildcards_as_unrestricted() -> N
     )
     assert normalize_accepted_output_modes(["text/plain", "*/*"]) is None
     assert normalize_accepted_output_modes(["*"]) is None
+
+
+def test_part_text_fallback_serializes_data_parts_as_stable_json() -> None:
+    assert part_text_fallback(DataPart(data={"tool": "bash", "status": "running"})) == (
+        '{"status":"running","tool":"bash"}'
+    )
+
+
+def test_apply_accepted_output_modes_downgrades_task_data_parts_to_text() -> None:
+    task = Task(
+        id="task-send",
+        context_id="ctx-send",
+        status=TaskStatus(
+            state=TaskState.completed,
+            message=Message(
+                message_id="msg-send",
+                role=Role.agent,
+                parts=[Part(root=DataPart(data={"tool": "bash", "status": "running"}))],
+                task_id="task-send",
+                context_id="ctx-send",
+            ),
+        ),
+        artifacts=[
+            Artifact(
+                artifact_id="artifact-send",
+                parts=[Part(root=DataPart(data={"tool": "bash", "status": "running"}))],
+            )
+        ],
+    )
+
+    downgraded = apply_accepted_output_modes(task, ["text/plain"])
+
+    assert isinstance(downgraded, Task)
+    assert downgraded.status.message is not None
+    assert downgraded.status.message.parts[0].root.text == '{"status":"running","tool":"bash"}'
+    assert downgraded.artifacts is not None
+    assert downgraded.artifacts[0].parts[0].root.text == '{"status":"running","tool":"bash"}'
 
 
 @pytest.mark.asyncio
@@ -150,7 +189,11 @@ async def test_on_get_task_applies_persisted_output_negotiation() -> None:
     assert result is not None
     assert extract_accepted_output_modes_from_metadata(result.metadata) == ("text/plain",)
     assert result.artifacts is not None
-    assert [artifact.artifact_id for artifact in result.artifacts] == ["task-get:text"]
+    assert [artifact.artifact_id for artifact in result.artifacts] == [
+        "task-get:text",
+        "task-get:json",
+    ]
+    assert result.artifacts[1].parts[0].root.text == '{"status":"completed","tool":"bash"}'
 
 
 @pytest.mark.asyncio
@@ -167,4 +210,8 @@ async def test_resubscribe_terminal_task_applies_persisted_output_negotiation() 
     assert len(events) == 1
     assert isinstance(events[0], Task)
     assert events[0].artifacts is not None
-    assert [artifact.artifact_id for artifact in events[0].artifacts] == ["task-resub:text"]
+    assert [artifact.artifact_id for artifact in events[0].artifacts] == [
+        "task-resub:text",
+        "task-resub:json",
+    ]
+    assert events[0].artifacts[1].parts[0].root.text == '{"status":"completed","tool":"bash"}'

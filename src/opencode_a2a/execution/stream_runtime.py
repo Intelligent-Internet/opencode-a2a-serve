@@ -18,6 +18,7 @@ from a2a.types import (
 )
 
 from ..invocation import call_with_supported_kwargs
+from ..output_modes import part_text_fallback
 from .event_helpers import _enqueue_artifact_update
 from .stream_events import (
     BlockType,
@@ -87,7 +88,20 @@ class StreamRuntime:
         async def _emit_chunks(chunks: list[_NormalizedStreamChunk]) -> None:
             for chunk in chunks:
                 if not allow_structured_output and getattr(chunk.part.root, "kind", None) == "data":
-                    continue
+                    fallback_text = part_text_fallback(chunk.part.root)
+                    if fallback_text is None:
+                        continue
+                    chunk = _NormalizedStreamChunk(
+                        part=Part(root=TextPart(text=fallback_text)),
+                        content_key=fallback_text,
+                        accumulate_content=False,
+                        append=chunk.append,
+                        block_type=chunk.block_type,
+                        internal_source=chunk.internal_source,
+                        shared_source=chunk.shared_source,
+                        message_id=chunk.message_id,
+                        role=chunk.role,
+                    )
                 resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
                 chunk_text = getattr(chunk.part.root, "text", "")
                 if stream_state.should_drop_initial_user_echo(
