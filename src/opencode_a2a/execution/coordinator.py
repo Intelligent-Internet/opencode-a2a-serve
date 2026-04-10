@@ -174,7 +174,11 @@ class ExecutionCoordinator:
                 break
 
         except httpx.HTTPStatusError as exc:
-            logger.exception("OpenCode request failed with HTTP error")
+            logger.warning(
+                "OpenCode request failed with HTTP status=%s",
+                exc.response.status_code,
+                exc_info=logger.isEnabledFor(logging.DEBUG),
+            )
             error_type, state, message = _format_upstream_error(
                 exc,
                 request="send_message",
@@ -190,7 +194,11 @@ class ExecutionCoordinator:
                 streaming_request=self._prepared.streaming_request,
             )
         except httpx.TimeoutException as exc:
-            logger.exception("OpenCode request timed out")
+            logger.warning(
+                "OpenCode request timed out: %s",
+                exc,
+                exc_info=logger.isEnabledFor(logging.DEBUG),
+            )
             await self._executor._emit_error(
                 self._event_queue,
                 task_id=self._task_id,

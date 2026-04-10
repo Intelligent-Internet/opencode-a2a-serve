@@ -202,3 +202,10 @@ async def test_streaming_retry_metric_increments_once_per_retry(monkeypatch, cap
 
     messages = [record.message for record in caplog.records]
     assert sum("metric=opencode_stream_retries_total" in message for message in messages) == 1
+    retry_logs = [
+        record
+        for record in caplog.records
+        if "OpenCode event stream failed; retrying" in record.message
+    ]
+    assert len(retry_logs) == 1
+    assert retry_logs[0].levelno == logging.DEBUG

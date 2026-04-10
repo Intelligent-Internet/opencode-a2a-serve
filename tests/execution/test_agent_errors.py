@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -173,7 +174,7 @@ async def test_execute_http_error_maps_to_task_error_type_and_state(
 
 
 @pytest.mark.asyncio
-async def test_streaming_execute_http_error_emits_status_update_with_metadata() -> None:
+async def test_streaming_execute_http_error_emits_status_update_with_metadata(caplog) -> None:
     request = httpx.Request("POST", "http://127.0.0.1:4096/message")
     response = httpx.Response(
         status_code=429,
@@ -204,7 +205,8 @@ async def test_streaming_execute_http_error_emits_status_update_with_metadata() 
     )
     event_queue = AsyncMock(spec=EventQueue)
 
-    await executor.execute(context, event_queue)
+    with caplog.at_level(logging.INFO, logger="opencode_a2a.execution.coordinator"):
+        await executor.execute(context, event_queue)
 
     status = None
     for call in event_queue.enqueue_event.call_args_list:
@@ -223,6 +225,14 @@ async def test_streaming_execute_http_error_emits_status_update_with_metadata() 
     assert status.status.state == TaskState.failed
     assert status.metadata["opencode"]["error"]["type"] == "UPSTREAM_QUOTA_EXCEEDED"
     assert status.metadata["opencode"]["error"]["upstream_status"] == 429
+    http_logs = [
+        record
+        for record in caplog.records
+        if "OpenCode request failed with HTTP status=429" in record.message
+    ]
+    assert len(http_logs) == 1
+    assert http_logs[0].levelno == logging.WARNING
+    assert not http_logs[0].exc_info
 
 
 @pytest.mark.asyncio
